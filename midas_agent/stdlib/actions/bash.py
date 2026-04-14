@@ -14,13 +14,29 @@ class BashAction(Action):
 
     @property
     def description(self) -> str:
-        return "Execute a shell command."
+        return (
+            "Executes a bash command with optional timeout. Working directory "
+            "persists between calls; shell state (environment variables, shell "
+            "functions, virtual environments) does not — each call starts from "
+            "a clean shell initialized from user profile.\n\n"
+            "Usage:\n"
+            "* Write a clear, concise description of what the command does in 5-10 words.\n"
+            "* When issuing multiple commands, use `;` or `&&` to separate them. "
+            "Do NOT use newlines to separate commands.\n"
+            "* Always quote file paths that contain spaces with double quotes.\n\n"
+            "IMPORTANT:\n"
+            "* Do NOT use `cat`, `head`, `tail` to read files — use `read_file` instead.\n"
+            "* Do NOT use `grep` or `find` to search — use `search_code` or `find_files` instead.\n"
+            "* Do NOT use `sed` or `awk` for file edits — use `edit_file` instead.\n"
+            "* Interactive commands (e.g. `python`, `vim`, `nano`) are NOT supported."
+        )
 
     @property
     def parameters(self) -> dict:
         return {
             "command": {"type": "string", "required": True},
             "timeout": {"type": "integer", "required": False, "default": 120},
+            "description": {"type": "string", "required": False},
         }
 
     def execute(self, **kwargs) -> str:

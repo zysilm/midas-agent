@@ -416,17 +416,16 @@ class TestIT66ReportResultAction:
     def test_report_result_callback(self):
         callback_log: list[dict] = []
 
-        def spy_report(result: str, status: str) -> None:
-            callback_log.append({"result": result, "status": status})
+        def spy_report(result: str) -> None:
+            callback_log.append({"result": result})
 
         action = ReportResultAction(report=spy_report)
 
-        output = action.execute(result="fix applied", status="success")
+        output = action.execute(result="fix applied")
 
         # Callback was invoked exactly once
         assert len(callback_log) == 1
         assert callback_log[0]["result"] == "fix applied"
-        assert callback_log[0]["status"] == "success"
 
         # execute() returns a string confirmation
         assert isinstance(output, str)
@@ -648,8 +647,8 @@ class TestIT610EndToEndHiringFlow:
         # --- Step 3: Hired agent executes and reports ---
         report_log: list[dict] = []
 
-        def on_report(result: str, status: str) -> None:
-            report_log.append({"result": result, "status": status})
+        def on_report(result: str) -> None:
+            report_log.append({"result": result})
 
         report_action = ReportResultAction(report=on_report)
 
@@ -670,7 +669,6 @@ class TestIT610EndToEndHiringFlow:
 
         # Report callback was invoked
         assert len(report_log) == 1
-        assert report_log[0]["status"] == "success"
         assert "fixed" in report_log[0]["result"].lower()
 
         # report_action returns a string

@@ -9,11 +9,20 @@ class TaskDoneAction(Action):
 
     @property
     def description(self) -> str:
-        return "Mark current task as completed."
+        return (
+            "Signals that the current task is complete and ready for evaluation. "
+            "This is the final action in a workspace's execution.\n\n"
+            "Usage:\n"
+            "* Call this when you believe the issue has been resolved and all "
+            "necessary changes have been made.\n"
+            "* After calling this, no further actions will be executed.\n"
+            "* If you run out of budget without calling this, the workspace is "
+            "evaluated as-is (which may result in a low score)."
+        )
 
     @property
     def parameters(self) -> dict:
-        return {"summary": {"type": "string", "required": True}}
+        return {}
 
     def execute(self, **kwargs) -> str:
-        return kwargs["summary"]
+        return kwargs.get("summary", "Task completed.")

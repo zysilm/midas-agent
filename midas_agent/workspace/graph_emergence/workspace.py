@@ -4,6 +4,14 @@ from __future__ import annotations
 from typing import Callable
 
 from midas_agent.llm.types import LLMRequest, LLMResponse
+from midas_agent.stdlib.actions.bash import BashAction
+from midas_agent.stdlib.actions.delegate_task import DelegateTaskAction
+from midas_agent.stdlib.actions.file_ops import (
+    EditFileAction,
+    ReadFileAction,
+    WriteFileAction,
+)
+from midas_agent.stdlib.actions.search import FindFilesAction, SearchCodeAction
 from midas_agent.stdlib.actions.task_done import TaskDoneAction
 from midas_agent.stdlib.plan_execute_agent import PlanExecuteAgent
 from midas_agent.types import Issue
@@ -39,9 +47,32 @@ class GraphEmergenceWorkspace(Workspace):
 
     def execute(self, issue: Issue) -> None:
         self.calls.append(("execute", {"issue_id": issue.issue_id}))
+
+        # Build responsible agent's action set:
+        # bash, read_file, edit_file, write_file, search_code, find_files,
+        # task_done, delegate_task
+        bash = BashAction(cwd=self.work_dir or None)
+        search = SearchCodeAction(cwd=self.work_dir or None)
+        find = FindFilesAction(cwd=self.work_dir or None)
+
+        delegate = DelegateTaskAction(
+            find_candidates=lambda desc: self._free_agent_manager.match(desc),
+        )
+
+        actions = [
+            bash,
+            ReadFileAction(),
+            EditFileAction(),
+            WriteFileAction(),
+            search,
+            find,
+            TaskDoneAction(),
+            delegate,
+        ]
+
         agent = PlanExecuteAgent(
             system_prompt=self._responsible_agent.soul.system_prompt,
-            actions=[TaskDoneAction()],
+            actions=actions,
             call_llm=self._call_llm,
             max_iterations=50,
             market_info_provider=lambda: "budget info",

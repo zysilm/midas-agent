@@ -16,17 +16,22 @@ class ReportResultAction(Action):
 
     @property
     def description(self) -> str:
-        return "Report task result to the hiring agent."
+        return (
+            "Returns results to the agent that hired you. You must call this "
+            "exactly once when your assigned task is complete.\n\n"
+            "Usage:\n"
+            "* This is the only way to communicate results back to your employer.\n"
+            "* Write a clear, concise summary of what you did and what the outcome was.\n"
+            "* After calling this, your session for this task ends."
+        )
 
     @property
     def parameters(self) -> dict:
         return {
             "result": {"type": "string", "required": True},
-            "status": {"type": "string", "required": False, "default": "success"},
         }
 
     def execute(self, **kwargs) -> str:
         result = kwargs["result"]
-        status = kwargs.get("status", "success")
-        self._report(result, status)
-        return f"Result reported with status={status}"
+        self._report(result)
+        return f"Result reported."

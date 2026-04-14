@@ -180,7 +180,8 @@ def run_training(
         config.eval_api_key or config.api_key,
         config.eval_api_base or config.api_base,
     )
-    execution_scorer = ExecutionScorer(docker_image="", timeout=300)
+    from midas_agent.evaluation.swebench_scorer import SWEBenchScorer
+    execution_scorer = SWEBenchScorer(timeout=1800)
     criteria_cache = CriteriaCache(cache_dir="/tmp/midas_criteria")
     llm_judge = LLMJudge(
         llm_provider=eval_provider, criteria_cache=criteria_cache,

@@ -37,7 +37,7 @@ class TestReadFileAction:
     def test_read_file_action_execute(self):
         """ReadFileAction.execute() returns a string result."""
         action = ReadFileAction()
-        result = action.execute(file_path="/tmp/test.txt")
+        result = action.execute(path="/tmp/test.txt")
         assert isinstance(result, str)
 
 
@@ -54,8 +54,8 @@ class TestEditFileAction:
         """EditFileAction.execute() returns a string result."""
         action = EditFileAction()
         result = action.execute(
-            file_path="/tmp/test.txt",
-            operation="replace",
+            path="/tmp/test.txt",
+            command="replace",
             start_line=1,
         )
         assert isinstance(result, str)
@@ -73,7 +73,7 @@ class TestWriteFileAction:
     def test_write_file_action_execute(self):
         """WriteFileAction.execute() returns a string result."""
         action = WriteFileAction()
-        result = action.execute(file_path="/tmp/test.txt", content="hello")
+        result = action.execute(path="/tmp/test.txt", content="hello")
         assert isinstance(result, str)
 
 
@@ -131,7 +131,7 @@ class TestDelegateTaskAction:
 
     def test_delegate_task_construction(self):
         """DelegateTaskAction can be constructed with a find_candidates callback."""
-        action = DelegateTaskAction(find_candidates=lambda desc, k: [])
+        action = DelegateTaskAction(find_candidates=lambda desc: [])
         assert action.name == "delegate_task"
 
 
@@ -141,5 +141,5 @@ class TestReportResultAction:
 
     def test_report_result_construction(self):
         """ReportResultAction can be constructed with a report callback."""
-        action = ReportResultAction(report=lambda result, status: None)
+        action = ReportResultAction(report=lambda result: None)
         assert action.name == "report_result"

@@ -102,11 +102,11 @@ class TestSingleStepDAGExecution:
     def test_single_step_completes(self, fake_issue):
         # Three LLM calls: read_file, edit_file, then a text response
         responses = [
-            _tool_response("read_file", {"file_path": "calculator.py"}, "c1"),
+            _tool_response("read_file", {"path": "calculator.py"}, "c1"),
             _tool_response(
                 "edit_file",
                 {
-                    "file_path": "calculator.py",
+                    "path": "calculator.py",
                     "operation": "replace",
                     "start_line": 5,
                     "content": "if divisor == 0: raise ZeroDivisionError",
@@ -161,7 +161,7 @@ class TestMultiStepDAGWithDependencies:
             _tool_response(
                 "edit_file",
                 {
-                    "file_path": "calculator.py",
+                    "path": "calculator.py",
                     "operation": "replace",
                     "start_line": 10,
                     "content": "if b == 0: raise ZeroDivisionError",
@@ -313,7 +313,7 @@ class TestSubmitPatchPersistsFile:
 
         # FakeLLM returns a tool call then text
         responses = [
-            _tool_response("read_file", {"file_path": "calc.py"}, "c1"),
+            _tool_response("read_file", {"path": "calc.py"}, "c1"),
             _text_response("Done."),
         ]
         provider = FakeLLMProvider(responses=responses)
@@ -445,7 +445,7 @@ class TestPostEpisodeSurvivalSelfRewrite:
     def test_self_rewrite_called_on_survival(self, fake_issue, temp_dir):
         # Workspace LLM
         responses = [
-            _tool_response("read_file", {"file_path": "calc.py"}, "c1"),
+            _tool_response("read_file", {"path": "calc.py"}, "c1"),
             _text_response("Fixed."),
         ]
         provider = FakeLLMProvider(responses=responses)
@@ -621,7 +621,7 @@ class TestReactAgentIterationLimit:
         # Every response is a tool call — the agent should never "finish"
         # naturally but instead hit the iteration cap.
         responses = [
-            _tool_response("read_file", {"file_path": "a.py"}, f"c{i}")
+            _tool_response("read_file", {"path": "a.py"}, f"c{i}")
             for i in range(10)  # more than enough
         ]
         provider = FakeLLMProvider(responses=responses)
@@ -644,8 +644,8 @@ class TestReactAgentIterationLimit:
         """When max_iterations is None the agent runs until it produces a
         text response (termination_reason='done')."""
         responses = [
-            _tool_response("read_file", {"file_path": "a.py"}, "c1"),
-            _tool_response("read_file", {"file_path": "b.py"}, "c2"),
+            _tool_response("read_file", {"path": "a.py"}, "c1"),
+            _tool_response("read_file", {"path": "b.py"}, "c2"),
             _text_response("All done."),
         ]
         provider = FakeLLMProvider(responses=responses)

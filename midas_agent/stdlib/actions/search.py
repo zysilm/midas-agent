@@ -12,15 +12,24 @@ class SearchCodeAction(Action):
 
     @property
     def description(self) -> str:
-        return "Search code with regex pattern."
+        return (
+            "Searches file contents using regular expressions. Backed by ripgrep. "
+            "Returns file paths with matching lines, sorted by modification time.\n\n"
+            "Usage:\n"
+            "* Supports full regex syntax (e.g. `\"log.*Error\"`, `\"function\\s+\\w+\"`).\n"
+            "* Filter by file type with the `include` parameter (e.g. `\"*.py\"`).\n"
+            "* Returns file paths with at least one match, not full file contents. "
+            "Use `read_file` to inspect matches in detail.\n"
+            "* You can call multiple tools in a single response. It is always "
+            "better to speculatively perform multiple searches in parallel."
+        )
 
     @property
     def parameters(self) -> dict:
         return {
             "pattern": {"type": "string", "required": True},
             "path": {"type": "string", "required": False},
-            "file_glob": {"type": "string", "required": False},
-            "max_results": {"type": "integer", "required": False, "default": 50},
+            "include": {"type": "string", "required": False},
         }
 
     def execute(self, **kwargs) -> str:
@@ -38,14 +47,22 @@ class FindFilesAction(Action):
 
     @property
     def description(self) -> str:
-        return "Find files by glob pattern."
+        return (
+            "Finds files by name using glob patterns. Returns matching file paths "
+            "sorted by modification time.\n\n"
+            "Usage:\n"
+            "* Supports glob patterns like `\"**/*.py\"`, `\"src/**/*.ts\"`.\n"
+            "* Use this when you need to locate files by name pattern, not by content. "
+            "For content search, use `search_code`.\n"
+            "* You can call multiple tools in a single response. It is always "
+            "better to speculatively perform multiple searches in parallel."
+        )
 
     @property
     def parameters(self) -> dict:
         return {
             "pattern": {"type": "string", "required": True},
             "path": {"type": "string", "required": False},
-            "max_results": {"type": "integer", "required": False, "default": 100},
         }
 
     def execute(self, **kwargs) -> str:
