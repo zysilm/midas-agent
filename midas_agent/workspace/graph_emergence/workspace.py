@@ -32,5 +32,5 @@ class GraphEmergenceWorkspace(Workspace):
     def submit_patch(self) -> None:
         raise NotImplementedError
 
-    def post_episode(self, eval_results: dict) -> None:
+    def post_episode(self, eval_results: dict, evicted_ids: list[str]) -> None:
         raise NotImplementedError

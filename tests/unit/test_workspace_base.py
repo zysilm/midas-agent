@@ -28,7 +28,7 @@ class TestWorkspaceABC:
             def submit_patch(self):
                 pass
 
-            def post_episode(self, eval_results):
+            def post_episode(self, eval_results, evicted_ids):
                 pass
 
         with pytest.raises(TypeError):
@@ -48,7 +48,7 @@ class TestWorkspaceABC:
             def submit_patch(self):
                 pass
 
-            def post_episode(self, eval_results):
+            def post_episode(self, eval_results, evicted_ids):
                 pass
 
         with pytest.raises(TypeError):
@@ -68,7 +68,7 @@ class TestWorkspaceABC:
             def execute(self, issue):
                 pass
 
-            def post_episode(self, eval_results):
+            def post_episode(self, eval_results, evicted_ids):
                 pass
 
         with pytest.raises(TypeError):

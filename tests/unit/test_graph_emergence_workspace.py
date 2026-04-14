@@ -79,6 +79,6 @@ class TestGraphEmergenceWorkspace:
         """post_episode() always returns None for GraphEmergenceWorkspace (no config evolution)."""
         ws = self._make_workspace()
 
-        result = ws.post_episode({"score": 0.8, "cost": 300})
+        result = ws.post_episode({"score": 0.8, "cost": 300}, evicted_ids=[])
 
         assert result is None

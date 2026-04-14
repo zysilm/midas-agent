@@ -482,15 +482,15 @@ class TestPostEpisodeSurvivalSelfRewrite:
         workspace.execute(fake_issue)
 
         eval_results = {
-            "survived": True,
-            "score": 0.85,
-            "cost": 150,
-            "eta": 0.85 / 150,
-            "episode_id": "ep-001",
-            "summary": "Fixed divide-by-zero successfully.",
+            "ws-survive": {
+                "score": 0.85,
+                "cost": 150,
+                "eta": 0.85 / 150,
+                "episode_id": "ep-001",
+            },
         }
 
-        result = workspace.post_episode(eval_results)
+        result = workspace.post_episode(eval_results, evicted_ids=[])
 
         # system_llm must have been invoked (self_rewrite delegates to it)
         assert system_provider.call_count >= 1
@@ -545,17 +545,15 @@ class TestPostEpisodeEvictionReproduce:
         workspace.execute(fake_issue)
 
         eval_results = {
-            "survived": False,
-            "score": 0.05,
-            "cost": 200,
-            "eta": 0.05 / 200,
-            "episode_id": "ep-002",
-            "summary": "Failed to fix the bug.",
-            "best_config": config,
-            "best_summaries": ["Previous attempt summary."],
+            "ws-evict": {
+                "score": 0.05,
+                "cost": 200,
+                "eta": 0.05 / 200,
+                "episode_id": "ep-002",
+            },
         }
 
-        result = workspace.post_episode(eval_results)
+        result = workspace.post_episode(eval_results, evicted_ids=["ws-evict"])
 
         # system_llm must have been invoked (reproduce delegates to it)
         assert system_provider.call_count >= 1

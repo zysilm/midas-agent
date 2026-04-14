@@ -503,7 +503,7 @@ class TestIT68PostEpisodeSkillReviewer:
             "summary": "Good performance on parsing task",
         }
 
-        result = ws.post_episode(eval_results)
+        result = ws.post_episode(eval_results, evicted_ids=[])
 
         # SkillReviewer.review() was called with the eval_results
         skill_reviewer.review.assert_called_once_with(eval_results)

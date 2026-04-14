@@ -28,5 +28,5 @@ class Workspace(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def post_episode(self, eval_results: dict) -> dict | None:
+    def post_episode(self, eval_results: dict, evicted_ids: list[str]) -> dict | None:
         raise NotImplementedError

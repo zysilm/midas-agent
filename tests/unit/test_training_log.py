@@ -127,7 +127,7 @@ class TestTrainingLog:
 
         assert isinstance(entry, LogEntry)
         assert entry.type == "allocate"
-        assert entry.from_entity == "scheduler"
+        assert entry.from_entity == "system"
         assert entry.to == "workspace_1"
         assert entry.amount == 1000
         assert entry.from_balance_after is None

@@ -302,9 +302,9 @@ class TestFullEpisodeLifecycle:
         assert len(survivors_ep1) == 2
         assert len(results_ep1) == 3
 
-        # Notify surviving workspaces of episode results
+        # Notify workspaces of episode results
         for ws in workspaces_ep1:
-            ws.post_episode(results_ep1)
+            ws.post_episode(results_ep1, evicted_ids=evicted_ep1)
 
         # Replace evicted
         scheduler.replace_evicted([{"variant": "new_ep2"}])
@@ -485,7 +485,7 @@ class TestFullEpisodeLifecycle:
 
         # Post-episode: all workspaces participate
         for ws in workspaces:
-            ws.post_episode(eval_results)
+            ws.post_episode(eval_results, evicted_ids=evicted)
 
     # -----------------------------------------------------------------------
     # IT-9.5: Observer captures complete lifecycle via SpyHookSet
@@ -537,7 +537,7 @@ class TestFullEpisodeLifecycle:
 
         # Post-episode
         for ws in workspaces:
-            ws.post_episode(eval_results)
+            ws.post_episode(eval_results, evicted_ids=evicted)
 
         # Verify the overall hook sequence:
         # 1. on_allocate should have been called for each workspace
@@ -627,7 +627,7 @@ class TestFullEpisodeLifecycle:
         # Post-episode
         record_phase("post_episode_start")
         for ws in workspaces:
-            ws.post_episode(eval_results)
+            ws.post_episode(eval_results, evicted_ids=evicted)
         record_phase("post_episode_end")
 
         # Replace evicted

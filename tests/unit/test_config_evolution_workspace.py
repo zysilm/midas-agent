@@ -13,6 +13,7 @@ from midas_agent.workspace.config_evolution.config_schema import (
 from midas_agent.workspace.config_evolution.executor import DAGExecutor, ExecutionResult
 from midas_agent.workspace.config_evolution.mutator import ConfigMutator
 from midas_agent.workspace.config_evolution.snapshot_store import ConfigSnapshotStore
+from midas_agent.evaluation.module import EvalResult
 from midas_agent.types import Issue
 from midas_agent.llm.types import LLMRequest, LLMResponse, TokenUsage
 
@@ -100,17 +101,37 @@ class TestConfigEvolutionWorkspace:
         ws.submit_patch()  # Should not raise
 
     def test_post_episode_evicted_returns_new_config(self):
-        """An evicted workspace returns a new config dict from post_episode()."""
+        """An evicted workspace returns a new config dict from post_episode().
+
+        When workspace_id is in evicted_ids, post_episode triggers
+        ConfigMutator.reproduce() and returns a new YAML config dict.
+        """
         ws = self._make_workspace()
 
-        result = ws.post_episode({"evicted": True, "score": 0.3, "cost": 200})
+        eval_results = {
+            "ws-1": EvalResult(
+                workspace_id="ws-1", episode_id="ep-1",
+                s_exec=0.3, s_llm=0.2, s_w=0.36,
+            ),
+        }
+        result = ws.post_episode(eval_results, evicted_ids=["ws-1"])
 
         assert isinstance(result, dict)
 
     def test_post_episode_survivor_returns_none(self):
-        """A surviving workspace returns None from post_episode()."""
+        """A surviving workspace returns None from post_episode().
+
+        When workspace_id is not in evicted_ids, post_episode triggers
+        ConfigMutator.self_rewrite() and returns None.
+        """
         ws = self._make_workspace()
 
-        result = ws.post_episode({"evicted": False, "score": 0.9, "cost": 100})
+        eval_results = {
+            "ws-1": EvalResult(
+                workspace_id="ws-1", episode_id="ep-1",
+                s_exec=0.9, s_llm=None, s_w=0.9,
+            ),
+        }
+        result = ws.post_episode(eval_results, evicted_ids=[])
 
         assert result is None
