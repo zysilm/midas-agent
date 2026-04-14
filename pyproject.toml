@@ -1,0 +1,24 @@
+[tool.poetry]
+name = "midas-agent"
+version = "0.1.0"
+description = "Budget-Driven Multi-Agent Training Engine"
+authors = []
+packages = [{include = "midas_agent"}]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.0"
+pytest-xdist = "^3.5"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "unit: Unit tests",
+    "integration: Integration tests",
+]
