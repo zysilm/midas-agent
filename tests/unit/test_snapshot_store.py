@@ -107,3 +107,73 @@ class TestConfigSnapshotStore:
         assert isinstance(results, list)
         assert len(results) == 1
         assert results[0].workspace_id == "ws-1"
+
+    def test_store_query_filter_by_episode_id(self):
+        """query() filters by episode_id when specified."""
+        store = ConfigSnapshotStore(store_dir="/tmp/test")
+        snap1 = self._make_snapshot(episode_id="ep-1", workspace_id="ws-1")
+        snap2 = self._make_snapshot(episode_id="ep-2", workspace_id="ws-1")
+        snap3 = self._make_snapshot(episode_id="ep-2", workspace_id="ws-2")
+
+        store.save(snap1)
+        store.save(snap2)
+        store.save(snap3)
+
+        filt = SnapshotFilter(episode_id="ep-2")
+        results = store.query(filt)
+
+        assert len(results) == 2
+        assert all(r.episode_id == "ep-2" for r in results)
+
+    def test_store_query_filter_by_min_eta(self):
+        """query() with min_eta returns only snapshots with eta >= threshold."""
+        store = ConfigSnapshotStore(store_dir="/tmp/test")
+        snap_low = self._make_snapshot(episode_id="ep-1", workspace_id="ws-1", eta=0.2)
+        snap_mid = self._make_snapshot(episode_id="ep-1", workspace_id="ws-2", eta=0.5)
+        snap_high = self._make_snapshot(episode_id="ep-1", workspace_id="ws-3", eta=0.9)
+
+        store.save(snap_low)
+        store.save(snap_mid)
+        store.save(snap_high)
+
+        filt = SnapshotFilter(min_eta=0.5)
+        results = store.query(filt)
+
+        assert len(results) == 2
+        assert all(r.eta >= 0.5 for r in results)
+
+    def test_store_query_filter_by_top_k(self):
+        """query() with top_k returns at most k snapshots, ordered by eta descending."""
+        store = ConfigSnapshotStore(store_dir="/tmp/test")
+        for i, eta in enumerate([0.3, 0.9, 0.5, 0.7]):
+            snap = self._make_snapshot(
+                episode_id="ep-1",
+                workspace_id=f"ws-{i}",
+                eta=eta,
+            )
+            store.save(snap)
+
+        filt = SnapshotFilter(top_k=2)
+        results = store.query(filt)
+
+        assert len(results) == 2
+        # Top-2 by eta should be 0.9 and 0.7
+        etas = [r.eta for r in results]
+        assert etas == sorted(etas, reverse=True)
+        assert etas[0] == pytest.approx(0.9)
+        assert etas[1] == pytest.approx(0.7)
+
+    def test_store_query_combined_filters(self):
+        """query() applies multiple filters simultaneously."""
+        store = ConfigSnapshotStore(store_dir="/tmp/test")
+        store.save(self._make_snapshot(episode_id="ep-1", workspace_id="ws-1", eta=0.3))
+        store.save(self._make_snapshot(episode_id="ep-1", workspace_id="ws-2", eta=0.8))
+        store.save(self._make_snapshot(episode_id="ep-2", workspace_id="ws-1", eta=0.9))
+        store.save(self._make_snapshot(episode_id="ep-2", workspace_id="ws-2", eta=0.4))
+
+        filt = SnapshotFilter(episode_id="ep-1", min_eta=0.5)
+        results = store.query(filt)
+
+        assert len(results) == 1
+        assert results[0].workspace_id == "ws-2"
+        assert results[0].eta == pytest.approx(0.8)

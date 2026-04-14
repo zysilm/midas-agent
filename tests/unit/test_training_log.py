@@ -114,7 +114,11 @@ class TestTrainingLog:
         assert log is not None
 
     def test_record_allocate(self, in_memory_storage):
-        """record_allocate returns a LogEntry with type='allocate'."""
+        """record_allocate returns a LogEntry with type='allocate'.
+
+        Design 03-01: allocate records have from_entity='scheduler',
+        from_balance_after=None (scheduler has no balance).
+        """
         hooks = HookSet()
         queue = SerialQueue()
         log = TrainingLog(storage=in_memory_storage, hooks=hooks, serial_queue=queue)
@@ -123,8 +127,11 @@ class TestTrainingLog:
 
         assert isinstance(entry, LogEntry)
         assert entry.type == "allocate"
+        assert entry.from_entity == "scheduler"
         assert entry.to == "workspace_1"
         assert entry.amount == 1000
+        assert entry.from_balance_after is None
+        assert entry.to_balance_after == 1000
 
     def test_record_allocate_triggers_hook(self, in_memory_storage):
         """record_allocate invokes the on_allocate hook when set."""
@@ -138,7 +145,11 @@ class TestTrainingLog:
         on_alloc.assert_called_once()
 
     def test_record_consume(self, in_memory_storage):
-        """record_consume returns a LogEntry with type='consume'."""
+        """record_consume returns a LogEntry with type='consume'.
+
+        Consume records: from_entity=None, to=entity_id (the consuming
+        entity), workspace_id set for Graph Emergence cost attribution.
+        """
         hooks = HookSet()
         queue = SerialQueue()
         log = TrainingLog(storage=in_memory_storage, hooks=hooks, serial_queue=queue)
@@ -149,8 +160,28 @@ class TestTrainingLog:
 
         assert isinstance(entry, LogEntry)
         assert entry.type == "consume"
+        assert entry.from_entity is None
         assert entry.to == "agent_a"
         assert entry.amount == 10
+        assert entry.workspace_id == "ws_1"
+        assert entry.to_balance_after == 90
+
+    def test_record_consume_without_workspace_id(self, in_memory_storage):
+        """record_consume with workspace_id=None (Configuration Evolution mode).
+
+        In Configuration Evolution, entity_id is the workspace_id itself,
+        so workspace_id parameter is omitted.
+        """
+        hooks = HookSet()
+        queue = SerialQueue()
+        log = TrainingLog(storage=in_memory_storage, hooks=hooks, serial_queue=queue)
+
+        log.record_allocate(to="ws_1", amount=100)
+        entry = log.record_consume(entity_id="ws_1", amount=10)
+
+        assert entry.workspace_id is None
+        assert entry.to == "ws_1"
+        assert entry.to_balance_after == 90
 
     def test_record_consume_triggers_hook(self, in_memory_storage):
         """record_consume invokes the on_consume hook when set."""
@@ -177,7 +208,11 @@ class TestTrainingLog:
         on_evict.assert_called_once()
 
     def test_record_transfer(self, in_memory_storage):
-        """record_transfer returns a LogEntry with type='transfer'."""
+        """record_transfer returns a LogEntry with type='transfer'.
+
+        Transfer records: from_entity=sender, to=receiver, both
+        balance_after fields populated for double-sided auditing.
+        """
         hooks = HookSet()
         queue = SerialQueue()
         log = TrainingLog(storage=in_memory_storage, hooks=hooks, serial_queue=queue)
@@ -190,6 +225,8 @@ class TestTrainingLog:
         assert entry.from_entity == "pool"
         assert entry.to == "workspace_2"
         assert entry.amount == 200
+        assert entry.from_balance_after == 300
+        assert entry.to_balance_after == 200
 
     def test_record_transfer_insufficient_balance(self, in_memory_storage):
         """record_transfer raises when from_entity has insufficient funds."""
@@ -235,6 +272,39 @@ class TestTrainingLog:
         log.record_allocate(to="agent_c", amount=500)
 
         assert log.is_active("agent_c") is True
+
+    def test_record_allocate_accumulates_balance(self, in_memory_storage):
+        """Multiple allocations to the same entity accumulate balance."""
+        hooks = HookSet()
+        queue = SerialQueue()
+        log = TrainingLog(storage=in_memory_storage, hooks=hooks, serial_queue=queue)
+
+        entry1 = log.record_allocate(to="ws_1", amount=500)
+        assert entry1.to_balance_after == 500
+
+        entry2 = log.record_allocate(to="ws_1", amount=300)
+        assert entry2.to_balance_after == 800
+
+        assert log.get_balance("ws_1") == 800
+
+    def test_is_active_returns_false_for_unknown_entity(self, in_memory_storage):
+        """is_active returns False for an entity with no records."""
+        hooks = HookSet()
+        queue = SerialQueue()
+        log = TrainingLog(storage=in_memory_storage, hooks=hooks, serial_queue=queue)
+
+        assert log.is_active("nonexistent") is False
+
+    def test_is_active_returns_false_when_balance_zero(self, in_memory_storage):
+        """is_active returns False when balance is depleted to zero."""
+        hooks = HookSet()
+        queue = SerialQueue()
+        log = TrainingLog(storage=in_memory_storage, hooks=hooks, serial_queue=queue)
+
+        log.record_allocate(to="ws_1", amount=100)
+        log.record_consume(entity_id="ws_1", amount=100)
+
+        assert log.is_active("ws_1") is False
 
     def test_get_log_entries_with_filter(self, in_memory_storage):
         """get_log_entries filters by entity_id, type, and time range."""

@@ -119,10 +119,9 @@ class TestEvaluationModuleIntegration:
 
     def test_partial_exec_score_triggers_llm_judge(self, temp_dir, fake_issue):
         """When S_exec < 1.0, LLMJudge is invoked.
-        Design formula: S_w = S_exec * (1 - beta * (1 - S_llm))
+        Design formula: S_w = S_exec + (1 - S_exec) * beta * S_llm
         With S_exec=0.5, beta=0.3, S_llm=0.7:
-        S_w = 0.5 * (1 - 0.3 * (1 - 0.7)) = 0.5 * (1 - 0.3 * 0.3)
-            = 0.5 * (1 - 0.09) = 0.5 * 0.91 = 0.455
+        S_w = 0.5 + (1 - 0.5) * 0.3 * 0.7 = 0.5 + 0.105 = 0.605
         """
         cache_dir = os.path.join(temp_dir, "criteria_cache")
         module, scorer, llm, _ = _build_evaluation_module(
@@ -138,8 +137,8 @@ class TestEvaluationModuleIntegration:
         result = results["ws1"]
         assert result.s_exec == 0.5
         assert result.s_llm == pytest.approx(0.7)
-        # S_w = S_exec * (1 - beta * (1 - S_llm))
-        expected_sw = 0.5 * (1 - 0.3 * (1 - 0.7))
+        # S_w = S_exec + (1 - S_exec) * beta * S_llm
+        expected_sw = 0.5 + (1 - 0.5) * 0.3 * 0.7
         assert result.s_w == pytest.approx(expected_sw, rel=1e-6)
 
         # LLM was called (at least for criteria extraction and evaluation)
@@ -149,10 +148,11 @@ class TestEvaluationModuleIntegration:
     # IT-7.3: S_exec=0.0 with S_llm=1.0 -- LLM cannot rescue zero execution
     # -----------------------------------------------------------------------
 
-    def test_zero_exec_score_not_rescued_by_llm(self, temp_dir, fake_issue):
+    def test_zero_exec_score_gets_llm_only_contribution(self, temp_dir, fake_issue):
         """S_exec=0.0, S_llm=1.0.
-        S_w = 0.0 * (1 - 0.3 * (1 - 1.0)) = 0.0 * 1.0 = 0.0.
-        The LLM signal cannot rescue a zero execution score."""
+        Design formula: S_w = S_exec + (1 - S_exec) * beta * S_llm
+        S_w = 0.0 + (1 - 0.0) * 0.3 * 1.0 = 0.3.
+        LLM can contribute up to beta when S_exec=0 (design §2.4 W3 example)."""
         cache_dir = os.path.join(temp_dir, "criteria_cache")
         module, scorer, llm, _ = _build_evaluation_module(
             scores={"ws1": 0.0},
@@ -166,8 +166,9 @@ class TestEvaluationModuleIntegration:
 
         result = results["ws1"]
         assert result.s_exec == 0.0
-        # S_w = 0.0 * (1 - 0.3 * (1 - 1.0)) = 0.0
-        assert result.s_w == pytest.approx(0.0, abs=1e-9)
+        # S_w = 0.0 + 1.0 * 0.3 * 1.0 = 0.3
+        expected_sw = 0.0 + (1 - 0.0) * 0.3 * 1.0
+        assert result.s_w == pytest.approx(expected_sw, rel=1e-6)
 
     # -----------------------------------------------------------------------
     # IT-7.4: CriteriaCache hit avoids re-extraction
@@ -252,7 +253,7 @@ class TestEvaluationModuleIntegration:
     # -----------------------------------------------------------------------
 
     def test_beta_zero_pure_execution_score(self, temp_dir, fake_issue):
-        """With beta=0, S_w = S_exec * (1 - 0 * anything) = S_exec.
+        """With beta=0, S_w = S_exec + (1 - S_exec) * 0 * S_llm = S_exec.
         The LLM judge should NOT be called because beta=0 makes it irrelevant."""
         cache_dir = os.path.join(temp_dir, "criteria_cache")
         module, scorer, llm, _ = _build_evaluation_module(
@@ -349,16 +350,17 @@ class TestEvaluationModuleIntegration:
         assert results["ws_perfect"].s_w == pytest.approx(1.0)
 
         # ws_partial: S_exec=0.5, S_llm=0.7
-        # S_w = 0.5 * (1 - 0.3 * (1 - 0.7)) = 0.5 * 0.91 = 0.455
+        # S_w = 0.5 + (1 - 0.5) * 0.3 * 0.7 = 0.5 + 0.105 = 0.605
         assert results["ws_partial"].s_exec == 0.5
         assert results["ws_partial"].s_llm == pytest.approx(0.7)
-        expected_partial = 0.5 * (1 - 0.3 * (1 - 0.7))
+        expected_partial = 0.5 + (1 - 0.5) * 0.3 * 0.7
         assert results["ws_partial"].s_w == pytest.approx(expected_partial, rel=1e-6)
 
         # ws_zero: S_exec=0.0, S_llm=1.0
-        # S_w = 0.0 * (1 - 0.3 * 0.0) = 0.0
+        # S_w = 0.0 + (1 - 0.0) * 0.3 * 1.0 = 0.3
         assert results["ws_zero"].s_exec == 0.0
-        assert results["ws_zero"].s_w == pytest.approx(0.0, abs=1e-9)
+        expected_zero = 0.0 + (1 - 0.0) * 0.3 * 1.0
+        assert results["ws_zero"].s_w == pytest.approx(expected_zero, rel=1e-6)
 
         # ws_missing: not in patches, should either be absent or have S_w=0
         if "ws_missing" in results:

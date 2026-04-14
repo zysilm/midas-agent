@@ -23,7 +23,7 @@ class TestMidasConfig:
         assert cfg.runtime_mode == "config_evolution"
 
     def test_config_defaults(self):
-        """MidasConfig defaults: score_floor=0.01, multiplier_mode='static', etc."""
+        """MidasConfig defaults: score_floor=0.01, multiplier_mode='adaptive', etc."""
         cfg = MidasConfig(
             initial_budget=5000,
             workspace_count=2,
@@ -31,12 +31,12 @@ class TestMidasConfig:
         )
 
         assert cfg.score_floor == 0.01
-        assert cfg.multiplier_mode == "static"
+        assert cfg.multiplier_mode == "adaptive"
         assert cfg.multiplier_init == 1.0
-        assert cfg.er_target == 0.0
-        assert cfg.cool_down == 0
+        assert cfg.er_target == 0.1
+        assert cfg.cool_down == 0.05
         assert cfg.mult_min == 0.5
-        assert cfg.mult_max == 2.0
+        assert cfg.mult_max == 5.0
         assert cfg.beta == 0.3
         assert cfg.eval_model == ""
         assert cfg.n_evict == 1
@@ -84,7 +84,7 @@ class TestMidasConfig:
             multiplier_mode="adaptive",
             multiplier_init=1.5,
             er_target=0.1,
-            cool_down=3,
+            cool_down=0.1,
             mult_min=0.2,
             mult_max=3.0,
             beta=0.5,
@@ -101,7 +101,7 @@ class TestMidasConfig:
         assert cfg.multiplier_mode == "adaptive"
         assert cfg.multiplier_init == 1.5
         assert cfg.er_target == 0.1
-        assert cfg.cool_down == 3
+        assert cfg.cool_down == 0.1
         assert cfg.mult_min == 0.2
         assert cfg.mult_max == 3.0
         assert cfg.beta == 0.5

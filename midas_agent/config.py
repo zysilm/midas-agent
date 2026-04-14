@@ -8,12 +8,12 @@ class MidasConfig:
     workspace_count: int
     runtime_mode: str
     score_floor: float = 0.01
-    multiplier_mode: str = "static"
+    multiplier_mode: str = "adaptive"
     multiplier_init: float = 1.0
-    er_target: float = 0.0
-    cool_down: int = 0
+    er_target: float = 0.1
+    cool_down: float = 0.05
     mult_min: float = 0.5
-    mult_max: float = 2.0
+    mult_max: float = 5.0
     beta: float = 0.3
     eval_model: str = ""
     n_evict: int = 1

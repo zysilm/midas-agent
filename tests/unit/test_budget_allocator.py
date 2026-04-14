@@ -28,7 +28,7 @@ class TestAdaptiveMultiplier:
             mode="adaptive",
             init_value=1.0,
             er_target=0.2,
-            cool_down=0,
+            cool_down=0.0,
             mult_min=0.5,
             mult_max=3.0,
         )
@@ -36,67 +36,181 @@ class TestAdaptiveMultiplier:
         assert new_value > 1.0
 
     def test_adaptive_multiplier_adaptive_down(self):
-        """When eviction_rate < er_target, the multiplier decreases."""
+        """When eviction_rate == 0, the multiplier deflates via cool_down."""
         am = AdaptiveMultiplier(
             mode="adaptive",
             init_value=1.0,
-            er_target=0.5,
-            cool_down=0,
+            er_target=0.2,
+            cool_down=0.05,
             mult_min=0.1,
             mult_max=3.0,
         )
-        new_value = am.update(eviction_rate=0.1)
+        new_value = am.update(eviction_rate=0.0)
         assert new_value < 1.0
 
-    def test_adaptive_multiplier_respects_bounds(self):
-        """Multiplier is clamped between mult_min and mult_max."""
+    def test_adaptive_multiplier_respects_upper_bound(self):
+        """Multiplier is clamped at mult_max after repeated inflation."""
         am = AdaptiveMultiplier(
             mode="adaptive",
             init_value=1.0,
             er_target=0.0,
-            cool_down=0,
+            cool_down=0.0,
             mult_min=0.8,
             mult_max=1.2,
         )
         # Very high eviction rate should push up, but clamp at 1.2
         for _ in range(50):
             am.update(eviction_rate=1.0)
-        assert am.current_value <= 1.2
+        assert am.current_value == pytest.approx(1.2)
 
-        # Very low eviction rate should push down, but clamp at 0.8
-        am2 = AdaptiveMultiplier(
-            mode="adaptive",
-            init_value=1.0,
-            er_target=1.0,
-            cool_down=0,
-            mult_min=0.8,
-            mult_max=1.2,
-        )
-        for _ in range(50):
-            am2.update(eviction_rate=0.0)
-        assert am2.current_value >= 0.8
+    def test_adaptive_multiplier_respects_lower_bound(self):
+        """Multiplier is clamped at mult_min after repeated deflation.
 
-    def test_adaptive_multiplier_cooldown(self):
-        """After an update, the next cool_down episodes are skipped (no change)."""
+        Uses cool_down > 0 so ER=0 actually deflates, exercising the
+        lower bound clamping logic.
+        """
         am = AdaptiveMultiplier(
             mode="adaptive",
             init_value=1.0,
             er_target=0.2,
-            cool_down=3,
+            cool_down=0.5,   # aggressive deflation to hit floor quickly
+            mult_min=0.8,
+            mult_max=3.0,
+        )
+        for _ in range(50):
+            am.update(eviction_rate=0.0)
+        assert am.current_value == pytest.approx(0.8)
+
+    def test_adaptive_multiplier_cooldown(self):
+        """cool_down is the deflation rate applied each episode when ER=0.
+        multiplier *= (1 - cool_down) for each ER=0 update."""
+        am = AdaptiveMultiplier(
+            mode="adaptive",
+            init_value=1.0,
+            er_target=0.2,
+            cool_down=0.05,
             mult_min=0.5,
             mult_max=3.0,
         )
-        first = am.update(eviction_rate=0.8)
-        assert first != 1.0  # First update should change
+        # Each ER=0 update deflates by 5%
+        first = am.update(eviction_rate=0.0)
+        assert first == pytest.approx(1.0 * (1 - 0.05))
 
-        # Next 3 updates should be skipped (cooldown)
-        for _ in range(3):
-            val = am.update(eviction_rate=0.8)
-            assert val == first, "Multiplier should not change during cooldown"
+        second = am.update(eviction_rate=0.0)
+        assert second == pytest.approx(1.0 * (1 - 0.05) ** 2)
 
-        # 4th update after cooldown should change again
-        val = am.update(eviction_rate=0.8)
-        assert val != first, "Multiplier should update after cooldown expires"
+        third = am.update(eviction_rate=0.0)
+        assert third == pytest.approx(1.0 * (1 - 0.05) ** 3)
+
+    def test_adaptive_multiplier_dead_zone(self):
+        """When 0 < ER <= er_target, multiplier does not change (dead zone).
+
+        Design 03-05 §5.12.4: ER in (0, er_target] → no adjustment.
+        """
+        am = AdaptiveMultiplier(
+            mode="adaptive",
+            init_value=1.0,
+            er_target=0.2,
+            cool_down=0.05,
+            mult_min=0.5,
+            mult_max=3.0,
+        )
+        # ER exactly at er_target boundary → dead zone, no change
+        result = am.update(eviction_rate=0.2)
+        assert result == pytest.approx(1.0)
+
+        # ER slightly below er_target → still dead zone
+        result = am.update(eviction_rate=0.1)
+        assert result == pytest.approx(1.0)
+
+        # ER just above zero → still dead zone
+        result = am.update(eviction_rate=0.05)
+        assert result == pytest.approx(1.0)
+
+    def test_adaptive_multiplier_moderate_inflate(self):
+        """When er_target < ER <= 0.5, multiplier inflates by 1.2×.
+
+        Design 03-05 §5.12.4: moderate inflation zone.
+        """
+        am = AdaptiveMultiplier(
+            mode="adaptive",
+            init_value=1.0,
+            er_target=0.1,
+            cool_down=0.05,
+            mult_min=0.5,
+            mult_max=5.0,
+        )
+        result = am.update(eviction_rate=0.3)
+        assert result == pytest.approx(1.0 * 1.2)
+
+        result = am.update(eviction_rate=0.5)
+        assert result == pytest.approx(1.0 * 1.2 * 1.2)
+
+    def test_adaptive_multiplier_strong_inflate(self):
+        """When 0.5 < ER < 1.0, multiplier inflates by 1.5×.
+
+        Design 03-05 §5.12.4: strong inflation zone.
+        """
+        am = AdaptiveMultiplier(
+            mode="adaptive",
+            init_value=1.0,
+            er_target=0.1,
+            cool_down=0.05,
+            mult_min=0.5,
+            mult_max=5.0,
+        )
+        result = am.update(eviction_rate=0.7)
+        assert result == pytest.approx(1.0 * 1.5)
+
+    def test_adaptive_multiplier_emergency_double(self):
+        """When ER == 1.0 (all evicted), multiplier doubles (2.0×).
+
+        Design 03-05 §5.12.4: emergency doubling zone.
+        """
+        am = AdaptiveMultiplier(
+            mode="adaptive",
+            init_value=1.0,
+            er_target=0.1,
+            cool_down=0.05,
+            mult_min=0.5,
+            mult_max=5.0,
+        )
+        result = am.update(eviction_rate=1.0)
+        assert result == pytest.approx(1.0 * 2.0)
+
+    def test_adaptive_multiplier_zone_transitions(self):
+        """Multiplier correctly transitions across all 5 zones in sequence.
+
+        Design 03-05 §5.12.4: full bang-bang controller behavior.
+        """
+        am = AdaptiveMultiplier(
+            mode="adaptive",
+            init_value=1.0,
+            er_target=0.1,
+            cool_down=0.05,
+            mult_min=0.5,
+            mult_max=5.0,
+        )
+        v = 1.0
+
+        # Zone 1: ER=0 → deflate
+        v *= (1 - 0.05)
+        assert am.update(eviction_rate=0.0) == pytest.approx(v)
+
+        # Zone 2: dead zone → no change
+        assert am.update(eviction_rate=0.05) == pytest.approx(v)
+
+        # Zone 3: moderate inflate
+        v *= 1.2
+        assert am.update(eviction_rate=0.4) == pytest.approx(v)
+
+        # Zone 4: strong inflate
+        v *= 1.5
+        assert am.update(eviction_rate=0.8) == pytest.approx(v)
+
+        # Zone 5: emergency double
+        v *= 2.0
+        assert am.update(eviction_rate=1.0) == pytest.approx(v)
 
     def test_adaptive_multiplier_current_value(self):
         """current_value property returns the current multiplier."""

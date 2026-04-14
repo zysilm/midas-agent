@@ -25,7 +25,7 @@ def _make_allocator(
     *,
     mult_mode: str = "static",
     er_target: float | None = None,
-    cool_down: int | None = None,
+    cool_down: float | None = None,
     mult_min: float | None = None,
     mult_max: float | None = None,
 ) -> tuple[BudgetAllocator, AdaptiveMultiplier]:

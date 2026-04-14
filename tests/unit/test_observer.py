@@ -96,6 +96,32 @@ class TestObserver:
 
             assert result is None
 
+    def test_on_time_paused(self):
+        """on_time_paused records a workspace time-pause event."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            observer = Observer(output_dir=tmpdir)
+            ts = time.time()
+
+            result = observer.on_time_paused(
+                workspace_id="ws-001",
+                timestamp=ts,
+            )
+
+            assert result is None
+
+    def test_on_time_resumed(self):
+        """on_time_resumed records a workspace time-resume event."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            observer = Observer(output_dir=tmpdir)
+            ts = time.time()
+
+            result = observer.on_time_resumed(
+                workspace_id="ws-001",
+                timestamp=ts,
+            )
+
+            assert result is None
+
     def test_print_episode_summary(self):
         """print_episode_summary outputs a summary for a given episode."""
         with tempfile.TemporaryDirectory() as tmpdir:
