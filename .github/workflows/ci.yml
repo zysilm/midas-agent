@@ -21,6 +21,15 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
+      - name: Check for leaked secrets
+        run: |
+          # Fail if any file contains something that looks like an API key
+          # Patterns: sk-ant-, sk-proj-, sk-, key-, ghp_, ghu_
+          if git diff --name-only origin/main...HEAD 2>/dev/null | xargs grep -rlP '(sk-ant-|sk-proj-|sk-[a-zA-Z0-9]{20,}|ghp_[a-zA-Z0-9]{36}|AKIA[A-Z0-9]{16})' -- 2>/dev/null; then
+            echo "::error::Possible API key detected in committed files. Remove it before pushing."
+            exit 1
+          fi
+
       - name: Install Poetry
         run: pip install poetry
 

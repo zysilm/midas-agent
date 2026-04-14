@@ -15,7 +15,14 @@ class MidasConfig:
     mult_min: float = 0.5
     mult_max: float = 5.0
     beta: float = 0.3
-    eval_model: str = ""
     n_evict: int = 1
     max_iterations_free_agent: int = 50
     storage_backend: str = "sqlite"
+    # Task execution LLM (empty model = stub)
+    model: str = ""
+    api_key: str = ""
+    api_base: str = ""
+    # Evaluation LLM judge (empty = same as task LLM)
+    eval_model: str = ""
+    eval_api_key: str = ""
+    eval_api_base: str = ""

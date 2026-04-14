@@ -29,6 +29,18 @@ from midas_agent.workspace.manager import WorkspaceManager
 logger = logging.getLogger(__name__)
 
 
+def _make_llm_provider(model: str, api_key: str, api_base: str) -> LLMProvider:
+    """Create an LLM provider from config. Empty model = stub."""
+    if not model:
+        return _StubLLMProvider()
+    from midas_agent.llm.litellm_provider import LiteLLMProvider
+    return LiteLLMProvider(
+        model=model,
+        api_key=api_key or None,
+        api_base=api_base or None,
+    )
+
+
 class _StubLLMProvider(LLMProvider):
     """Minimal LLM provider for offline/test usage."""
 
@@ -131,7 +143,7 @@ def run_training(
         storage=storage, hooks=hooks, serial_queue=serial_queue,
     )
 
-    llm_provider = _StubLLMProvider()
+    llm_provider = _make_llm_provider(config.model, config.api_key, config.api_base)
     resource_meter = ResourceMeter(
         training_log=training_log, llm_provider=llm_provider,
     )
@@ -163,10 +175,15 @@ def run_training(
         system_llm_callback=lambda req: system_llm.call(req),
     )
 
+    eval_provider = _make_llm_provider(
+        config.eval_model or config.model,
+        config.eval_api_key or config.api_key,
+        config.eval_api_base or config.api_base,
+    )
     execution_scorer = ExecutionScorer(docker_image="", timeout=300)
     criteria_cache = CriteriaCache(cache_dir="/tmp/midas_criteria")
     llm_judge = LLMJudge(
-        llm_provider=llm_provider, criteria_cache=criteria_cache,
+        llm_provider=eval_provider, criteria_cache=criteria_cache,
     )
     evaluation_module = EvaluationModule(
         execution_scorer=execution_scorer,
