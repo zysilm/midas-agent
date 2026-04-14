@@ -8,7 +8,7 @@ from midas_agent.stdlib.action import Action
 
 class ReportResultAction(Action):
     def __init__(self, report: Callable) -> None:
-        raise NotImplementedError
+        self._report = report
 
     @property
     def name(self) -> str:
@@ -26,4 +26,7 @@ class ReportResultAction(Action):
         }
 
     def execute(self, **kwargs) -> str:
-        raise NotImplementedError
+        result = kwargs["result"]
+        status = kwargs.get("status", "success")
+        self._report(result, status)
+        return f"Result reported with status={status}"

@@ -5,7 +5,7 @@ from midas_agent.llm.types import LLMRequest, LLMResponse
 
 class SystemLLM:
     def __init__(self, llm_provider: LLMProvider) -> None:
-        raise NotImplementedError
+        self._llm_provider = llm_provider
 
     def call(self, request: LLMRequest) -> LLMResponse:
-        raise NotImplementedError
+        return self._llm_provider.complete(request)

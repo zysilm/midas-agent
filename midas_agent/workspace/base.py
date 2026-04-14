@@ -14,6 +14,8 @@ class Workspace(ABC):
         system_llm: Callable[[LLMRequest], LLMResponse],
     ) -> None:
         self.workspace_id = workspace_id
+        self.calls: list[tuple[str, dict]] = []
+        self.budget_received: int = 0
 
     @abstractmethod
     def receive_budget(self, amount: int) -> None:

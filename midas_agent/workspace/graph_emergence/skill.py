@@ -23,7 +23,25 @@ class SkillReviewer:
         system_llm: Callable[[LLMRequest], LLMResponse],
         free_agent_manager: FreeAgentManager,
     ) -> None:
-        raise NotImplementedError
+        self._system_llm = system_llm
+        self._free_agent_manager = free_agent_manager
 
     def review(self, eval_results: dict) -> None:
-        raise NotImplementedError
+        if "agent_id" in eval_results:
+            self._free_agent_manager.update_embedding(eval_results["agent_id"])
+        # Optionally call system_llm for skill review
+        self._system_llm(
+            LLMRequest(
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "Review the following evaluation results and suggest skill updates.",
+                    },
+                    {
+                        "role": "user",
+                        "content": str(eval_results),
+                    },
+                ],
+                model="default",
+            )
+        )

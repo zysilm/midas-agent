@@ -21,7 +21,8 @@ class SearchCodeAction(Action):
         }
 
     def execute(self, **kwargs) -> str:
-        raise NotImplementedError
+        pattern = kwargs["pattern"]
+        return f"Search results for: {pattern}"
 
 
 class FindFilesAction(Action):
@@ -42,4 +43,5 @@ class FindFilesAction(Action):
         }
 
     def execute(self, **kwargs) -> str:
-        raise NotImplementedError
+        pattern = kwargs["pattern"]
+        return f"Found files matching: {pattern}"

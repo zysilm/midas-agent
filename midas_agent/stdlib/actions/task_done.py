@@ -16,4 +16,4 @@ class TaskDoneAction(Action):
         return {"summary": {"type": "string", "required": True}}
 
     def execute(self, **kwargs) -> str:
-        raise NotImplementedError
+        return kwargs["summary"]

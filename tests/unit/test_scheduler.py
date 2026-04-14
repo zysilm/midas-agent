@@ -109,6 +109,9 @@ class TestScheduler:
             training_log=training_log,
         )
 
+        # Seed etas so the proportional (non-cold-start) path is taken.
+        scheduler._last_etas = {"ws-1": 0.5, "ws-2": 0.5}
+
         scheduler.allocate_budgets()
 
         budget_allocator.calculate_allocation.assert_called_once()
@@ -132,6 +135,7 @@ class TestScheduler:
         budget_allocator.calculate_eta.return_value = {"ws-1": 0.008}
 
         training_log = MagicMock(spec=TrainingLog)
+        training_log.get_balance.return_value = 9000
 
         scheduler = _make_scheduler(
             evaluation_module=eval_module,
@@ -176,6 +180,9 @@ class TestScheduler:
         """replace_evicted() delegates to WorkspaceManager."""
         workspace_manager = MagicMock(spec=WorkspaceManager)
         scheduler = _make_scheduler(workspace_manager=workspace_manager)
+
+        # Seed evicted IDs so replace_evicted has workspaces to replace.
+        scheduler._evicted_ids = ["ws-old-1", "ws-old-2"]
 
         new_configs = [{"name": "ws-new-1"}, {"name": "ws-new-2"}]
         scheduler.replace_evicted(new_configs)
@@ -250,6 +257,7 @@ class TestScheduler:
         selection_engine.run_selection.return_value = (["ws-2"], ["ws-1"])
 
         training_log = MagicMock(spec=TrainingLog)
+        training_log.get_balance.return_value = 9000
 
         scheduler = _make_scheduler(
             evaluation_module=eval_module,

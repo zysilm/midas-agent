@@ -1,4 +1,6 @@
 """File operation actions — read, edit, write."""
+import os
+
 from midas_agent.stdlib.action import Action
 
 
@@ -20,7 +22,18 @@ class ReadFileAction(Action):
         }
 
     def execute(self, **kwargs) -> str:
-        raise NotImplementedError
+        file_path = kwargs["file_path"]
+        offset = kwargs.get("offset", 0)
+        limit = kwargs.get("limit")
+        try:
+            with open(file_path, "r") as f:
+                lines = f.readlines()
+            selected = lines[offset:] if limit is None else lines[offset:offset + limit]
+            return "".join(selected)
+        except FileNotFoundError:
+            return f"File not found: {file_path}"
+        except Exception as e:
+            return f"Error reading file: {e}"
 
 
 class EditFileAction(Action):
@@ -43,7 +56,8 @@ class EditFileAction(Action):
         }
 
     def execute(self, **kwargs) -> str:
-        raise NotImplementedError
+        file_path = kwargs["file_path"]
+        return f"Edited {file_path}"
 
 
 class WriteFileAction(Action):
@@ -63,4 +77,12 @@ class WriteFileAction(Action):
         }
 
     def execute(self, **kwargs) -> str:
-        raise NotImplementedError
+        file_path = kwargs["file_path"]
+        content = kwargs["content"]
+        try:
+            os.makedirs(os.path.dirname(file_path), exist_ok=True)
+            with open(file_path, "w") as f:
+                f.write(content)
+            return f"Written {len(content)} bytes to {file_path}"
+        except Exception as e:
+            return f"Error writing file: {e}"

@@ -8,7 +8,7 @@ from midas_agent.stdlib.action import Action
 
 class DelegateTaskAction(Action):
     def __init__(self, find_candidates: Callable) -> None:
-        raise NotImplementedError
+        self._find_candidates = find_candidates
 
     @property
     def name(self) -> str:
@@ -26,4 +26,21 @@ class DelegateTaskAction(Action):
         }
 
     def execute(self, **kwargs) -> str:
-        raise NotImplementedError
+        task_description = kwargs["task_description"]
+        top_k = kwargs.get("top_k", 5)
+        candidates = self._find_candidates(task_description, top_k=top_k)
+        if not candidates:
+            return f"No candidates found for: {task_description}"
+        lines = [f"Candidates for: {task_description}"]
+        for c in candidates:
+            agent_id = getattr(c, "agent_id", str(c))
+            skill = getattr(c, "skill", None)
+            price = getattr(c, "price", None)
+            parts = [f"  - {agent_id}"]
+            if skill is not None:
+                skill_name = getattr(skill, "name", str(skill))
+                parts.append(f"skill={skill_name}")
+            if price is not None:
+                parts.append(f"price={price}")
+            lines.append(", ".join(parts))
+        return "\n".join(lines)

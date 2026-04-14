@@ -15,7 +15,25 @@ class PricingEngine:
         training_log: TrainingLog,
         buffer_multiplier: float = 1.2,
     ) -> None:
-        raise NotImplementedError
+        self._training_log = training_log
+        self._buffer_multiplier = buffer_multiplier
 
     def calculate_price(self, agent: Agent) -> int:
-        raise NotImplementedError
+        from midas_agent.scheduler.storage import LogFilter
+
+        entries = self._training_log.get_log_entries(
+            LogFilter(entity_id=agent.agent_id, type="consume")
+        )
+
+        if not entries:
+            base_cost = 100
+        else:
+            base_cost = sum(e.amount for e in entries) / len(entries)
+
+        price = int(base_cost * self._buffer_multiplier)
+
+        balance = self._training_log.get_balance(agent.agent_id)
+        if balance < 0:
+            price += abs(balance)
+
+        return max(price, 1)
