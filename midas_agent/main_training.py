@@ -228,7 +228,8 @@ def run_training(
             else:
                 logger.info("  No repo to clone (dry run)")
 
-            # 2. Allocate budgets
+            # 2. Set current issue and allocate budgets
+            scheduler.set_current_issue(issue)
             scheduler.allocate_budgets()
 
             # 3. Execute all workspaces (each gets its own repo copy)

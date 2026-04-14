@@ -47,6 +47,14 @@ class Scheduler:
         self._evicted_ids: list[str] = []
 
     # ------------------------------------------------------------------
+    # Episode context
+    # ------------------------------------------------------------------
+
+    def set_current_issue(self, issue) -> None:
+        """Set the current issue for this episode."""
+        self._evaluation_module.set_issue(issue)
+
+    # ------------------------------------------------------------------
     # Budget allocation
     # ------------------------------------------------------------------
 

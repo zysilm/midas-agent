@@ -44,6 +44,10 @@ class EvaluationModule:
             description="",
         )
 
+    def set_issue(self, issue: Issue) -> None:
+        """Set the current issue for this evaluation episode."""
+        self._issue = issue
+
     def evaluate_all(
         self,
         patches: dict[str, str],
