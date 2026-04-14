@@ -1,6 +1,7 @@
 """Pricing engine for Graph Emergence agent marketplace."""
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
 from midas_agent.scheduler.training_log import TrainingLog
@@ -9,7 +10,15 @@ if TYPE_CHECKING:
     from midas_agent.workspace.graph_emergence.agent import Agent
 
 
-class PricingEngine:
+class PricingEngineBase(ABC):
+    """Abstract pricing interface shared by training and production."""
+
+    @abstractmethod
+    def calculate_price(self, agent: Agent) -> int:
+        raise NotImplementedError
+
+
+class PricingEngine(PricingEngineBase):
     def __init__(
         self,
         training_log: TrainingLog,

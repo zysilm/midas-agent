@@ -4,7 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from midas_agent.workspace.graph_emergence.pricing import PricingEngine
+from midas_agent.workspace.graph_emergence.pricing import PricingEngineBase
 
 if TYPE_CHECKING:
     from midas_agent.workspace.graph_emergence.agent import Agent
@@ -18,7 +18,7 @@ class Candidate:
 
 
 class FreeAgentManager:
-    def __init__(self, pricing_engine: PricingEngine) -> None:
+    def __init__(self, pricing_engine: PricingEngineBase) -> None:
         self._pricing_engine = pricing_engine
         self._agents: dict[str, Agent] = {}
 
