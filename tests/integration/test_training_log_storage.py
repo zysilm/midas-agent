@@ -207,7 +207,7 @@ class TestHookInvocationOrdering:
         spy_hooks.assert_called("on_consume", times=1)
         consume_calls = spy_hooks.get_calls("on_consume")
         # After consuming 2000 from 5000, remaining balance is 3000
-        assert consume_calls[0]["to_balance_after"] == 3_000
+        assert consume_calls[0]["balance_after"] == 3_000
 
         # Order: allocate happened before consume (index-wise in the ledger)
         all_entries = log.get_log_entries(LogFilter(entity_id="ws1"))
