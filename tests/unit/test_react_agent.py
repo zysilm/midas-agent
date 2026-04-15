@@ -246,6 +246,78 @@ class TestReactAgent:
         assert result.action_history[0].action_name == "bash"
         assert "hello" in result.action_history[0].result
 
+    def test_balance_injected_after_tool_result(self):
+        """When balance_provider is set, current balance is appended to tool results."""
+        from midas_agent.stdlib.actions.bash import BashAction
+        from midas_agent.llm.types import ToolCall
+
+        call_count = 0
+        captured_messages: list[list[dict]] = []
+
+        def llm_with_tool(req: LLMRequest) -> LLMResponse:
+            nonlocal call_count
+            captured_messages.append(list(req.messages))
+            call_count += 1
+            if call_count == 1:
+                return LLMResponse(
+                    content=None,
+                    tool_calls=[ToolCall(id="c1", name="bash", arguments={"command": "echo hi"})],
+                    usage=TokenUsage(input_tokens=10, output_tokens=5),
+                )
+            return LLMResponse(
+                content="done", tool_calls=None,
+                usage=TokenUsage(input_tokens=10, output_tokens=5),
+            )
+
+        agent = ReactAgent(
+            system_prompt="test",
+            actions=[BashAction()],
+            call_llm=llm_with_tool,
+            balance_provider=lambda: 42000,
+        )
+        agent.run()
+
+        # Second LLM call should have the tool result with balance injected
+        second_call_msgs = captured_messages[1]
+        tool_msg = [m for m in second_call_msgs if m.get("role") == "tool"]
+        assert len(tool_msg) == 1
+        assert "[当前余额: 42000]" in tool_msg[0]["content"]
+
+    def test_no_balance_when_provider_is_none(self):
+        """When balance_provider is None, tool results are not modified."""
+        from midas_agent.stdlib.actions.bash import BashAction
+        from midas_agent.llm.types import ToolCall
+
+        call_count = 0
+        captured_messages: list[list[dict]] = []
+
+        def llm_with_tool(req: LLMRequest) -> LLMResponse:
+            nonlocal call_count
+            captured_messages.append(list(req.messages))
+            call_count += 1
+            if call_count == 1:
+                return LLMResponse(
+                    content=None,
+                    tool_calls=[ToolCall(id="c1", name="bash", arguments={"command": "echo hi"})],
+                    usage=TokenUsage(input_tokens=10, output_tokens=5),
+                )
+            return LLMResponse(
+                content="done", tool_calls=None,
+                usage=TokenUsage(input_tokens=10, output_tokens=5),
+            )
+
+        agent = ReactAgent(
+            system_prompt="test",
+            actions=[BashAction()],
+            call_llm=llm_with_tool,
+        )
+        agent.run()
+
+        second_call_msgs = captured_messages[1]
+        tool_msg = [m for m in second_call_msgs if m.get("role") == "tool"]
+        assert len(tool_msg) == 1
+        assert "余额" not in tool_msg[0]["content"]
+
     def test_terminates_on_task_done(self):
         """When TaskDoneAction is invoked, termination_reason is 'done'."""
         from midas_agent.stdlib.actions.task_done import TaskDoneAction

@@ -11,9 +11,13 @@ class DelegateTaskAction(Action):
         self,
         find_candidates: Callable,
         spawn_callback: Callable | None = None,
+        balance_provider: Callable[[], int] | None = None,
+        calling_agent_id: str | None = None,
     ) -> None:
         self._find_candidates = find_candidates
         self._spawn_callback = spawn_callback
+        self._balance_provider = balance_provider
+        self._calling_agent_id = calling_agent_id
 
     @property
     def name(self) -> str:
@@ -43,12 +47,31 @@ class DelegateTaskAction(Action):
             "spawn": {"type": "boolean", "required": False},
         }
 
+    def _is_caller_protected(self) -> bool:
+        """Check if the calling agent is protected by looking it up via candidates."""
+        if self._calling_agent_id is None:
+            return False
+        # Use find_candidates with empty query to discover all agents,
+        # then check if the calling agent has protected_by set.
+        try:
+            candidates = self._find_candidates("")
+            for c in candidates:
+                agent = getattr(c, "agent", None)
+                if agent is not None and getattr(agent, "agent_id", None) == self._calling_agent_id:
+                    return bool(getattr(agent, "protected_by", None))
+        except Exception:
+            pass
+        return False
+
     def execute(self, **kwargs) -> str:
         task_description = kwargs["task_description"]
         spawn = kwargs.get("spawn", False)
 
         # Handle spawn request
         if spawn and self._spawn_callback is not None:
+            # Protected agents cannot spawn new agents
+            if self._is_caller_protected():
+                return "Protected agent cannot spawn new agents. Not allowed."
             agent = self._spawn_callback(task_description)
             agent_id = getattr(agent, "agent_id", None) or "new agent"
             return f"Spawned agent {agent_id} for: {task_description}"
@@ -73,5 +96,10 @@ class DelegateTaskAction(Action):
         # Always offer spawn option when spawn_callback is available
         if self._spawn_callback is not None:
             lines.append("Option: spawn a new agent for this task.")
+
+        # Append balance information if provider is set
+        if self._balance_provider is not None:
+            balance = self._balance_provider()
+            lines.append(f"[你的余额: {balance}]")
 
         return "\n".join(lines)

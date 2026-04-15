@@ -35,11 +35,13 @@ class ReactAgent:
         actions: list[Action],
         call_llm: Callable[[LLMRequest], LLMResponse],
         max_iterations: int | None = None,
+        balance_provider: Callable[[], int] | None = None,
     ) -> None:
         self.system_prompt = system_prompt
         self.actions = actions
         self.call_llm = call_llm
         self.max_iterations = max_iterations
+        self.balance_provider = balance_provider
         self._actions_by_name: dict[str, Action] = {a.name: a for a in actions}
 
     def _build_tools(self) -> list[dict] | None:
@@ -143,10 +145,13 @@ class ReactAgent:
                     action_history.append(record)
 
                     # Add tool result message
+                    tool_content = result
+                    if self.balance_provider is not None:
+                        tool_content += f"\n[当前余额: {self.balance_provider()}]"
                     messages.append({
                         "role": "tool",
                         "tool_call_id": tool_call.id,
-                        "content": result,
+                        "content": tool_content,
                     })
 
                     # Check for task_done action

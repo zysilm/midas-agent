@@ -948,3 +948,129 @@ class TestIT616WorkspaceSpawnDuringExecute:
         spawned = list(free_agent_manager.free_agents.values())[0]
         assert spawned.protected_by == "lead-1"
         assert spawned.agent_type == "free"
+
+
+# ---------------------------------------------------------------------------
+# IT-6.17: Independent free agent can spawn new agents
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+class TestIT617FreeAgentSpawnsAnother:
+    """An independent free agent (not protected) can spawn new agents.
+    Design doc §3.2: only protected agents cannot spawn. Independent
+    free agents have their own balance and can spawn."""
+
+    def test_independent_free_agent_spawns(self):
+        training_log, storage, spy_hooks = _make_log()
+        pricing_engine = PricingEngine(training_log=training_log)
+        free_agent_manager = FreeAgentManager(pricing_engine=pricing_engine)
+
+        # Register an independent free agent (no protected_by)
+        independent = _make_free_agent("indie-1", skill=_make_skill("testing"))
+        free_agent_manager.register(independent)
+
+        spawned: list[Agent] = []
+
+        def spawn_callback(task_description: str) -> Agent:
+            agent = Agent(
+                agent_id=f"sub-{len(spawned)}",
+                soul=Soul(system_prompt=f"Sub-agent for: {task_description}"),
+                agent_type="free",
+                protected_by="indie-1",  # protected by the independent agent
+            )
+            spawned.append(agent)
+            free_agent_manager.register(agent)
+            return agent
+
+        delegate = DelegateTaskAction(
+            find_candidates=lambda desc: free_agent_manager.match(desc),
+            spawn_callback=spawn_callback,
+        )
+
+        output = delegate.execute(task_description="write tests", spawn=True)
+
+        assert len(spawned) == 1
+        assert spawned[0].protected_by == "indie-1"
+        assert "sub-0" in free_agent_manager.free_agents
+
+
+# ---------------------------------------------------------------------------
+# IT-6.18: Protected agent cannot spawn (design doc §3.2)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+class TestIT618ProtectedAgentCannotSpawn:
+    """A protected agent (protected_by is set) must not be allowed to spawn.
+    Design doc §3.2: 'protected agent不可spawn新agent'."""
+
+    def test_protected_agent_spawn_rejected(self):
+        training_log, storage, spy_hooks = _make_log()
+        pricing_engine = PricingEngine(training_log=training_log)
+        free_agent_manager = FreeAgentManager(pricing_engine=pricing_engine)
+
+        # Register a protected agent
+        protected = Agent(
+            agent_id="protected-1",
+            soul=Soul(system_prompt="I am protected"),
+            agent_type="free",
+            protected_by="lead-1",
+        )
+        free_agent_manager.register(protected)
+
+        spawn_called = False
+
+        def spawn_callback(task_description: str) -> Agent:
+            nonlocal spawn_called
+            spawn_called = True
+            return Agent(
+                agent_id="should-not-exist",
+                soul=Soul(system_prompt="x"),
+                agent_type="free",
+                protected_by="protected-1",
+            )
+
+        delegate = DelegateTaskAction(
+            find_candidates=lambda desc: free_agent_manager.match(desc),
+            spawn_callback=spawn_callback,
+            calling_agent_id="protected-1",
+        )
+
+        output = delegate.execute(task_description="do something", spawn=True)
+
+        # Spawn should be rejected for protected agents
+        assert not spawn_called
+        assert "cannot spawn" in output.lower() or "not allowed" in output.lower()
+
+
+# ---------------------------------------------------------------------------
+# IT-6.19: Balance shown in delegate_task output
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+class TestIT619BalanceInDelegateOutput:
+    """delegate_task output must include the caller's current balance
+    when balance_provider is set, so the agent can compare prices."""
+
+    def test_balance_shown_with_candidates(self):
+        training_log, storage, spy_hooks = _make_log()
+        pricing_engine = PricingEngine(training_log=training_log)
+        free_agent_manager = FreeAgentManager(pricing_engine=pricing_engine)
+
+        free_agent_manager.register(
+            _make_free_agent("expert-1", skill=_make_skill("debugging"))
+        )
+
+        delegate = DelegateTaskAction(
+            find_candidates=lambda desc: free_agent_manager.match(desc),
+            spawn_callback=lambda desc: None,
+            balance_provider=lambda: 45000,
+        )
+
+        output = delegate.execute(task_description="debug crash")
+
+        assert "expert-1" in output
+        assert "45000" in output
+        assert "spawn" in output.lower()

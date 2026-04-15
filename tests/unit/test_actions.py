@@ -134,6 +134,24 @@ class TestDelegateTaskAction:
         action = DelegateTaskAction(find_candidates=lambda desc: [])
         assert action.name == "delegate_task"
 
+    def test_delegate_task_output_includes_balance(self):
+        """When balance_provider is set, output includes current balance."""
+        action = DelegateTaskAction(
+            find_candidates=lambda desc: [],
+            spawn_callback=lambda desc: None,
+            balance_provider=lambda: 35000,
+        )
+        output = action.execute(task_description="fix bug")
+        assert "35000" in output
+
+    def test_delegate_task_no_balance_without_provider(self):
+        """When balance_provider is None, output does not include balance."""
+        action = DelegateTaskAction(
+            find_candidates=lambda desc: [],
+        )
+        output = action.execute(task_description="fix bug")
+        assert "余额" not in output and "balance" not in output.lower()
+
 
 @pytest.mark.unit
 class TestReportResultAction:
