@@ -197,11 +197,14 @@ class TestBudgetSelectionIntegration:
         assert len(survivors) == 1, "At least one workspace must survive"
 
     # -----------------------------------------------------------------------
-    # IT-3.8: Graph Emergence skips eviction
+    # IT-3.8: Graph Emergence skips end-of-episode eviction
     # -----------------------------------------------------------------------
 
     def test_graph_emergence_skips_eviction(self):
-        """runtime_mode='graph_emergence'. evicted=[], survivors=all."""
+        """runtime_mode='graph_emergence'. evicted=[], survivors=all.
+
+        Graph Emergence relies on mid-episode budget exhaustion, not
+        end-of-episode bottom-n ranking."""
         engine = SelectionEngine("graph_emergence", n_evict=2)
         etas = {"ws1": 0.1, "ws2": 0.2, "ws3": 0.3}
 

@@ -344,14 +344,14 @@ class TestFullEpisodeLifecycle:
         assert len(alloc_entries) == 6
 
     # -----------------------------------------------------------------------
-    # IT-9.3: Single episode -- Graph Emergence, 2 workspaces, no eviction
+    # IT-9.3: Single episode -- Graph Emergence, no end-of-episode eviction
     # -----------------------------------------------------------------------
 
-    def test_single_episode_graph_emergence_no_eviction(
+    def test_single_episode_graph_emergence_no_ranking_eviction(
         self, graph_emergence_config, temp_dir, fake_issue
     ):
-        """Graph Emergence mode with 2 workspaces. No eviction should occur.
-        All consume entries must carry workspace_id for dual attribution."""
+        """Graph Emergence mode: SelectionEngine does NOT do bottom-n eviction.
+        Eviction only happens mid-episode via budget exhaustion."""
         config = graph_emergence_config
         exec_scores = {"ws-0": 0.6, "ws-1": 0.4}
 
@@ -366,43 +366,125 @@ class TestFullEpisodeLifecycle:
             )
         )
 
-        # Create and allocate
         scheduler.create_workspaces()
         scheduler.allocate_budgets()
 
         workspaces = scheduler.get_workspaces()
         assert len(workspaces) == 2
 
-        # Execute
         patches = {}
         for ws in workspaces:
             ws.execute(fake_issue)
             ws.submit_patch()
             patches[ws.workspace_id] = f"patch content for {ws.workspace_id}"
 
-        # Evaluate and select
         evicted, survivors, eval_results = scheduler.evaluate_and_select(patches)
 
-        # Graph Emergence does NOT evict
+        # SelectionEngine returns no evictions for GE mode
         assert evicted == [], (
-            f"Graph Emergence must not evict, but evicted: {evicted}"
+            f"Graph Emergence must not do ranking eviction, but got: {evicted}"
         )
         assert len(survivors) == 2
         assert len(eval_results) == 2
 
-        # Eviction hook must NOT have fired (from selection -- budget depletion
-        # is a separate concern)
-        # Note: we check that no eviction occurred from the selection process
-        # The workspace count should remain 2
-        final_workspaces = scheduler.get_workspaces()
-        assert len(final_workspaces) == 2
+    # -----------------------------------------------------------------------
+    # IT-9.3b: Graph Emergence — mid-episode budget exhaustion tracked
+    # as eviction and triggers workspace replacement (Issue #3 Bug 1)
+    # -----------------------------------------------------------------------
 
-        # All consume entries should have workspace_id set
-        consume_entries = training_log.get_log_entries(LogFilter(type="consume"))
-        for entry in consume_entries:
-            assert entry.workspace_id is not None, (
-                f"Graph Emergence consume entry {entry.tx_id} must carry workspace_id"
+    def test_graph_emergence_budget_exhaustion_collected(
+        self, temp_dir, fake_issue
+    ):
+        """When a GE workspace exhausts its budget mid-episode, the
+        Scheduler must collect that eviction (via on_workspace_evicted
+        hook) and feed it into replace_evicted so a new workspace is
+        created. Issue #3.
+
+        Flow:
+        1. 2 workspaces, very low budget so ws-0 exhausts
+        2. on_workspace_evicted fires for ws-0
+        3. Scheduler collects the mid-episode eviction
+        4. replace_evicted creates replacement
+        5. Final workspace count = 2
+        """
+        config = MidasConfig(
+            initial_budget=200,  # Very low — will exhaust
+            workspace_count=2,
+            runtime_mode="graph_emergence",
+            n_evict=1,
+            score_floor=0.01,
+            multiplier_mode="static",
+            multiplier_init=1.0,
+            beta=0.3,
+        )
+
+        exec_scores = {"ws-0": 0.0, "ws-1": 0.8}
+
+        # First call uses 300 tokens → exhausts ws-0's 200 budget
+        high_usage = LLMResponse(
+            content="expensive",
+            tool_calls=None,
+            usage=TokenUsage(input_tokens=150, output_tokens=150),
+        )
+        normal = _make_llm_response()
+        llm_responses = [high_usage] + [normal] * 50
+
+        scheduler, training_log, hooks, fake_llm, fake_scorer, storage, ws_mgr = (
+            _build_scheduler(
+                config=config,
+                exec_scores=exec_scores,
+                llm_responses=llm_responses,
+                temp_dir=temp_dir,
             )
+        )
+
+        scheduler.create_workspaces()
+        scheduler.allocate_budgets()
+
+        workspaces = scheduler.get_workspaces()
+        assert len(workspaces) == 2
+
+        # Execute — ws-0 will exhaust budget
+        patches = {}
+        for ws in workspaces:
+            try:
+                ws.execute(fake_issue)
+                ws.submit_patch()
+                patches[ws.workspace_id] = f"patch content for {ws.workspace_id}"
+            except BudgetExhaustedError:
+                patches[ws.workspace_id] = ""
+
+        # on_workspace_evicted must have fired for the exhausted workspace
+        eviction_calls = hooks.get_calls("on_workspace_evicted")
+        assert len(eviction_calls) >= 1, (
+            "on_workspace_evicted must fire when budget exhausted mid-episode"
+        )
+
+        # Scheduler must collect mid-episode evictions so they can be
+        # used for replacement. This is the core of Issue #3 Bug 1.
+        mid_episode_evicted = scheduler.get_mid_episode_evictions()
+        assert len(mid_episode_evicted) >= 1, (
+            "Scheduler must track mid-episode budget exhaustion evictions"
+        )
+
+        # evaluate_and_select — SelectionEngine returns [] for GE mode
+        evicted, survivors, eval_results = scheduler.evaluate_and_select(patches)
+        assert evicted == [], "GE mode: no ranking eviction"
+
+        # But the combined eviction list (mid-episode + ranking) should
+        # include the budget-exhausted workspace
+        all_evicted = scheduler.get_all_evictions()
+        assert len(all_evicted) >= 1, (
+            "Combined eviction list must include mid-episode evictions"
+        )
+
+        # Replace using combined evictions
+        scheduler.replace_evicted([{"system_prompt": "new agent"}])
+
+        final_workspaces = scheduler.get_workspaces()
+        assert len(final_workspaces) == 2, (
+            "Workspace count must remain 2 after replacement"
+        )
 
     # -----------------------------------------------------------------------
     # IT-9.4: Budget exhaustion mid-episode

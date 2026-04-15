@@ -22,7 +22,7 @@ from midas_agent.scheduler.selection import SelectionEngine
 from midas_agent.scheduler.serial_queue import SerialQueue
 from midas_agent.scheduler.system_llm import SystemLLM
 from midas_agent.scheduler.training_log import HookSet, TrainingLog
-from midas_agent.scheduler.storage import InMemoryStorageBackend
+from midas_agent.scheduler.storage import InMemoryStorageBackend, LogFilter
 from midas_agent.types import Issue
 from midas_agent.workspace.manager import WorkspaceManager
 
@@ -201,6 +201,7 @@ def run_training(
         selection_engine=selection_engine,
         workspace_manager=workspace_manager,
         evaluation_module=evaluation_module,
+        hooks=hooks,
     )
 
     # -- Load issues --
@@ -280,20 +281,28 @@ def run_training(
             shutil.rmtree(repo_dir + "_workspaces", ignore_errors=True)
 
     # -- Export training artifacts --
-    _export_artifacts(config, scheduler)
+    _export_artifacts(config, scheduler, training_log)
 
     logger.info("Training complete. %d episodes.", len(issues))
 
 
-def _export_artifacts(config: MidasConfig, scheduler: Scheduler) -> None:
+def _export_artifacts(
+    config: MidasConfig,
+    scheduler: Scheduler,
+    training_log: TrainingLog | None = None,
+) -> None:
     """Export training artifacts to disk after training completes."""
     try:
-        _do_export(config, scheduler)
+        _do_export(config, scheduler, training_log)
     except Exception as e:
         logger.debug("Export skipped: %s", e)
 
 
-def _do_export(config: MidasConfig, scheduler: Scheduler) -> None:
+def _do_export(
+    config: MidasConfig,
+    scheduler: Scheduler,
+    training_log: TrainingLog | None = None,
+) -> None:
     import os
 
     output_dir = "/tmp/midas_output"
@@ -311,6 +320,9 @@ def _do_export(config: MidasConfig, scheduler: Scheduler) -> None:
             SkillSchema,
             SoulSchema,
         )
+
+        # Collect all workspace IDs that were evicted across training.
+        evicted_ws_ids = scheduler.get_all_evicted_ever()
 
         # Pick the first workspace's responsible agent (in a full implementation
         # we'd pick the highest-eta one).
@@ -331,12 +343,28 @@ def _do_export(config: MidasConfig, scheduler: Scheduler) -> None:
                         content=agent.skill.content,
                     )
                 price = fa_manager._pricing_engine.calculate_price(agent)
+
+                # Compute bankruptcy_rate: fraction of workspaces this
+                # agent served that were evicted via budget exhaustion.
+                br = 0.0
+                if training_log is not None:
+                    consume_entries = training_log.get_log_entries(
+                        LogFilter(entity_id=agent.agent_id, type="consume")
+                    )
+                    served = {
+                        e.workspace_id
+                        for e in consume_entries
+                        if e.workspace_id
+                    }
+                    if served:
+                        br = len(served & evicted_ws_ids) / len(served)
+
                 free_agents_schemas.append(FreeAgentSchema(
                     agent_id=agent.agent_id,
                     soul=SoulSchema(system_prompt=agent.soul.system_prompt),
                     skill=skill_schema,
                     price=price,
-                    bankruptcy_rate=0.0,
+                    bankruptcy_rate=br,
                 ))
 
         resp_skill = None

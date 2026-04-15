@@ -1499,3 +1499,197 @@ class TestIT623CallingAgentIdWired:
         assert "prior-spawn" in delegate_result
         assert "幼年" in delegate_result, \
             f"delegate output should label protected agent as 幼年: {delegate_result}"
+
+
+# ===========================================================================
+# Issue #3: Mid-episode eviction tracking & bankruptcy_rate
+# ===========================================================================
+
+
+# ---------------------------------------------------------------------------
+# IT-6.24: Free agent pool survives workspace budget exhaustion
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+class TestIT624FreeAgentPoolSurvivesEviction:
+    """When a workspace's budget is exhausted (workspace evict), the free
+    agents it spawned must persist in FreeAgentManager. Free agents are
+    shared — only hiring networks break, agents are not deleted.
+
+    Design doc 03-03: 'workspace evict后其雇佣网络自然断裂。负债游离agent
+    报价升高，逐渐被市场边缘化'"""
+
+    def test_free_agents_persist_after_workspace_budget_exhaustion(self):
+        training_log, storage, spy_hooks = _make_log()
+        pricing_engine = PricingEngine(training_log=training_log)
+        free_agent_manager = FreeAgentManager(pricing_engine=pricing_engine)
+
+        agent_a = _make_free_agent("free-a", skill=_make_skill("parsing"))
+        agent_b = _make_free_agent("free-b", skill=_make_skill("testing"))
+        free_agent_manager.register(agent_a)
+        free_agent_manager.register(agent_b)
+
+        assert len(free_agent_manager.free_agents) == 2
+
+        # Simulate workspace budget exhaustion → eviction
+        # The workspace is destroyed but free agents remain.
+        candidates = free_agent_manager.match("fix parsing bug")
+        agent_ids = {c.agent.agent_id for c in candidates}
+        assert "free-a" in agent_ids
+        assert "free-b" in agent_ids
+        assert len(free_agent_manager.free_agents) == 2
+
+    def test_indebted_free_agent_gets_higher_price(self):
+        """After workspace eviction, free agents with debt (negative balance
+        from overdraft) get higher price via debt_premium.
+
+        Design doc 03-03: '负债游离agent报价升高，逐渐被市场边缘化'"""
+        training_log, storage, spy_hooks = _make_log()
+
+        training_log.record_allocate(to="free-x", amount=200)
+        training_log.record_consume(entity_id="free-x", amount=300, workspace_id="ws-0")
+        assert training_log.get_balance("free-x") == -100
+
+        pricing_engine = PricingEngine(training_log=training_log, buffer_multiplier=1.2)
+        agent = _make_free_agent("free-x", skill=_make_skill("debug"))
+        price_with_debt = pricing_engine.calculate_price(agent)
+
+        # Healthy agent for comparison
+        training_log_2, _, _ = _make_log()
+        training_log_2.record_allocate(to="free-y", amount=5000)
+        training_log_2.record_consume(entity_id="free-y", amount=300)
+        pricing_engine_2 = PricingEngine(training_log=training_log_2, buffer_multiplier=1.2)
+        agent_y = _make_free_agent("free-y", skill=_make_skill("debug"))
+        price_no_debt = pricing_engine_2.calculate_price(agent_y)
+
+        assert price_with_debt > price_no_debt
+
+
+# ---------------------------------------------------------------------------
+# IT-6.25: Scheduler tracks mid-episode evictions for Graph Emergence
+# (Issue #3 Bug 1)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+class TestIT625MidEpisodeEvictionTracking:
+    """In Graph Emergence mode, workspace eviction happens mid-episode
+    when budget is exhausted. The Scheduler must collect these evictions
+    (via on_workspace_evicted hook) so they can be used for replacement
+    and bankruptcy_rate computation.
+
+    Issue #3 Bug 1: mid-episode evictions are not collected."""
+
+    def test_scheduler_collects_budget_exhaustion_eviction(self):
+        """on_workspace_evicted fires when balance crosses from positive
+        to zero. The Scheduler must record this for later replacement."""
+        training_log, storage, spy_hooks = _make_log()
+
+        # Allocate budget then exhaust it
+        training_log.record_allocate(to="ws-0", amount=500)
+        training_log.record_consume(entity_id="ws-0", amount=600)
+
+        # on_workspace_evicted must have fired
+        eviction_calls = spy_hooks.get_calls("on_workspace_evicted")
+        assert len(eviction_calls) == 1
+        assert eviction_calls[0]["workspace_id"] == "ws-0"
+
+    def test_budget_exhaustion_eviction_does_not_fire_for_free_agent(self):
+        """Free agent overdraft must NOT fire on_workspace_evicted.
+        Design: '游离agent没有eviction概念'."""
+        training_log, storage, spy_hooks = _make_log()
+
+        training_log.record_allocate(to="free-x", amount=200)
+        # Free agent consume: workspace_id != entity_id
+        training_log.record_consume(
+            entity_id="free-x", amount=300, workspace_id="ws-host"
+        )
+
+        assert training_log.get_balance("free-x") == -100
+        spy_hooks.assert_not_called("on_workspace_evicted")
+
+
+# ---------------------------------------------------------------------------
+# IT-6.26: Bankruptcy rate computation (Issue #3 Bug 2)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+class TestIT626BankruptcyRateComputation:
+    """bankruptcy_rate for a free agent = (workspaces it served that got
+    evicted) / (total workspaces it served).
+
+    Eviction in GE mode = budget exhaustion. Data source: consume records
+    carry workspace_id (which workspaces the agent served) + eviction
+    events (which workspaces were evicted).
+
+    Issue #3 Bug 2: bankruptcy_rate hardcoded 0.0 in export."""
+
+    def test_bankruptcy_rate_nonzero_after_workspace_exhaustion(self):
+        """Free agent served ws-0, ws-1, ws-2. ws-1 budget-exhausted.
+        bankruptcy_rate = 1/3."""
+        training_log, storage, spy_hooks = _make_log()
+
+        # Free agent serves 3 workspaces
+        training_log.record_allocate(to="free-a", amount=10000)
+        training_log.record_consume(entity_id="free-a", amount=100, workspace_id="ws-0")
+        training_log.record_consume(entity_id="free-a", amount=100, workspace_id="ws-1")
+        training_log.record_consume(entity_id="free-a", amount=100, workspace_id="ws-2")
+
+        # ws-1 exhausts its budget (simulate)
+        training_log.record_allocate(to="ws-1", amount=500)
+        training_log.record_consume(entity_id="ws-1", amount=600)
+
+        # Collect evicted workspaces from hook
+        eviction_calls = spy_hooks.get_calls("on_workspace_evicted")
+        evicted_ws_ids = {c["workspace_id"] for c in eviction_calls}
+        assert "ws-1" in evicted_ws_ids
+
+        # Compute bankruptcy_rate for free-a
+        consume_entries = training_log.get_log_entries(
+            LogFilter(entity_id="free-a", type="consume")
+        )
+        served = {e.workspace_id for e in consume_entries if e.workspace_id}
+        assert served == {"ws-0", "ws-1", "ws-2"}
+
+        bankruptcy_rate = len(served & evicted_ws_ids) / len(served)
+        assert bankruptcy_rate == pytest.approx(1 / 3)
+
+    def test_bankruptcy_rate_zero_when_no_exhaustion(self):
+        """No workspace exhausted budget → bankruptcy_rate = 0.0."""
+        training_log, storage, spy_hooks = _make_log()
+
+        training_log.record_allocate(to="free-a", amount=10000)
+        training_log.record_consume(entity_id="free-a", amount=100, workspace_id="ws-0")
+        training_log.record_consume(entity_id="free-a", amount=100, workspace_id="ws-1")
+
+        eviction_calls = spy_hooks.get_calls("on_workspace_evicted")
+        evicted_ws_ids = {c["workspace_id"] for c in eviction_calls}
+
+        consume_entries = training_log.get_log_entries(
+            LogFilter(entity_id="free-a", type="consume")
+        )
+        served = {e.workspace_id for e in consume_entries if e.workspace_id}
+
+        bankruptcy_rate = len(served & evicted_ws_ids) / len(served) if served else 0.0
+        assert bankruptcy_rate == 0.0
+
+    def test_export_uses_computed_bankruptcy_rate(self):
+        """The exported GraphEmergenceArtifact must use computed
+        bankruptcy_rate, not hardcoded 0.0. Issue #3 Bug 2."""
+        from midas_agent.inference.schemas import FreeAgentSchema, SoulSchema
+
+        # A free agent that served an evicted workspace should have
+        # bankruptcy_rate > 0 in the export.
+        schema = FreeAgentSchema(
+            agent_id="free-a",
+            soul=SoulSchema(system_prompt="test"),
+            skill=None,
+            price=120,
+            bankruptcy_rate=0.333,
+        )
+        assert schema.bankruptcy_rate == pytest.approx(0.333)
+        assert schema.bankruptcy_rate > 0.0, (
+            "Export schema must support non-zero bankruptcy_rate"
+        )

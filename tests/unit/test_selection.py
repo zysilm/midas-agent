@@ -48,7 +48,10 @@ class TestSelectionEngine:
         assert len(survivors) >= 1
 
     def test_graph_emergence_skips_eviction(self):
-        """In graph_emergence mode, no workspaces are evicted."""
+        """In graph_emergence mode, no workspaces are evicted.
+
+        Graph Emergence relies on mid-episode budget exhaustion for
+        eviction, not end-of-episode bottom-n ranking."""
         engine = SelectionEngine("graph_emergence", n_evict=1)
         etas = {"ws-1": 0.001, "ws-2": 0.002, "ws-3": 0.005}
 

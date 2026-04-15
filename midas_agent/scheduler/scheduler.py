@@ -13,7 +13,7 @@ from midas_agent.scheduler.budget_allocator import BudgetAllocator
 from midas_agent.scheduler.resource_meter import ResourceMeter
 from midas_agent.scheduler.selection import SelectionEngine
 from midas_agent.scheduler.system_llm import SystemLLM
-from midas_agent.scheduler.training_log import TrainingLog
+from midas_agent.scheduler.training_log import HookSet, TrainingLog
 
 if TYPE_CHECKING:
     from midas_agent.evaluation.module import EvaluationModule, EvalResult
@@ -32,6 +32,7 @@ class Scheduler:
         selection_engine: SelectionEngine,
         workspace_manager: WorkspaceManager,
         evaluation_module: EvaluationModule,
+        hooks: HookSet | None = None,
     ) -> None:
         self._config = config
         self._training_log = training_log
@@ -45,6 +46,26 @@ class Scheduler:
         self._episode_count: int = 0
         self._last_etas: dict[str, float] = {}
         self._evicted_ids: list[str] = []
+        self._mid_episode_evictions: list[str] = []
+        self._all_evicted_ever: set[str] = set()
+
+        # Register on_workspace_evicted hook to collect mid-episode
+        # budget-exhaustion evictions. Wrap any existing callback so
+        # SpyHookSet (or other observers) still receive the event.
+        # Resolve hooks: explicit parameter > TrainingLog's hooks > None.
+        resolved_hooks = hooks or getattr(training_log, "_hooks", None)
+        if resolved_hooks is not None:
+            original_cb = resolved_hooks.on_workspace_evicted
+
+            def _on_evicted(**kwargs: object) -> None:
+                ws_id = kwargs.get("workspace_id")
+                if ws_id is not None:
+                    self._mid_episode_evictions.append(str(ws_id))
+                    self._all_evicted_ever.add(str(ws_id))
+                if original_cb is not None:
+                    original_cb(**kwargs)
+
+            resolved_hooks.on_workspace_evicted = _on_evicted
 
     # ------------------------------------------------------------------
     # Episode context
@@ -52,6 +73,7 @@ class Scheduler:
 
     def set_current_issue(self, issue) -> None:
         """Set the current issue for this episode."""
+        self._mid_episode_evictions = []
         self._evaluation_module.set_issue(issue)
 
     # ------------------------------------------------------------------
@@ -146,11 +168,30 @@ class Scheduler:
         for i in range(self._config.workspace_count):
             self._workspace_manager.create(workspace_id=f"ws-{i}")
 
+    def get_mid_episode_evictions(self) -> list[str]:
+        """Return workspace IDs evicted mid-episode via budget exhaustion."""
+        return list(self._mid_episode_evictions)
+
+    def get_all_evictions(self) -> list[str]:
+        """Return combined list: mid-episode evictions + SelectionEngine evictions."""
+        seen: set[str] = set()
+        combined: list[str] = []
+        for ws_id in self._mid_episode_evictions + self._evicted_ids:
+            if ws_id not in seen:
+                seen.add(ws_id)
+                combined.append(ws_id)
+        return combined
+
+    def get_all_evicted_ever(self) -> set[str]:
+        """Return all workspace IDs evicted across all episodes."""
+        return set(self._all_evicted_ever)
+
     def replace_evicted(self, new_configs: list[dict]) -> None:
         """Replace previously evicted workspaces with new ones."""
+        all_evicted = self.get_all_evictions()
         for i, new_config in enumerate(new_configs):
             old_id = (
-                self._evicted_ids[i] if i < len(self._evicted_ids) else None
+                all_evicted[i] if i < len(all_evicted) else None
             )
             if old_id is not None:
                 new_id = f"ws-{self._episode_count}-new-{i}"
