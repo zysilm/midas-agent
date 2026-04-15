@@ -93,7 +93,10 @@ def _resolve_swebench_image(issue: Issue) -> str:
         for row in ds:
             if row["instance_id"] == issue.issue_id:
                 spec = make_test_spec(dict(row), namespace="swebench")
-                return f"swebench/{spec.env_image_key}"
+                # Use the instance (eval) image — it has the repo installed
+                # with all dependencies. The env image is not on DockerHub.
+                # instance_image_key already includes the namespace prefix.
+                return spec.instance_image_key
     except Exception as e:
         logger.warning("Could not resolve SWE-bench image: %s", e)
 
@@ -269,25 +272,37 @@ def run_training(
                     ws.work_dir = ws_repo
                     ws_repo_dirs.append(ws_repo)
 
-                # Docker mode: start container, inject DockerBashAction
-                if config.execution_env == "docker" and ws.work_dir:
+                # Docker mode: start container, inject all Docker actions
+                if config.execution_env == "docker":
                     try:
                         from midas_agent.docker.container_manager import ContainerManager
-                        from midas_agent.stdlib.actions.docker_bash import DockerBashAction
+                        from midas_agent.stdlib.actions.docker_actions import (
+                            DockerBashAction,
+                            DockerReadFileAction,
+                            DockerEditFileAction,
+                            DockerWriteFileAction,
+                            DockerSearchCodeAction,
+                            DockerFindFilesAction,
+                        )
 
                         cm = ContainerManager()
                         image = _resolve_swebench_image(issue)
                         cid = cm.start(
                             image=image,
-                            host_workspace=ws.work_dir,
+                            host_workspace=None,  # no mount — all ops inside container
+                            install_cmd=None,  # conda testbed env already has repo installed
                         )
                         containers.append(cm)
-                        # Inject DockerBashAction into the workspace
-                        if hasattr(ws, "_bash_action"):
-                            ws._bash_action = DockerBashAction(
-                                container_id=cid,
-                                cwd=ws.work_dir,
-                            )
+                        # Inject all Docker actions into the workspace
+                        if hasattr(ws, "_action_overrides"):
+                            ws._action_overrides = {
+                                "bash": DockerBashAction(container_id=cid),
+                                "read_file": DockerReadFileAction(container_id=cid),
+                                "edit_file": DockerEditFileAction(container_id=cid),
+                                "write_file": DockerWriteFileAction(container_id=cid),
+                                "search_code": DockerSearchCodeAction(container_id=cid),
+                                "find_files": DockerFindFilesAction(container_id=cid),
+                            }
                         logger.info("  %s: Docker container %s", ws.workspace_id, cid)
                     except Exception as e:
                         logger.warning(

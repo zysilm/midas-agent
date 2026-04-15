@@ -86,7 +86,7 @@ class TestContainerManager:
         args = run_call[0][0]
         assert "-v" in args
         v_idx = args.index("-v")
-        assert "/my/repo:/workspace" == args[v_idx + 1]
+        assert "/my/repo:/testbed" == args[v_idx + 1]
 
     @patch("midas_agent.docker.container_manager.subprocess.run")
     def test_stop_removes_container(self, mock_run):

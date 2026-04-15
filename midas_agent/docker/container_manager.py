@@ -31,16 +31,17 @@ class ContainerManager:
     def start(
         self,
         image: str,
-        host_workspace: str,
-        container_workspace: str = "/workspace",
+        host_workspace: str | None = None,
+        container_workspace: str = "/testbed",
         install_cmd: str | None = "pip install -e .",
     ) -> str:
-        """Start a Docker container with the workspace mounted.
+        """Start a Docker container, optionally with a volume mount.
 
         Args:
             image: Docker image name (e.g. ``swebench/sweb.eval.x86_64.astropy...``).
-            host_workspace: Local path to the cloned repo.
-            container_workspace: Mount point inside the container.
+            host_workspace: Local path to mount into the container.
+                Pass None for no mount (use container's own filesystem).
+            container_workspace: Working directory inside the container.
             install_cmd: Command to install the repo inside the container.
                 Pass None to skip installation.
 
@@ -50,17 +51,18 @@ class ContainerManager:
         # Pull image if not present locally
         self._pull_if_needed(image)
 
-        # Start container in background with workspace mounted
-        mount = f"{host_workspace}:{container_workspace}"
+        # Start container in background
+        cmd = [
+            "docker", "run", "-d",
+            "--platform", "linux/amd64",
+            "-w", container_workspace,
+        ]
+        if host_workspace is not None:
+            cmd.extend(["-v", f"{host_workspace}:{container_workspace}"])
+        cmd.extend([image, "sleep", "infinity"])
+
         result = subprocess.run(
-            [
-                "docker", "run", "-d",
-                "--platform", "linux/amd64",
-                "-v", mount,
-                "-w", container_workspace,
-                image,
-                "sleep", "infinity",
-            ],
+            cmd,
             capture_output=True,
             text=True,
             timeout=60,

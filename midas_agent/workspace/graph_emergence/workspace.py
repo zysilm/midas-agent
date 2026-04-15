@@ -33,7 +33,7 @@ class GraphEmergenceWorkspace(Workspace):
         system_llm: Callable[[LLMRequest], LLMResponse],
         free_agent_manager: FreeAgentManager,
         skill_reviewer: SkillReviewer,
-        bash_action: BashAction | None = None,
+        action_overrides: dict | None = None,
     ) -> None:
         super().__init__(workspace_id, call_llm, system_llm)
         self._responsible_agent = responsible_agent
@@ -41,7 +41,7 @@ class GraphEmergenceWorkspace(Workspace):
         self._system_llm = system_llm
         self._free_agent_manager = free_agent_manager
         self._skill_reviewer = skill_reviewer
-        self._bash_action = bash_action
+        self._action_overrides = action_overrides or {}
         self._budget = 0
         self._last_result = None
         self._patches_dir: str = "/tmp/patches"
@@ -66,14 +66,14 @@ class GraphEmergenceWorkspace(Workspace):
             calling_agent_id=self._responsible_agent.agent_id,
         )
 
-        bash = self._bash_action if self._bash_action is not None else BashAction(cwd=cwd)
+        ov = self._action_overrides
         actions = [
-            bash,
-            ReadFileAction(cwd=cwd),
-            EditFileAction(cwd=cwd),
-            WriteFileAction(cwd=cwd),
-            SearchCodeAction(cwd=cwd),
-            FindFilesAction(cwd=cwd),
+            ov.get("bash", BashAction(cwd=cwd)),
+            ov.get("read_file", ReadFileAction(cwd=cwd)),
+            ov.get("edit_file", EditFileAction(cwd=cwd)),
+            ov.get("write_file", WriteFileAction(cwd=cwd)),
+            ov.get("search_code", SearchCodeAction(cwd=cwd)),
+            ov.get("find_files", FindFilesAction(cwd=cwd)),
             TaskDoneAction(),
             delegate,
         ]
@@ -133,21 +133,36 @@ class GraphEmergenceWorkspace(Workspace):
             f.write(patch_content)
 
     def _generate_patch(self) -> str:
-        """Get patch content from git diff if work_dir is set.
+        """Get patch content from git diff.
 
         Stages all changes (including untracked files) to capture the
         full diff, then resets the index so the working tree is unchanged.
+
+        Supports two modes:
+        - Local: work_dir is set, runs git locally.
+        - Docker: action_overrides has a "bash" DockerBashAction, runs git
+          inside the container.
         """
+        # Try Docker mode first (all ops inside container)
+        docker_bash = self._action_overrides.get("bash")
+        if docker_bash is not None and hasattr(docker_bash, "_container_id"):
+            try:
+                docker_bash.execute(command="git add -A")
+                result = docker_bash.execute(command="git diff --cached")
+                docker_bash.execute(command="git reset")
+                return result
+            except Exception:
+                pass
+
+        # Local mode
         if self.work_dir and os.path.isdir(os.path.join(self.work_dir, ".git")):
             try:
-                # Stage everything so untracked new files appear in the diff
                 subprocess.run(
                     ["git", "add", "-A"],
                     cwd=self.work_dir,
                     capture_output=True,
                     timeout=10,
                 )
-                # Diff the staged changes against HEAD
                 result = subprocess.run(
                     ["git", "diff", "--cached"],
                     cwd=self.work_dir,
@@ -156,7 +171,6 @@ class GraphEmergenceWorkspace(Workspace):
                     timeout=30,
                 )
                 patch = result.stdout
-                # Reset index so we don't leave staged changes behind
                 subprocess.run(
                     ["git", "reset"],
                     cwd=self.work_dir,
