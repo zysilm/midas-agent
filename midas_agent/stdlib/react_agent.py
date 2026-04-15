@@ -42,19 +42,49 @@ class ReactAgent:
         self.max_iterations = max_iterations
         self._actions_by_name: dict[str, Action] = {a.name: a for a in actions}
 
+    def _build_tools(self) -> list[dict] | None:
+        """Convert Action objects to OpenAI tools format."""
+        if not self.actions:
+            return None
+        tools = []
+        for action in self.actions:
+            properties = {}
+            required = []
+            for param_name, param_def in action.parameters.items():
+                prop = {"type": param_def.get("type", "string")}
+                if "default" in param_def:
+                    prop["default"] = param_def["default"]
+                properties[param_name] = prop
+                if param_def.get("required", False):
+                    required.append(param_name)
+            tools.append({
+                "type": "function",
+                "function": {
+                    "name": action.name,
+                    "description": action.description,
+                    "parameters": {
+                        "type": "object",
+                        "properties": properties,
+                        "required": required,
+                    },
+                },
+            })
+        return tools
+
     def run(self, context: str | None = None) -> AgentResult:
         from midas_agent.scheduler.resource_meter import BudgetExhaustedError
 
         iterations = 0
         action_history: list[ActionRecord] = []
         messages: list[dict] = [{"role": "system", "content": self.system_prompt}]
+        tools = self._build_tools()
 
         if context is not None:
             messages.append({"role": "user", "content": context})
 
         while True:
             try:
-                request = LLMRequest(messages=messages, model="default")
+                request = LLMRequest(messages=messages, model="default", tools=tools)
                 response = self.call_llm(request)
             except BudgetExhaustedError:
                 return AgentResult(

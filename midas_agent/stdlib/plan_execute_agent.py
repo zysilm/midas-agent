@@ -80,7 +80,7 @@ class PlanExecuteAgent(ReactAgent):
                 )
 
             try:
-                request = LLMRequest(messages=messages, model="default")
+                request = LLMRequest(messages=messages, model="default", tools=self._build_tools())
                 response = self.call_llm(request)
             except BudgetExhaustedError:
                 return AgentResult(

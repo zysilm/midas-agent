@@ -134,6 +134,118 @@ class TestReactAgent:
         assert result.termination_reason == "max_iterations"
         assert result.iterations <= 1
 
+    def test_passes_tools_to_llm_request(self):
+        """run() passes action definitions as tools in the LLMRequest."""
+        from midas_agent.stdlib.actions.bash import BashAction
+        from midas_agent.stdlib.actions.task_done import TaskDoneAction
+
+        requests_log: list[LLMRequest] = []
+
+        def capturing_llm(req: LLMRequest) -> LLMResponse:
+            requests_log.append(req)
+            return LLMResponse(
+                content="done",
+                tool_calls=None,
+                usage=TokenUsage(input_tokens=10, output_tokens=5),
+            )
+
+        agent = ReactAgent(
+            system_prompt="test",
+            actions=[BashAction(), TaskDoneAction()],
+            call_llm=capturing_llm,
+        )
+        agent.run()
+
+        assert len(requests_log) >= 1
+        tools = requests_log[0].tools
+        assert tools is not None
+        assert len(tools) == 2
+        tool_names = {t["function"]["name"] for t in tools}
+        assert tool_names == {"bash", "task_done"}
+
+    def test_tools_have_correct_schema(self):
+        """Tools passed to LLM follow the OpenAI function calling format."""
+        from midas_agent.stdlib.actions.bash import BashAction
+
+        requests_log: list[LLMRequest] = []
+
+        def capturing_llm(req: LLMRequest) -> LLMResponse:
+            requests_log.append(req)
+            return LLMResponse(
+                content="done", tool_calls=None,
+                usage=TokenUsage(input_tokens=10, output_tokens=5),
+            )
+
+        agent = ReactAgent(
+            system_prompt="test",
+            actions=[BashAction()],
+            call_llm=capturing_llm,
+        )
+        agent.run()
+
+        tool = requests_log[0].tools[0]
+        assert tool["type"] == "function"
+        assert "name" in tool["function"]
+        assert "description" in tool["function"]
+        assert "parameters" in tool["function"]
+        params = tool["function"]["parameters"]
+        assert params["type"] == "object"
+        assert "command" in params["properties"]
+        assert "command" in params["required"]
+
+    def test_no_tools_when_no_actions(self):
+        """When agent has no actions, tools is None."""
+        requests_log: list[LLMRequest] = []
+
+        def capturing_llm(req: LLMRequest) -> LLMResponse:
+            requests_log.append(req)
+            return LLMResponse(
+                content="done", tool_calls=None,
+                usage=TokenUsage(input_tokens=10, output_tokens=5),
+            )
+
+        agent = ReactAgent(
+            system_prompt="test",
+            actions=[],
+            call_llm=capturing_llm,
+        )
+        agent.run()
+
+        assert requests_log[0].tools is None
+
+    def test_executes_tool_call_and_returns_result(self):
+        """Agent executes tool calls from LLM and feeds results back."""
+        from midas_agent.stdlib.actions.bash import BashAction
+        from midas_agent.llm.types import ToolCall
+
+        call_count = 0
+
+        def llm_with_tool_then_done(req: LLMRequest) -> LLMResponse:
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return LLMResponse(
+                    content=None,
+                    tool_calls=[ToolCall(id="c1", name="bash", arguments={"command": "echo hello"})],
+                    usage=TokenUsage(input_tokens=10, output_tokens=5),
+                )
+            return LLMResponse(
+                content="done", tool_calls=None,
+                usage=TokenUsage(input_tokens=10, output_tokens=5),
+            )
+
+        agent = ReactAgent(
+            system_prompt="test",
+            actions=[BashAction()],
+            call_llm=llm_with_tool_then_done,
+        )
+        result = agent.run()
+
+        assert result.termination_reason == "done"
+        assert len(result.action_history) == 1
+        assert result.action_history[0].action_name == "bash"
+        assert "hello" in result.action_history[0].result
+
     def test_terminates_on_task_done(self):
         """When TaskDoneAction is invoked, termination_reason is 'done'."""
         from midas_agent.stdlib.actions.task_done import TaskDoneAction
