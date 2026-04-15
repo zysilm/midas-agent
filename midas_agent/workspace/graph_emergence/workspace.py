@@ -1,6 +1,9 @@
 """GraphEmergenceWorkspace — Workspace implementation for Graph Emergence."""
 from __future__ import annotations
 
+import os
+import subprocess
+import uuid
 from typing import Callable
 
 from midas_agent.llm.types import LLMRequest, LLMResponse
@@ -39,6 +42,7 @@ class GraphEmergenceWorkspace(Workspace):
         self._skill_reviewer = skill_reviewer
         self._budget = 0
         self._last_result = None
+        self._patches_dir: str = "/tmp/patches"
 
     def receive_budget(self, amount: int) -> None:
         self._budget += amount
@@ -81,6 +85,31 @@ class GraphEmergenceWorkspace(Workspace):
 
     def submit_patch(self) -> None:
         self.calls.append(("submit_patch", {}))
+
+        patches_dir = os.path.join(self._patches_dir, self.workspace_id)
+        os.makedirs(patches_dir, exist_ok=True)
+
+        patch_content = self._generate_patch()
+        episode_id = uuid.uuid4().hex[:8]
+        patch_path = os.path.join(patches_dir, f"{episode_id}.patch")
+        with open(patch_path, "w") as f:
+            f.write(patch_content)
+
+    def _generate_patch(self) -> str:
+        """Get patch content from git diff if work_dir is set."""
+        if self.work_dir and os.path.isdir(os.path.join(self.work_dir, ".git")):
+            try:
+                result = subprocess.run(
+                    ["git", "diff"],
+                    cwd=self.work_dir,
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                )
+                return result.stdout
+            except Exception:
+                pass
+        return ""
 
     def post_episode(self, eval_results: dict, evicted_ids: list[str]) -> None:
         self.calls.append(("post_episode", {"eval_results": eval_results, "evicted_ids": evicted_ids}))

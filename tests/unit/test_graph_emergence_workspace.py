@@ -75,6 +75,62 @@ class TestGraphEmergenceWorkspace:
 
         ws.submit_patch()  # Should not raise
 
+    def test_submit_patch_writes_git_diff(self, tmp_path):
+        """submit_patch() writes git diff from work_dir to patches directory."""
+        import subprocess
+
+        # Set up a git repo with a change
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        subprocess.run(["git", "init"], cwd=repo, capture_output=True)
+        subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=repo, capture_output=True)
+        subprocess.run(["git", "config", "user.name", "test"], cwd=repo, capture_output=True)
+        (repo / "file.py").write_text("original\n")
+        subprocess.run(["git", "add", "."], cwd=repo, capture_output=True)
+        subprocess.run(["git", "commit", "-m", "init"], cwd=repo, capture_output=True)
+        (repo / "file.py").write_text("modified\n")
+
+        patches_dir = tmp_path / "patches"
+        ws = self._make_workspace()
+        ws.work_dir = str(repo)
+        ws._patches_dir = str(patches_dir)
+
+        ws.submit_patch()
+
+        # Should have written a .patch file with the diff
+        ws_patches = patches_dir / "ws-ge-1"
+        assert ws_patches.is_dir()
+        patch_files = list(ws_patches.glob("*.patch"))
+        assert len(patch_files) == 1
+        content = patch_files[0].read_text()
+        assert "original" in content
+        assert "modified" in content
+
+    def test_submit_patch_empty_diff(self, tmp_path):
+        """submit_patch() writes empty patch when no changes in work_dir."""
+        import subprocess
+
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        subprocess.run(["git", "init"], cwd=repo, capture_output=True)
+        subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=repo, capture_output=True)
+        subprocess.run(["git", "config", "user.name", "test"], cwd=repo, capture_output=True)
+        (repo / "file.py").write_text("unchanged\n")
+        subprocess.run(["git", "add", "."], cwd=repo, capture_output=True)
+        subprocess.run(["git", "commit", "-m", "init"], cwd=repo, capture_output=True)
+
+        patches_dir = tmp_path / "patches"
+        ws = self._make_workspace()
+        ws.work_dir = str(repo)
+        ws._patches_dir = str(patches_dir)
+
+        ws.submit_patch()
+
+        ws_patches = patches_dir / "ws-ge-1"
+        patch_files = list(ws_patches.glob("*.patch"))
+        assert len(patch_files) == 1
+        assert patch_files[0].read_text() == ""
+
     def test_post_episode_returns_none(self):
         """post_episode() always returns None for GraphEmergenceWorkspace (no config evolution)."""
         ws = self._make_workspace()
