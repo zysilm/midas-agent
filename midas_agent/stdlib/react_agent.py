@@ -107,11 +107,21 @@ class ReactAgent:
 
             if response.tool_calls:
                 # Build assistant message with tool calls
-                messages.append({
-                    "role": "assistant",
-                    "content": response.content,
-                    "tool_calls": response.tool_calls,
-                })
+                assistant_msg: dict = {"role": "assistant"}
+                if response.content:
+                    assistant_msg["content"] = response.content
+                assistant_msg["tool_calls"] = [
+                    {
+                        "id": tc.id,
+                        "type": "function",
+                        "function": {
+                            "name": tc.name,
+                            "arguments": tc.arguments if isinstance(tc.arguments, str) else __import__("json").dumps(tc.arguments),
+                        },
+                    }
+                    for tc in response.tool_calls
+                ]
+                messages.append(assistant_msg)
 
                 for tool_call in response.tool_calls:
                     action = self._actions_by_name[tool_call.name]
