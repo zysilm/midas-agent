@@ -33,6 +33,7 @@ class GraphEmergenceWorkspace(Workspace):
         system_llm: Callable[[LLMRequest], LLMResponse],
         free_agent_manager: FreeAgentManager,
         skill_reviewer: SkillReviewer,
+        bash_action: BashAction | None = None,
     ) -> None:
         super().__init__(workspace_id, call_llm, system_llm)
         self._responsible_agent = responsible_agent
@@ -40,6 +41,7 @@ class GraphEmergenceWorkspace(Workspace):
         self._system_llm = system_llm
         self._free_agent_manager = free_agent_manager
         self._skill_reviewer = skill_reviewer
+        self._bash_action = bash_action
         self._budget = 0
         self._last_result = None
         self._patches_dir: str = "/tmp/patches"
@@ -64,8 +66,9 @@ class GraphEmergenceWorkspace(Workspace):
             calling_agent_id=self._responsible_agent.agent_id,
         )
 
+        bash = self._bash_action if self._bash_action is not None else BashAction(cwd=cwd)
         actions = [
-            BashAction(cwd=cwd),
+            bash,
             ReadFileAction(cwd=cwd),
             EditFileAction(cwd=cwd),
             WriteFileAction(cwd=cwd),

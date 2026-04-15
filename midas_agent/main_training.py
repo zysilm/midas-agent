@@ -77,6 +77,30 @@ def load_swe_bench(split: str = "test") -> list[Issue]:
     return issues
 
 
+def _resolve_swebench_image(issue: Issue) -> str:
+    """Resolve the SWE-bench Docker image name for an issue.
+
+    Uses swebench's make_test_spec to get the correct env image key,
+    then prepends the DockerHub namespace.
+    """
+    try:
+        from swebench.harness.test_spec.test_spec import make_test_spec
+        from datasets import load_dataset
+
+        ds = load_dataset(
+            "princeton-nlp/SWE-bench_Verified", split="test",
+        )
+        for row in ds:
+            if row["instance_id"] == issue.issue_id:
+                spec = make_test_spec(dict(row), namespace="swebench")
+                return f"swebench/{spec.env_image_key}"
+    except Exception as e:
+        logger.warning("Could not resolve SWE-bench image: %s", e)
+
+    # Fallback: generic Python image
+    return "python:3.11-slim"
+
+
 def clone_repo(repo: str, base_commit: str, dest: str) -> None:
     """Clone a GitHub repo at a specific commit into dest."""
     url = f"https://github.com/{repo}.git"
@@ -236,12 +260,41 @@ def run_training(
             # 3. Execute all workspaces (each gets its own repo copy)
             workspaces = scheduler.get_workspaces()
             ws_repo_dirs: list[str] = []
+            containers: list = []  # ContainerManager instances to clean up
+
             for ws in workspaces:
                 if os.path.isdir(os.path.join(repo_dir, ".git")):
                     ws_repo = os.path.join(repo_dir + "_workspaces", ws.workspace_id)
                     shutil.copytree(repo_dir, ws_repo)
                     ws.work_dir = ws_repo
                     ws_repo_dirs.append(ws_repo)
+
+                # Docker mode: start container, inject DockerBashAction
+                if config.execution_env == "docker" and ws.work_dir:
+                    try:
+                        from midas_agent.docker.container_manager import ContainerManager
+                        from midas_agent.stdlib.actions.docker_bash import DockerBashAction
+
+                        cm = ContainerManager()
+                        image = _resolve_swebench_image(issue)
+                        cid = cm.start(
+                            image=image,
+                            host_workspace=ws.work_dir,
+                        )
+                        containers.append(cm)
+                        # Inject DockerBashAction into the workspace
+                        if hasattr(ws, "_bash_action"):
+                            ws._bash_action = DockerBashAction(
+                                container_id=cid,
+                                cwd=ws.work_dir,
+                            )
+                        logger.info("  %s: Docker container %s", ws.workspace_id, cid)
+                    except Exception as e:
+                        logger.warning(
+                            "  %s: Docker setup failed (%s), falling back to local",
+                            ws.workspace_id, e,
+                        )
+
                 ws.execute(issue)
 
             # 4. Submit patches
@@ -276,7 +329,12 @@ def run_training(
             scheduler.replace_evicted(new_configs)
 
         finally:
-            # 8. Clean up repo and workspace copies
+            # 8. Clean up containers and repo copies
+            for cm in containers:
+                try:
+                    cm.stop()
+                except Exception:
+                    pass
             shutil.rmtree(repo_dir, ignore_errors=True)
             shutil.rmtree(repo_dir + "_workspaces", ignore_errors=True)
 

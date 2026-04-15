@@ -26,3 +26,6 @@ class MidasConfig:
     eval_model: str = ""
     eval_api_key: str = ""
     eval_api_base: str = ""
+    # Execution environment: "local" = current behavior,
+    # "docker" = bash commands run inside SWE-bench Docker container
+    execution_env: str = "local"
