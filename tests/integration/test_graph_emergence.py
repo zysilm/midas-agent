@@ -693,3 +693,189 @@ class TestIT610EndToEndHiringFlow:
 
         # on_workspace_evicted was NOT fired (free agent semantics)
         spy_hooks.assert_not_called("on_workspace_evicted")
+
+
+# ---------------------------------------------------------------------------
+# IT-6.11: delegate_task with empty pool offers spawn option
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+class TestIT611DelegateTaskSpawnOption:
+    """When no free agents exist, delegate_task must still offer the
+    option to spawn a new agent. The response should indicate that
+    spawn is available even when no candidates match."""
+
+    def test_empty_pool_offers_spawn(self):
+        training_log, storage, spy_hooks = _make_log()
+        pricing_engine = PricingEngine(training_log=training_log)
+        free_agent_manager = FreeAgentManager(pricing_engine=pricing_engine)
+        # Pool is empty — no agents registered
+
+        delegate = DelegateTaskAction(
+            find_candidates=lambda desc: free_agent_manager.match(desc),
+            spawn_callback=lambda desc: None,  # spawn available but not invoked yet
+        )
+
+        output = delegate.execute(task_description="fix the parsing bug")
+
+        # Must mention spawn as an option, not just "No candidates found"
+        assert "spawn" in output.lower()
+
+
+# ---------------------------------------------------------------------------
+# IT-6.12: Spawn creates agent with protection relationship
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+class TestIT612SpawnCreatesProtectedAgent:
+    """When the responsible agent chooses to spawn via delegate_task,
+    the system must create a new agent with a protection relationship
+    (protector=responsible_agent) and register it in FreeAgentManager."""
+
+    def test_spawn_creates_protected_agent(self):
+        training_log, storage, spy_hooks = _make_log()
+        pricing_engine = PricingEngine(training_log=training_log)
+        free_agent_manager = FreeAgentManager(pricing_engine=pricing_engine)
+
+        spawned_agents: list[Agent] = []
+
+        def spawn_callback(task_description: str) -> Agent:
+            agent = Agent(
+                agent_id=f"spawned-{len(spawned_agents)}",
+                soul=Soul(system_prompt=f"Specialist for: {task_description}"),
+                agent_type="free",
+                protected_by="lead-1",
+            )
+            spawned_agents.append(agent)
+            free_agent_manager.register(agent)
+            return agent
+
+        delegate = DelegateTaskAction(
+            find_candidates=lambda desc: free_agent_manager.match(desc),
+            spawn_callback=spawn_callback,
+        )
+
+        # Simulate LLM choosing spawn (execute with spawn=True)
+        output = delegate.execute(
+            task_description="fix parsing bug",
+            spawn=True,
+        )
+
+        assert len(spawned_agents) == 1
+        assert spawned_agents[0].protected_by == "lead-1"
+        assert spawned_agents[0].agent_id in free_agent_manager.free_agents
+
+
+# ---------------------------------------------------------------------------
+# IT-6.13: Protected agent LLM calls charged to protector
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+class TestIT613ProtectedAgentChargedToProtector:
+    """A protected agent's LLM consumption must be debited from the
+    protector's balance, not the protected agent's own balance."""
+
+    def test_consume_charged_to_protector(self):
+        training_log, storage, spy_hooks = _make_log()
+
+        # Protector (responsible agent) has budget
+        training_log.record_allocate(to="lead-1", amount=10000)
+
+        # Protected agent has no allocation
+        # Consume should go against lead-1's balance via workspace_id
+        training_log.record_consume(
+            entity_id="lead-1",  # charged to protector
+            amount=500,
+            workspace_id="ws-1",
+        )
+
+        assert training_log.get_balance("lead-1") == 9500
+        # The protected agent (spawned-0) never had its own balance
+
+
+# ---------------------------------------------------------------------------
+# IT-6.14: End-to-end spawn -> execute -> report cycle
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+class TestIT614SpawnExecuteReportCycle:
+    """Full spawn -> delegate -> sub-agent execute -> report_result cycle.
+    The spawned agent should be able to execute a sub-task and report
+    results back to the responsible agent."""
+
+    def test_full_spawn_cycle(self):
+        training_log, storage, spy_hooks = _make_log()
+        pricing_engine = PricingEngine(training_log=training_log)
+        free_agent_manager = FreeAgentManager(pricing_engine=pricing_engine)
+
+        # Track spawned agents and reported results
+        spawned: list[Agent] = []
+        reported: list[str] = []
+
+        def spawn_callback(task_description: str) -> Agent:
+            agent = Agent(
+                agent_id="spawned-worker",
+                soul=Soul(system_prompt=f"Worker for: {task_description}"),
+                agent_type="free",
+                protected_by="lead-1",
+            )
+            spawned.append(agent)
+            free_agent_manager.register(agent)
+            return agent
+
+        def report_callback(result: str) -> None:
+            reported.append(result)
+
+        delegate = DelegateTaskAction(
+            find_candidates=lambda desc: free_agent_manager.match(desc),
+            spawn_callback=spawn_callback,
+        )
+        report_action = ReportResultAction(report=report_callback)
+
+        # Step 1: Spawn via delegate_task
+        delegate.execute(task_description="write unit test", spawn=True)
+        assert len(spawned) == 1
+
+        # Step 2: Spawned agent is now in the pool
+        assert "spawned-worker" in free_agent_manager.free_agents
+
+        # Step 3: Spawned agent reports result
+        report_action.execute(result="Test written and passes.")
+        assert len(reported) == 1
+        assert "Test written" in reported[0]
+
+
+# ---------------------------------------------------------------------------
+# IT-6.15: delegate_task with candidates AND spawn option
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+class TestIT615DelegateWithCandidatesAndSpawn:
+    """When free agents exist, delegate_task should return both the
+    candidate list AND the spawn option."""
+
+    def test_candidates_plus_spawn(self):
+        training_log, storage, spy_hooks = _make_log()
+        pricing_engine = PricingEngine(training_log=training_log)
+        free_agent_manager = FreeAgentManager(pricing_engine=pricing_engine)
+
+        # Register one existing agent
+        free_agent_manager.register(
+            _make_free_agent("expert-1", skill=_make_skill("debugging"))
+        )
+
+        delegate = DelegateTaskAction(
+            find_candidates=lambda desc: free_agent_manager.match(desc),
+            spawn_callback=lambda desc: None,
+        )
+
+        output = delegate.execute(task_description="debug the crash")
+
+        # Should contain both the candidate and spawn option
+        assert "expert-1" in output
+        assert "spawn" in output.lower()

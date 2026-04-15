@@ -7,8 +7,13 @@ from midas_agent.stdlib.action import Action
 
 
 class DelegateTaskAction(Action):
-    def __init__(self, find_candidates: Callable) -> None:
+    def __init__(
+        self,
+        find_candidates: Callable,
+        spawn_callback: Callable | None = None,
+    ) -> None:
         self._find_candidates = find_candidates
+        self._spawn_callback = spawn_callback
 
     @property
     def name(self) -> str:
@@ -35,22 +40,38 @@ class DelegateTaskAction(Action):
     def parameters(self) -> dict:
         return {
             "task_description": {"type": "string", "required": True},
+            "spawn": {"type": "boolean", "required": False},
         }
 
     def execute(self, **kwargs) -> str:
         task_description = kwargs["task_description"]
+        spawn = kwargs.get("spawn", False)
+
+        # Handle spawn request
+        if spawn and self._spawn_callback is not None:
+            agent = self._spawn_callback(task_description)
+            agent_id = getattr(agent, "agent_id", None) or "new agent"
+            return f"Spawned agent {agent_id} for: {task_description}"
+
         candidates = self._find_candidates(task_description)
+        lines: list[str] = []
         if not candidates:
-            return f"No candidates found for: {task_description}"
-        lines = [f"Candidates for: {task_description}"]
-        for c in candidates:
-            agent_id = getattr(c, "agent_id", None) or getattr(c.agent, "agent_id", str(c))
-            price = getattr(c, "price", None)
-            similarity = getattr(c, "similarity", None)
-            parts = [f"  - {agent_id}"]
-            if price is not None:
-                parts.append(f"price={price}")
-            if similarity is not None:
-                parts.append(f"match={similarity:.1f}")
-            lines.append(", ".join(parts))
+            lines.append(f"No candidates found for: {task_description}")
+        else:
+            lines.append(f"Candidates for: {task_description}")
+            for c in candidates:
+                agent_id = getattr(c, "agent_id", None) or getattr(c.agent, "agent_id", str(c))
+                price = getattr(c, "price", None)
+                similarity = getattr(c, "similarity", None)
+                parts = [f"  - {agent_id}"]
+                if price is not None:
+                    parts.append(f"price={price}")
+                if similarity is not None:
+                    parts.append(f"match={similarity:.1f}")
+                lines.append(", ".join(parts))
+
+        # Always offer spawn option when spawn_callback is available
+        if self._spawn_callback is not None:
+            lines.append("Option: spawn a new agent for this task.")
+
         return "\n".join(lines)
