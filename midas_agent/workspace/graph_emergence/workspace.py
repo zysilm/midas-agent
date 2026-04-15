@@ -19,7 +19,7 @@ from midas_agent.stdlib.actions.task_done import TaskDoneAction
 from midas_agent.stdlib.plan_execute_agent import PlanExecuteAgent
 from midas_agent.types import Issue
 from midas_agent.workspace.base import Workspace
-from midas_agent.workspace.graph_emergence.agent import Agent
+from midas_agent.workspace.graph_emergence.agent import Agent, Soul
 from midas_agent.workspace.graph_emergence.free_agent_manager import FreeAgentManager
 from midas_agent.workspace.graph_emergence.skill import SkillReviewer
 
@@ -58,6 +58,7 @@ class GraphEmergenceWorkspace(Workspace):
         cwd = self.work_dir or None
         delegate = DelegateTaskAction(
             find_candidates=lambda desc: self._free_agent_manager.match(desc),
+            spawn_callback=lambda desc: self._spawn_agent(desc),
         )
 
         actions = [
@@ -79,6 +80,20 @@ class GraphEmergenceWorkspace(Workspace):
             market_info_provider=lambda: "budget info",
         )
         self._last_result = agent.run(context=issue.description)
+
+    def _spawn_agent(self, task_description: str) -> Agent:
+        """Spawn a new free agent with protection relationship."""
+        import uuid
+
+        agent_id = f"spawned-{uuid.uuid4().hex[:8]}"
+        agent = Agent(
+            agent_id=agent_id,
+            soul=Soul(system_prompt=f"You are a specialist agent. Task: {task_description}"),
+            agent_type="free",
+            protected_by=self._responsible_agent.agent_id,
+        )
+        self._free_agent_manager.register(agent)
+        return agent
 
     def submit_patch(self) -> None:
         self.calls.append(("submit_patch", {}))

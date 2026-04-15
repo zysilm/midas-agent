@@ -879,3 +879,72 @@ class TestIT615DelegateWithCandidatesAndSpawn:
         # Should contain both the candidate and spawn option
         assert "expert-1" in output
         assert "spawn" in output.lower()
+
+
+# ---------------------------------------------------------------------------
+# IT-6.16: Workspace-level spawn via execute()
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+class TestIT616WorkspaceSpawnDuringExecute:
+    """When the responsible agent calls delegate_task(spawn=True) during
+    execute(), GraphEmergenceWorkspace must:
+    1. Have wired spawn_callback into DelegateTaskAction
+    2. Create a new agent with protection relationship
+    3. Register the spawned agent in FreeAgentManager
+
+    Uses a scripted FakeLLMProvider: plan phase returns text, execution
+    phase returns delegate_task(spawn=True) tool call, then task_done.
+    """
+
+    def test_spawn_during_execute_creates_agent(self):
+        training_log, storage, spy_hooks = _make_log()
+        pricing_engine = PricingEngine(training_log=training_log)
+        free_agent_manager = FreeAgentManager(pricing_engine=pricing_engine)
+        skill_reviewer = MagicMock(spec=SkillReviewer)
+
+        responsible_agent = _make_agent("lead-1", agent_type="workspace_bound")
+
+        # Script LLM: plan → delegate_task(spawn=True) → task_done
+        plan_response = _make_response(content="Plan: delegate to a specialist.")
+        spawn_response = _make_response(
+            tool_calls=[
+                ToolCall(
+                    id="call_1",
+                    name="delegate_task",
+                    arguments={"task_description": "analyze separability", "spawn": True},
+                )
+            ],
+        )
+        done_response = _make_response(
+            tool_calls=[
+                ToolCall(id="call_2", name="task_done", arguments={}),
+            ],
+        )
+
+        provider = FakeLLMProvider(
+            responses=[plan_response, spawn_response, done_response],
+        )
+
+        ws = GraphEmergenceWorkspace(
+            workspace_id="ws-ge-1",
+            responsible_agent=responsible_agent,
+            call_llm=provider.complete,
+            system_llm=MagicMock(return_value=_make_response()),
+            free_agent_manager=free_agent_manager,
+            skill_reviewer=skill_reviewer,
+        )
+
+        issue = Issue(
+            issue_id="test-1",
+            repo="test/repo",
+            description="Fix the bug",
+        )
+        ws.execute(issue)
+
+        # A new agent should have been spawned and registered
+        assert len(free_agent_manager.free_agents) == 1
+        spawned = list(free_agent_manager.free_agents.values())[0]
+        assert spawned.protected_by == "lead-1"
+        assert spawned.agent_type == "free"
