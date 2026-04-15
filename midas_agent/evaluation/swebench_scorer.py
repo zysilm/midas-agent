@@ -53,7 +53,7 @@ class SWEBenchScorer(ExecutionScorer):
         }
 
         try:
-            test_spec = make_test_spec(instance)
+            test_spec = make_test_spec(instance, namespace="swebench")
             client = docker.from_env()
 
             result = run_instance(
