@@ -226,6 +226,8 @@ class WorkspaceManager:
             "with the codebase using the tools provided: search code, read files, edit "
             "files, write files, and run bash commands.\n\n"
             "Key principles:\n"
+            "- Before starting any work, use the `think` tool to analyze the problem "
+            "and plan your approach.\n"
             "- Make minimal, focused changes. Only modify source files, never tests.\n"
             "- Match the existing code style and conventions of the repository.\n"
             "- Be efficient with your token budget — every tool call has a cost.\n"

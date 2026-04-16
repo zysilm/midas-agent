@@ -16,6 +16,7 @@ from midas_agent.stdlib.actions.file_ops import (
 )
 from midas_agent.stdlib.actions.search import FindFilesAction, SearchCodeAction
 from midas_agent.stdlib.actions.task_done import TaskDoneAction
+from midas_agent.stdlib.actions.think import ThinkAction
 from midas_agent.stdlib.plan_execute_agent import PlanExecuteAgent
 from midas_agent.types import Issue
 from midas_agent.workspace.base import Workspace
@@ -85,7 +86,7 @@ class GraphEmergenceWorkspace(Workspace):
             parent_actions=base_actions,
         )
 
-        actions = list(self._extra_actions) + base_actions + [TaskDoneAction(), delegate]
+        actions = list(self._extra_actions) + base_actions + [ThinkAction(), TaskDoneAction(), delegate]
 
         agent = PlanExecuteAgent(
             system_prompt=self._responsible_agent.soul.system_prompt,
