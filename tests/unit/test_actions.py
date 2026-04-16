@@ -85,20 +85,18 @@ class TestEditFileAction:
         action = EditFileAction()
         assert action.name == "edit_file"
 
-    # -- replace command --
+    # -- str_replace --
 
     def test_replace_modifies_file_content(self, tmp_path):
-        """replace command actually changes the file on disk."""
+        """old_string/new_string replace actually changes the file on disk."""
         f = tmp_path / "code.py"
         f.write_text("line1\nline2\nline3\nline4\n")
 
         action = EditFileAction(cwd=str(tmp_path))
         result = action.execute(
-            command="replace",
             path="code.py",
-            start_line=2,
-            end_line=3,
-            new_content="replaced2\nreplaced3\n",
+            old_string="line2\nline3",
+            new_string="replaced2\nreplaced3",
         )
 
         content = f.read_text()
@@ -111,52 +109,47 @@ class TestEditFileAction:
         assert "line3" not in content
 
     def test_replace_single_line(self, tmp_path):
-        """replace a single line (start_line == end_line)."""
+        """Replace a single line using old_string/new_string."""
         f = tmp_path / "code.py"
         f.write_text("aaa\nbbb\nccc\n")
 
         action = EditFileAction(cwd=str(tmp_path))
         action.execute(
-            command="replace",
             path="code.py",
-            start_line=2,
-            end_line=2,
-            new_content="BBB\n",
+            old_string="bbb",
+            new_string="BBB",
         )
 
         lines = f.read_text().splitlines()
         assert lines == ["aaa", "BBB", "ccc"]
 
     def test_replace_returns_confirmation(self, tmp_path):
-        """replace returns a message confirming the edit."""
+        """Replace returns a message confirming the edit."""
         f = tmp_path / "code.py"
         f.write_text("old\n")
 
         action = EditFileAction(cwd=str(tmp_path))
         result = action.execute(
-            command="replace",
             path="code.py",
-            start_line=1,
-            end_line=1,
-            new_content="new\n",
+            old_string="old",
+            new_string="new",
         )
 
         assert isinstance(result, str)
         assert "code.py" in result
 
-    # -- insert command --
+    # -- insert via str_replace --
 
     def test_insert_adds_content_after_line(self, tmp_path):
-        """insert command adds new_content after insert_line."""
+        """Insert new content after a line by including the line in old_string."""
         f = tmp_path / "code.py"
         f.write_text("line1\nline2\nline3\n")
 
         action = EditFileAction(cwd=str(tmp_path))
         action.execute(
-            command="insert",
             path="code.py",
-            insert_line=1,
-            new_content="inserted\n",
+            old_string="line1\n",
+            new_string="line1\ninserted\n",
         )
 
         lines = f.read_text().splitlines()
@@ -165,34 +158,32 @@ class TestEditFileAction:
         assert lines[2] == "line2"
 
     def test_insert_at_end(self, tmp_path):
-        """insert after the last line appends to end of file."""
+        """Insert at end by replacing last line with itself plus new content."""
         f = tmp_path / "code.py"
         f.write_text("line1\nline2\n")
 
         action = EditFileAction(cwd=str(tmp_path))
         action.execute(
-            command="insert",
             path="code.py",
-            insert_line=2,
-            new_content="line3\n",
+            old_string="line2\n",
+            new_string="line2\nline3\n",
         )
 
         lines = f.read_text().splitlines()
         assert lines == ["line1", "line2", "line3"]
 
-    # -- delete command --
+    # -- delete via str_replace --
 
     def test_delete_removes_lines(self, tmp_path):
-        """delete command removes lines from start_line to end_line."""
+        """Delete lines by replacing with empty string."""
         f = tmp_path / "code.py"
         f.write_text("keep1\ndelete_me\nalso_delete\nkeep2\n")
 
         action = EditFileAction(cwd=str(tmp_path))
         action.execute(
-            command="delete",
             path="code.py",
-            start_line=2,
-            end_line=3,
+            old_string="delete_me\nalso_delete\n",
+            new_string="",
         )
 
         content = f.read_text()
@@ -210,11 +201,9 @@ class TestEditFileAction:
 
         action = EditFileAction(cwd=str(tmp_path))
         result = action.execute(
-            command="replace",
             path="code.py",
-            start_line=1,
-            end_line=1,
-            new_content="x = (\n",  # unclosed paren = invalid syntax
+            old_string="x = 1",
+            new_string="x = (",  # unclosed paren = invalid syntax
         )
 
         # Edit should be rejected
@@ -229,11 +218,9 @@ class TestEditFileAction:
 
         action = EditFileAction(cwd=str(tmp_path))
         result = action.execute(
-            command="replace",
             path="code.py",
-            start_line=1,
-            end_line=1,
-            new_content="x = 42\n",
+            old_string="x = 1",
+            new_string="x = 42",
         )
 
         assert "error" not in result.lower() or "syntax" not in result.lower()
@@ -246,11 +233,9 @@ class TestEditFileAction:
 
         action = EditFileAction(cwd=str(tmp_path))
         action.execute(
-            command="replace",
             path="config.txt",
-            start_line=1,
-            end_line=1,
-            new_content="this is not valid python (\n",
+            old_string="old value",
+            new_string="this is not valid python (",
         )
 
         assert "this is not valid python (" in f.read_text()
@@ -261,11 +246,9 @@ class TestEditFileAction:
         """Editing a file that doesn't exist returns an error, not a crash."""
         action = EditFileAction(cwd=str(tmp_path))
         result = action.execute(
-            command="replace",
             path="does_not_exist.py",
-            start_line=1,
-            end_line=1,
-            new_content="x\n",
+            old_string="x",
+            new_string="y",
         )
 
         assert "error" in result.lower() or "not found" in result.lower()
@@ -279,11 +262,9 @@ class TestEditFileAction:
 
         action = EditFileAction(cwd=str(tmp_path))
         action.execute(
-            command="replace",
             path="src/mod.py",
-            start_line=1,
-            end_line=1,
-            new_content="new\n",
+            old_string="old",
+            new_string="new",
         )
 
         assert f.read_text().strip() == "new"

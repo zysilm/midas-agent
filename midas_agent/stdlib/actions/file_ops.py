@@ -109,50 +109,30 @@ class EditFileAction(Action):
     @property
     def description(self) -> str:
         return (
-            "Edits an existing file using line-number-based operations.\n\n"
+            "Performs exact string replacement in a file.\n\n"
             "Usage:\n"
-            " - You MUST use `read_file` at least once on a file before "
-            "editing it. This tool references line numbers from `read_file` "
-            "output. Editing without reading first will produce wrong results.\n"
-            " - When editing, preserve the exact indentation (tabs/spaces) as "
-            "it appears in the file. Incorrect indentation will break the code.\n"
-            " - ALWAYS prefer editing existing source files in the repository. "
-            "NEVER create new files when you can edit an existing one — this "
-            "is how you produce a patch that fixes the issue.\n\n"
-            "Three sub-commands:\n"
-            " - `replace`: Replace lines from `start_line` to `end_line` "
-            "(inclusive) with `new_content`. This is the most common operation "
-            "for bug fixes.\n"
-            " - `insert`: Insert `new_content` after `insert_line`. Use this "
-            "to add new code without removing existing lines.\n"
-            " - `delete`: Delete lines from `start_line` to `end_line` "
-            "(inclusive). Use this to remove dead code.\n\n"
-            "# Instructions\n"
-            " - Line numbers are 1-indexed and reference the output of "
-            "`read_file`.\n"
-            " - For Python files, the edit is syntax-checked with `ast.parse` "
+            " - Specify `old_string` (the exact text to find) and `new_string` "
+            "(the replacement). The tool replaces the first — and only — "
+            "occurrence of `old_string` with `new_string`.\n"
+            " - `old_string` must be unique in the file. If it matches "
+            "multiple locations, the edit is rejected. Provide more "
+            "surrounding context to make the match unique.\n"
+            " - For `.py` files the result is syntax-checked with `ast.parse` "
             "before being committed. If the syntax check fails, the edit is "
-            "rejected and an error is returned — fix the syntax and retry.\n"
-            " - After editing, the file's line numbers may shift. If you need "
-            "to make another edit to the same file, call `read_file` again to "
-            "get the updated line numbers.\n"
-            " - To fix a bug, the typical workflow is:\n"
-            "   1. `read_file` to understand the code\n"
-            "   2. `edit_file(command='replace', ...)` to apply the fix\n"
-            "   3. `bash` to run tests and verify the fix\n"
-            "   4. `task_done` when satisfied"
+            "rejected and the file is left unchanged.\n"
+            " - Prefer this tool for editing existing files. It only changes "
+            "the text you specify and preserves everything else.\n"
+            " - To delete text, set `new_string` to an empty string.\n"
+            " - Multiple edits on the same file do not require re-reading — "
+            "content matching is immune to line-number drift."
         )
 
     @property
     def parameters(self) -> dict:
         return {
-            "command": {"type": "string", "required": True},
             "path": {"type": "string", "required": True},
-            "start_line": {"type": "integer", "required": False},
-            "end_line": {"type": "integer", "required": False},
-            "insert_line": {"type": "integer", "required": False},
-            "new_content": {"type": "string", "required": False},
-            "auto_indent": {"type": "boolean", "required": False, "default": True},
+            "old_string": {"type": "string", "required": True},
+            "new_string": {"type": "string", "required": True},
         }
 
     def _resolve(self, path: str) -> str:
@@ -168,57 +148,45 @@ class EditFileAction(Action):
         except KeyError:
             return "Error: missing required parameter 'path'"
 
-        command = kwargs.get("command")
-        if command is None:
-            return f"Error: missing required parameter 'command' for {file_path}"
+        old_string = kwargs.get("old_string")
+        new_string = kwargs.get("new_string")
+        if old_string is None or new_string is None:
+            return "Error: missing required parameter 'old_string' or 'new_string'"
 
         # Read existing file
         try:
             with open(file_path, "r") as f:
-                lines = f.readlines()
+                content = f.read()
         except FileNotFoundError:
             return f"Error: file not found: {file_path}"
         except Exception as e:
             return f"Error reading file: {e}"
 
-        # Apply the edit to produce new lines
-        try:
-            if command == "replace":
-                start = kwargs["start_line"]
-                end = kwargs["end_line"]
-                new_content = kwargs.get("new_content", "")
-                new_lines = new_content.splitlines(True)
-                result_lines = lines[: start - 1] + new_lines + lines[end:]
+        # Check occurrences of old_string
+        count = content.count(old_string)
+        if count == 0:
+            return f"old_string not found in {file_path}"
+        if count > 1:
+            return (
+                f"old_string is not unique in {file_path} "
+                f"(found {count} occurrences). "
+                f"Provide more surrounding context to make it unique."
+            )
 
-            elif command == "insert":
-                insert_line = kwargs["insert_line"]
-                new_content = kwargs.get("new_content", "")
-                new_lines = new_content.splitlines(True)
-                result_lines = lines[:insert_line] + new_lines + lines[insert_line:]
-
-            elif command == "delete":
-                start = kwargs["start_line"]
-                end = kwargs["end_line"]
-                result_lines = lines[: start - 1] + lines[end:]
-
-            else:
-                return f"Error: unknown command '{command}'"
-        except KeyError as e:
-            return f"Error: missing required parameter {e} for command '{command}'"
-
-        result_text = "".join(result_lines)
+        # Exactly one occurrence — replace
+        new_content = content.replace(old_string, new_string, 1)
 
         # Syntax check for Python files
         if file_path.endswith(".py"):
             try:
-                ast.parse(result_text)
+                ast.parse(new_content)
             except SyntaxError as e:
                 return f"Syntax error: {e}. Edit rejected; file unchanged."
 
         # Write back
         try:
             with open(file_path, "w") as f:
-                f.write(result_text)
+                f.write(new_content)
         except Exception as e:
             return f"Error writing file: {e}"
 

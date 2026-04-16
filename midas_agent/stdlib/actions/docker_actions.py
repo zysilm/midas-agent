@@ -165,8 +165,11 @@ class DockerEditFileAction(EditFileAction):
         return path
 
     def execute(self, **kwargs) -> str:
-        command = kwargs.get("command", "replace")
         path = self._resolve_container_path(kwargs["path"])
+        old_string = kwargs.get("old_string")
+        new_string = kwargs.get("new_string")
+        if old_string is None or new_string is None:
+            return "Error: missing required parameter 'old_string' or 'new_string'"
 
         # Read current file content from container
         try:
@@ -179,40 +182,29 @@ class DockerEditFileAction(EditFileAction):
             )
             if result.returncode != 0:
                 return f"Error: file not found or cannot read: {path}"
-            lines = result.stdout.splitlines(keepends=True)
+            content = result.stdout
         except Exception as e:
             return f"Error reading file for edit: {e}"
 
-        # Apply edit
-        if command == "replace":
-            start = kwargs.get("start_line", 1)
-            end = kwargs.get("end_line", start)
-            new_content = kwargs.get("new_content", "")
-            new_lines = new_content.splitlines(keepends=True)
-            if new_content and not new_content.endswith("\n"):
-                new_lines[-1] += "\n"
-            edited = lines[:start - 1] + new_lines + lines[end:]
-        elif command == "insert":
-            insert_line = kwargs.get("insert_line", 0)
-            new_content = kwargs.get("new_content", "")
-            new_lines = new_content.splitlines(keepends=True)
-            if new_content and not new_content.endswith("\n"):
-                new_lines[-1] += "\n"
-            edited = lines[:insert_line] + new_lines + lines[insert_line:]
-        elif command == "delete":
-            start = kwargs.get("start_line", 1)
-            end = kwargs.get("end_line", start)
-            edited = lines[:start - 1] + lines[end:]
-        else:
-            return f"Error: unknown command '{command}'"
+        # Check occurrences of old_string
+        count = content.count(old_string)
+        if count == 0:
+            return f"old_string not found in {path}"
+        if count > 1:
+            return (
+                f"old_string is not unique in {path} "
+                f"(found {count} occurrences). "
+                f"Provide more surrounding context to make it unique."
+            )
 
-        new_text = "".join(edited)
+        # Exactly one occurrence — replace
+        new_content = content.replace(old_string, new_string, 1)
 
         # Syntax check for Python files
         if path.endswith(".py"):
             import ast
             try:
-                ast.parse(new_text)
+                ast.parse(new_content)
             except SyntaxError as e:
                 return (
                     f"Syntax error in edited file — edit rejected. "
@@ -222,7 +214,7 @@ class DockerEditFileAction(EditFileAction):
         # Write back to container
         try:
             # Use printf + redirect to handle special characters
-            escaped = new_text.replace("\\", "\\\\").replace("'", "'\\''")
+            escaped = new_content.replace("\\", "\\\\").replace("'", "'\\''")
             write_cmd = f"printf '%s' '{escaped}' > {shlex.quote(path)}"
             result = _docker_exec(
                 self._container_id, write_cmd,
