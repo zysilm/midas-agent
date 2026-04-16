@@ -1,7 +1,9 @@
 """Workspace manager — lifecycle management for all workspaces."""
 from __future__ import annotations
 
-from typing import Callable, TYPE_CHECKING
+import glob
+import os
+from typing import Callable, IO, TYPE_CHECKING
 
 from midas_agent.config import MidasConfig
 from midas_agent.llm.types import LLMRequest, LLMResponse
@@ -16,11 +18,21 @@ class WorkspaceManager:
         config: MidasConfig,
         call_llm_factory: Callable[[str], Callable],
         system_llm_callback: Callable[[LLMRequest], LLMResponse],
+        action_log_dir: str = "/tmp/midas_action_logs",
     ) -> None:
         self._config = config
         self._call_llm_factory = call_llm_factory
         self._system_llm_callback = system_llm_callback
         self._workspaces: dict[str, Workspace] = {}
+        self._action_log_dir = action_log_dir
+        self._action_log_handles: dict[str, IO] = {}
+        os.makedirs(self._action_log_dir, exist_ok=True)
+        # Remove stale JSONL files from previous runs
+        for stale in glob.glob(os.path.join(self._action_log_dir, "*.jsonl")):
+            try:
+                os.remove(stale)
+            except OSError:
+                pass
 
     @property
     def workspaces(self) -> dict[str, Workspace]:
@@ -47,7 +59,41 @@ class WorkspaceManager:
         return ws
 
     def destroy(self, workspace_id: str) -> None:
+        self._close_action_log(workspace_id)
         self._workspaces.pop(workspace_id, None)
+
+    def close_all_action_logs(self, remove_empty: bool = False) -> None:
+        """Close all open action log file handles.
+
+        Args:
+            remove_empty: If True, delete JSONL files that are empty
+                (0 bytes). This avoids leaving empty log files for
+                workspaces that were created but never executed.
+        """
+        for ws_id in list(self._action_log_handles):
+            handle = self._action_log_handles.get(ws_id)
+            path = handle.name if handle and not handle.closed else None
+            self._close_action_log(ws_id)
+            if remove_empty and path:
+                try:
+                    if os.path.exists(path) and os.path.getsize(path) == 0:
+                        os.remove(path)
+                except OSError:
+                    pass
+
+    def _open_action_log(self, workspace_id: str) -> IO:
+        """Open a JSONL action log file for a workspace."""
+        log_path = os.path.join(self._action_log_dir, f"{workspace_id}.jsonl")
+        handle = open(log_path, "w")
+        self._action_log_handles[workspace_id] = handle
+        return handle
+
+    def _close_action_log(self, workspace_id: str) -> None:
+        """Close the action log file handle for a workspace, if open."""
+        handle = self._action_log_handles.pop(workspace_id, None)
+        if handle is not None and not handle.closed:
+            handle.flush()
+            handle.close()
 
     def list_workspaces(self) -> list[Workspace]:
         return list(self._workspaces.values())
@@ -200,6 +246,8 @@ class WorkspaceManager:
             agent_type="workspace_bound",
         )
 
+        action_log = self._open_action_log(workspace_id)
+
         return GraphEmergenceWorkspace(
             workspace_id=workspace_id,
             responsible_agent=responsible_agent,
@@ -208,4 +256,5 @@ class WorkspaceManager:
             free_agent_manager=free_agent_manager,
             skill_reviewer=skill_reviewer,
             max_tool_output_chars=self._config.max_tool_output_chars,
+            action_log=action_log,
         )

@@ -42,9 +42,23 @@ def _make_llm_provider(model: str, api_key: str, api_base: str) -> LLMProvider:
 
 
 class _StubLLMProvider(LLMProvider):
-    """Minimal LLM provider for offline/test usage."""
+    """Minimal LLM provider for offline/test usage.
+
+    Returns a task_done tool call so the agent terminates gracefully
+    and produces at least one action log entry.
+    """
 
     def complete(self, request: LLMRequest) -> LLMResponse:
+        from midas_agent.llm.types import ToolCall
+
+        # If the request has tools available, respond with task_done
+        # so the agent terminates and writes an action log entry.
+        if request.tools:
+            return LLMResponse(
+                content=None,
+                tool_calls=[ToolCall(id="stub-done", name="task_done", arguments={"result": "stub"})],
+                usage=TokenUsage(input_tokens=0, output_tokens=0),
+            )
         return LLMResponse(
             content="ok",
             tool_calls=None,
@@ -338,6 +352,9 @@ def run_training(
                     pass
             shutil.rmtree(repo_dir, ignore_errors=True)
             shutil.rmtree(repo_dir + "_workspaces", ignore_errors=True)
+
+    # -- Close action log files (remove empty files from unexecuted workspaces) --
+    workspace_manager.close_all_action_logs(remove_empty=True)
 
     # -- Export training artifacts --
     _export_artifacts(config, scheduler, training_log)

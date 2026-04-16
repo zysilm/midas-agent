@@ -56,6 +56,7 @@ class PlanExecuteAgent(ReactAgent):
         messages.append({"role": "user", "content": "\n".join(user_parts)})
 
         # ReAct loop (tools available from the start)
+        plan_received = False
         while True:
             if self.max_iterations is not None and iterations >= self.max_iterations:
                 logger.info("  Hit max_iterations (%d). Stopping.", self.max_iterations)
@@ -164,6 +165,18 @@ class PlanExecuteAgent(ReactAgent):
                         if not messages or messages[0].get("role") != "system":
                             messages.insert(0, {"role": "system", "content": self.system_prompt})
             elif response.content:
+                # Planning phase: if tools are available and the agent has
+                # not yet received a plan, treat this first content-only
+                # response as the plan and continue to execution.
+                if self.actions and not plan_received:
+                    plan_received = True
+                    logger.info(
+                        "  [iter %d] Plan response (%d tokens): %s",
+                        iterations, resp_tokens, response.content[:300],
+                    )
+                    messages.append({"role": "assistant", "content": response.content})
+                    continue
+
                 logger.info(
                     "  [iter %d] Text response (no tool call, %d tokens): %s",
                     iterations, resp_tokens, response.content[:300],
