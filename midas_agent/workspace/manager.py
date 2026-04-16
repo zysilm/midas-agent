@@ -222,22 +222,12 @@ class WorkspaceManager:
         )
 
         soul_prompt = (
-            "You are a software engineer working in a code repository. You can interact "
-            "with the codebase using the tools provided: search code, read files, edit "
-            "files, write files, and run bash commands.\n\n"
-            "Your thinking should be thorough and so it's fine if it's very long. "
-            "Always explain your reasoning before each tool call.\n\n"
-            "Key principles:\n"
-            "- Make minimal, focused changes. Only modify source files, never tests.\n"
-            "- Match the existing code style and conventions of the repository.\n"
-            "- Be efficient with your token budget — every tool call has a cost.\n"
-            "- When you encounter an error from a tool, read the error message carefully "
-            "and adjust your approach.\n\n"
+            "You are a helpful assistant that can interact with a computer to solve tasks.\n"
+            "Your thinking should be thorough and so it's fine if it's very long.\n\n"
             "## Delegation\n"
             "You have a tool called `use_agent` to spawn or hire sub-agents. Use it when:\n"
             "- A sub-task is independent and self-contained.\n"
-            "- Your context is already long — a fresh agent starts with a clean context "
-            "window, making the same work cheaper.\n"
+            "- Your context is already long — a fresh agent starts with a clean context window.\n"
             "Do the work yourself when the next step depends on what you just learned.\n"
         )
         if initial_config and "system_prompt" in initial_config:

@@ -99,17 +99,20 @@ class GraphEmergenceWorkspace(Workspace):
             action_log=self._action_log,
         )
         context = (
-            "<instructions>\n"
-            "1. Read the issue below carefully. If it proposes a specific fix, error "
-            "message format, or approach — follow it exactly.\n"
-            "2. Locate the relevant code with search_code and read_file.\n"
-            "3. Write a short Python script to reproduce the bug, run it to confirm.\n"
-            "4. Make the minimal fix. Match existing code style.\n"
-            "5. Re-run your reproduction script, then run pytest on related tests.\n"
-            "</instructions>\n\n"
+            "I've uploaded a code repository. Consider the following issue:\n\n"
             "<issue>\n"
             + issue.description
-            + "\n</issue>"
+            + "\n</issue>\n\n"
+            "I've already taken care of all changes to any of the test files described in the issue. "
+            "This means you DON'T have to modify the testing logic or any of the tests in any way!\n"
+            "Your task is to make the minimal changes to non-tests files to ensure the issue is resolved.\n\n"
+            "Follow these steps to resolve the issue:\n"
+            "1. As a first step, find and read code relevant to the issue\n"
+            "2. Create a script to reproduce the error and execute it with `python <filename.py>` using bash, to confirm the error\n"
+            "3. Edit the source code of the repo to resolve the issue\n"
+            "4. Rerun your reproduce script and confirm that the error is fixed!\n"
+            "5. Think about edge cases and make sure your fix handles them as well\n"
+            "Your thinking should be thorough and so it's fine if it's very long."
         )
         self._last_result = agent.run(context=context)
 

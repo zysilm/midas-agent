@@ -18,30 +18,7 @@ class ReadFileAction(Action):
     @property
     def description(self) -> str:
         cwd_note = f"The current working directory is: {self.cwd}\n" if self.cwd else ""
-        return (
-            "Reads a file from the local filesystem. You can access any file "
-            "directly by using this tool.\n\n"
-            f"{cwd_note}"
-            "Usage:\n"
-            " - Use relative paths from the working directory (e.g. "
-            "`./src/module.py`), or absolute paths. Relative paths are "
-            "resolved against the working directory.\n"
-            " - By default, reads up to 2000 lines starting from the "
-            "beginning of the file.\n"
-            " - For large files, use `offset` and `limit` to read specific "
-            "portions. When you already know which part of the file you need, "
-            "only read that part — this saves tokens.\n"
-            " - Results are returned with line numbers (1-indexed). Use these "
-            "line numbers when calling `edit_file`.\n"
-            " - You can call multiple tools in a single response. When multiple "
-            "files might be relevant, read them all in parallel rather than "
-            "sequentially — this is faster and avoids wasting iterations.\n"
-            " - If the file does not exist, an error message is returned with "
-            "the resolved path. Check the path and try again.\n\n"
-            "IMPORTANT: You must read a file with this tool before editing it "
-            "with `edit_file`. The edit tool will reference line numbers from "
-            "this tool's output."
-        )
+        return f"Reads a file and returns contents with line numbers.\n{cwd_note}"
 
     @property
     def parameters(self) -> dict:
@@ -99,6 +76,8 @@ class ReadFileAction(Action):
 
 
 class EditFileAction(Action):
+    _undo_history: dict[str, str] = {}
+
     def __init__(self, cwd: str | None = None) -> None:
         self.cwd = cwd
 
@@ -109,22 +88,13 @@ class EditFileAction(Action):
     @property
     def description(self) -> str:
         return (
-            "Performs exact string replacement in a file.\n\n"
-            "Usage:\n"
-            " - Specify `old_string` (the exact text to find) and `new_string` "
-            "(the replacement). The tool replaces the first — and only — "
-            "occurrence of `old_string` with `new_string`.\n"
-            " - `old_string` must be unique in the file. If it matches "
-            "multiple locations, the edit is rejected. Provide more "
-            "surrounding context to make the match unique.\n"
-            " - For `.py` files the result is syntax-checked with `ast.parse` "
-            "before being committed. If the syntax check fails, the edit is "
-            "rejected and the file is left unchanged.\n"
-            " - Prefer this tool for editing existing files. It only changes "
-            "the text you specify and preserves everything else.\n"
-            " - To delete text, set `new_string` to an empty string.\n"
-            " - Multiple edits on the same file do not require re-reading — "
-            "content matching is immune to line-number drift."
+            "Performs string replacement in a file. Shows the edited region "
+            "with line numbers after a successful edit.\n\n"
+            "Notes:\n"
+            "* The `old_string` must match EXACTLY one occurrence in the file. "
+            "Be mindful of whitespace!\n"
+            "* If `old_string` is not unique, the replacement will not be performed.\n"
+            "* Set `undo=True` with a `path` to revert the last edit made to that file."
         )
 
     @property
@@ -133,6 +103,7 @@ class EditFileAction(Action):
             "path": {"type": "string", "required": True},
             "old_string": {"type": "string", "required": True},
             "new_string": {"type": "string", "required": True},
+            "undo": {"type": "boolean", "required": False, "description": "If True, revert the last edit to the file at path."},
         }
 
     def _resolve(self, path: str) -> str:
@@ -142,11 +113,43 @@ class EditFileAction(Action):
             return os.path.join(self.cwd, path)
         return path
 
+    def _snippet(self, content: str, target: str, path: str, context_lines: int = 4) -> str:
+        """Return a cat -n style snippet around *target* in *content*."""
+        lines = content.splitlines(keepends=True)
+        # Find the first line that contains part of target
+        target_first_line = target.splitlines()[0] if target else ""
+        center = 0
+        for i, line in enumerate(lines):
+            if target_first_line and target_first_line in line:
+                center = i
+                break
+        start = max(0, center - context_lines)
+        end = min(len(lines), center + len(target.splitlines()) + context_lines)
+        snippet_lines: list[str] = []
+        for i in range(start, end):
+            num = i + 1  # 1-indexed
+            text = lines[i].rstrip("\n")
+            snippet_lines.append(f"    {num}\t{text}")
+        header = f"The file {path} has been edited. Here's the result of running `cat -n` on a snippet:"
+        return header + "\n" + "\n".join(snippet_lines)
+
     def execute(self, **kwargs) -> str:
         try:
             file_path = self._resolve(kwargs["path"])
         except KeyError:
             return "Error: missing required parameter 'path'"
+
+        # Handle undo
+        if kwargs.get("undo"):
+            if file_path in EditFileAction._undo_history:
+                prev = EditFileAction._undo_history.pop(file_path)
+                try:
+                    with open(file_path, "w") as f:
+                        f.write(prev)
+                    return f"Reverted {file_path} to previous content."
+                except Exception as e:
+                    return f"Error reverting file: {e}"
+            return f"No undo history for {file_path}"
 
         old_string = kwargs.get("old_string")
         new_string = kwargs.get("new_string")
@@ -181,7 +184,16 @@ class EditFileAction(Action):
             try:
                 ast.parse(new_content)
             except SyntaxError as e:
-                return f"Syntax error: {e}. Edit rejected; file unchanged."
+                return (
+                    "<SYNTAX_ERROR>\n"
+                    "Your edit introduced a syntax error. "
+                    "Edit rejected; file unchanged:\n"
+                    f"{e}\n"
+                    "</SYNTAX_ERROR>"
+                )
+
+        # Save current content for undo before writing
+        EditFileAction._undo_history[file_path] = content
 
         # Write back
         try:
@@ -190,7 +202,7 @@ class EditFileAction(Action):
         except Exception as e:
             return f"Error writing file: {e}"
 
-        return f"Edited {file_path}"
+        return self._snippet(new_content, new_string, kwargs["path"])
 
 
 class WriteFileAction(Action):
@@ -203,25 +215,7 @@ class WriteFileAction(Action):
 
     @property
     def description(self) -> str:
-        return (
-            "Writes a file to the local filesystem. Creates parent directories "
-            "automatically if they do not exist.\n\n"
-            "Usage:\n"
-            " - This tool will overwrite the existing file if there is one at "
-            "the provided path.\n"
-            " - Prefer `edit_file` for modifying existing files — it only "
-            "changes the lines you specify and preserves the rest. Only use "
-            "`write_file` to create genuinely new files (e.g. test scripts, "
-            "reproduction scripts).\n"
-            " - NEVER use `write_file` to rewrite an entire source file when "
-            "you only need to change a few lines. Use `edit_file` instead — "
-            "the resulting diff will be cleaner and the patch more reviewable.\n\n"
-            "IMPORTANT: New files created with `write_file` are useful for "
-            "testing and reproduction, but they are NOT the fix. To fix a "
-            "bug, you must edit the existing source files with `edit_file`. "
-            "Your score is based on whether the repository's failing tests "
-            "pass after your changes, not on new files you create."
-        )
+        return "Creates or overwrites a file with the given content."
 
     @property
     def parameters(self) -> dict:
