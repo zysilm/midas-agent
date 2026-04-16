@@ -13,11 +13,13 @@ class DelegateTaskAction(Action):
         spawn_callback: Callable | None = None,
         balance_provider: Callable[[], int] | None = None,
         calling_agent_id: str | None = None,
+        call_llm: Callable | None = None,
     ) -> None:
         self._find_candidates = find_candidates
         self._spawn_callback = spawn_callback
         self._balance_provider = balance_provider
         self._calling_agent_id = calling_agent_id
+        self._call_llm = call_llm
 
     @property
     def name(self) -> str:
@@ -98,8 +100,51 @@ class DelegateTaskAction(Action):
             for desc in spawn:
                 agent = self._spawn_callback(desc)
                 aid = getattr(agent, "agent_id", None) or "new agent"
-                lines.append(f"Spawned agent {aid} for: {desc}")
+                if self._call_llm is not None:
+                    from midas_agent.stdlib.react_agent import ReactAgent
+                    from midas_agent.stdlib.actions.task_done import TaskDoneAction
+
+                    sub_agent = ReactAgent(
+                        system_prompt=agent.soul.system_prompt,
+                        actions=[TaskDoneAction()],
+                        call_llm=self._call_llm,
+                        max_iterations=10,
+                    )
+                    sub_context = f"[Spawned agent {aid}] {task_description}"
+                    result = sub_agent.run(context=sub_context)
+                    output = result.output if result.output else "Sub-agent completed with no output."
+                    lines.append(f"Spawned agent {aid} result: {output}")
+                else:
+                    lines.append(f"Spawned agent {aid} for: {desc}")
             return "\n".join(lines)
+
+        # Handle hire request (agent_id specified)
+        agent_id_param = kwargs.get("agent_id")
+        if agent_id_param:
+            if self._call_llm is not None:
+                candidates = self._find_candidates(task_description)
+                target = None
+                for c in candidates:
+                    a = getattr(c, "agent", c)
+                    if getattr(a, "agent_id", None) == agent_id_param:
+                        target = a
+                        break
+                if target is None:
+                    return f"Agent not found: {agent_id_param}"
+
+                from midas_agent.stdlib.react_agent import ReactAgent
+                from midas_agent.stdlib.actions.task_done import TaskDoneAction
+
+                sub_agent = ReactAgent(
+                    system_prompt=target.soul.system_prompt,
+                    actions=[TaskDoneAction()],
+                    call_llm=self._call_llm,
+                    max_iterations=10,
+                )
+                result = sub_agent.run(context=task_description)
+                return result.output if result.output else "Agent completed with no output."
+            else:
+                return f"Agent not found: {agent_id_param}"
 
         candidates = self._find_candidates(task_description)
         lines: list[str] = []

@@ -68,6 +68,7 @@ class GraphEmergenceWorkspace(Workspace):
             spawn_callback=lambda desc: self._spawn_agent(desc),
             balance_provider=balance_provider,
             calling_agent_id=self._responsible_agent.agent_id,
+            call_llm=self._call_llm,
         )
 
         ov = self._action_overrides

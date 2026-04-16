@@ -579,18 +579,17 @@ class TestDelegateTaskAction:
         assert "spawned-0" in output
 
     def test_hire_with_agent_id(self):
-        """When agent_id is specified, delegate_task triggers the hire path
-        (synchronous execution, returns result)."""
+        """When agent_id is specified without call_llm, delegate_task
+        returns an error about agent not found."""
         action = DelegateTaskAction(
             find_candidates=lambda desc: [],
         )
-        # For now, just verify the parameter is accepted without error
-        # Full hire-and-wait implementation is a separate concern
         output = action.execute(
             task_description="fix parsing bug",
             agent_id="expert-1",
         )
         assert isinstance(output, str)
+        assert "not found" in output.lower()
 
     def test_candidate_output_labels_young_agents(self):
         """When candidates include agents protected by the caller, they must
