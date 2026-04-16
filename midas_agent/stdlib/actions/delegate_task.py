@@ -5,6 +5,24 @@ from typing import Callable
 
 from midas_agent.stdlib.action import Action
 
+SUB_AGENT_INSTRUCTIONS = """You are a spawned sub-agent working on a specific subtask assigned by your parent agent.
+
+Your responsibilities:
+- Focus ONLY on your assigned subtask. Do not try to solve the entire problem.
+- When you have completed your analysis or work, call report_result with a clear, concise summary of your findings.
+- Your report_result content will be delivered directly to your parent agent.
+
+Guidelines:
+- Be thorough but focused. Read relevant code, search for patterns, and form a clear conclusion.
+- If you are an explorer, you can search and read code but cannot edit files.
+- If you are a worker, you can also edit and write files.
+- Always call report_result when done. Do not just stop — explicitly report your findings.
+"""
+
+# Tool sets per role
+_EXPLORER_TOOLS = {"bash", "read_file", "search_code", "find_files", "report_result"}
+_WORKER_TOOLS = {"bash", "read_file", "edit_file", "write_file", "search_code", "find_files", "report_result"}
+
 
 class DelegateTaskAction(Action):
     def __init__(
@@ -35,6 +53,28 @@ class DelegateTaskAction(Action):
             "tokens per LLM call means the same work costs less budget. "
             "This is especially valuable when your own context is already "
             "long from many file reads and tool results.\n\n"
+            "# Roles: explorer vs worker\n"
+            "Prefix the spawn description with 'explorer:' or 'worker:' to "
+            "set the sub-agent's role.\n"
+            " - **explorer** (default): read-only access. Can search code, "
+            "read files, and run bash, but cannot edit or write files. Use "
+            "for analysis, investigation, and code search tasks.\n"
+            " - **worker**: full access. Can also edit and write files. Use "
+            "when the sub-agent needs to make changes (fix a bug, write a "
+            "test, refactor code).\n"
+            "Examples: `spawn=[\"explorer: find where X is defined\"]`, "
+            "`spawn=[\"worker: fix the off-by-one in foo.py\"]`.\n\n"
+            "# Writing effective briefings\n"
+            "The task_description is the only context your sub-agent receives. "
+            "Make it concrete, specific, and self-contained:\n"
+            " - State exactly what to do and what to report back.\n"
+            " - Include file paths, function names, or error messages when "
+            "relevant — the sub-agent does not share your context.\n"
+            " - Scope the task narrowly. A well-defined subtask gets better "
+            "results than a vague 'look into this'.\n"
+            " - Sub-agents report their findings back to you via "
+            "report_result. You will receive the report_result content "
+            "directly.\n\n"
             "# When to use this tool\n"
             " - The sub-task is independent and self-contained (e.g. "
             "'search for where function X is defined', 'write a test for "
@@ -58,7 +98,8 @@ class DelegateTaskAction(Action):
             " - **Browse candidates:** omit both `spawn` and `agent_id` to "
             "see available agents and their prices.\n\n"
             "Spawned agents are under your protection — their LLM costs are "
-            "charged to your balance. They report results back to you."
+            "charged to your balance. They report results back to you via "
+            "report_result."
         )
 
     @property
@@ -85,10 +126,22 @@ class DelegateTaskAction(Action):
             pass
         return False
 
-    def _build_sub_agent_actions(self, protected_by: str | None) -> list:
-        """Build action set for a sub-agent based on protection status.
+    def _build_sub_agent_actions(
+        self,
+        protected_by: str | None,
+        role: str | None = None,
+        report_callback: Callable | None = None,
+    ) -> list:
+        """Build action set for a sub-agent based on protection status and role.
 
-        Protected agents (幼年): basic actions + report_result, NO use_agent, NO task_done.
+        When *role* is provided (from spawn path role parsing):
+        - explorer: bash, read_file, search_code, find_files, report_result
+        - worker: bash, read_file, edit_file, write_file, search_code, find_files, report_result
+
+        When *role* is None (backward compat / hire path):
+        - No role-based filtering; only protection-based filtering applies.
+
+        Protected agents (幼年): no use_agent, no task_done.
         Independent agents: basic actions + use_agent + report_result.
         """
         from midas_agent.stdlib.actions.report_result import ReportResultAction
@@ -98,8 +151,19 @@ class DelegateTaskAction(Action):
             from midas_agent.stdlib.actions.task_done import TaskDoneAction
             return [TaskDoneAction()]
 
+        # Determine allowed tool names based on role (None = no filtering)
+        if role == "worker":
+            allowed_tools = _WORKER_TOOLS
+        elif role == "explorer":
+            allowed_tools = _EXPLORER_TOOLS
+        else:
+            allowed_tools = None  # no role-based filtering
+
         result = []
         for action in self._parent_actions:
+            # Role-based filtering (only when role is explicitly set)
+            if allowed_tools is not None and action.name not in allowed_tools:
+                continue
             if protected_by is not None:
                 # Protected agent: no use_agent, no task_done
                 if action.name == "use_agent":
@@ -109,7 +173,7 @@ class DelegateTaskAction(Action):
             result.append(action)
 
         # Independent agents need use_agent (a new DelegateTaskAction instance)
-        if protected_by is None:
+        if protected_by is None and (allowed_tools is None or "use_agent" in allowed_tools):
             has_use_agent = any(a.name == "use_agent" for a in result)
             if not has_use_agent:
                 result.append(DelegateTaskAction(
@@ -122,7 +186,8 @@ class DelegateTaskAction(Action):
         # Add report_result for sub-agents (if not already present)
         has_report = any(a.name == "report_result" for a in result)
         if not has_report:
-            result.append(ReportResultAction(report=lambda r: None))
+            cb = report_callback if report_callback is not None else (lambda r: None)
+            result.append(ReportResultAction(report=cb))
 
         return result
 
@@ -141,23 +206,44 @@ class DelegateTaskAction(Action):
                 return "Protected agent cannot spawn new agents. Not allowed."
             lines: list[str] = []
             for desc in spawn:
-                agent = self._spawn_callback(desc)
+                # Parse role prefix from description
+                role = "explorer"  # default
+                clean_desc = desc
+                if desc.lower().startswith("explorer:"):
+                    role = "explorer"
+                    clean_desc = desc[len("explorer:"):].strip()
+                elif desc.lower().startswith("worker:"):
+                    role = "worker"
+                    clean_desc = desc[len("worker:"):].strip()
+
+                agent = self._spawn_callback(clean_desc)
                 aid = getattr(agent, "agent_id", None) or "new agent"
                 if self._call_llm is not None:
                     from midas_agent.stdlib.react_agent import ReactAgent
 
+                    # Mutable container to capture report_result content
+                    reported: dict = {}
+                    def on_report(text, _reported=reported):
+                        _reported["result"] = text
+
+                    system_prompt = SUB_AGENT_INSTRUCTIONS + "\nYour assigned role: " + role + "\n"
+
                     sub_agent = ReactAgent(
-                        system_prompt=agent.soul.system_prompt,
-                        actions=self._build_sub_agent_actions(agent.protected_by),
+                        system_prompt=system_prompt,
+                        actions=self._build_sub_agent_actions(
+                            agent.protected_by,
+                            role=role,
+                            report_callback=on_report,
+                        ),
                         call_llm=self._call_llm,
-                        max_iterations=10,
+                        max_iterations=9999,
                     )
                     sub_context = f"[Spawned agent {aid}] {task_description}"
                     result = sub_agent.run(context=sub_context)
-                    output = result.output if result.output else "Sub-agent completed with no output."
+                    output = reported.get("result") or result.output or "Sub-agent completed with no output."
                     lines.append(f"Spawned agent {aid} result: {output}")
                 else:
-                    lines.append(f"Spawned agent {aid} for: {desc}")
+                    lines.append(f"Spawned agent {aid} for: {clean_desc}")
             return "\n".join(lines)
 
         # Handle hire request (agent_id specified)
@@ -176,14 +262,23 @@ class DelegateTaskAction(Action):
 
                 from midas_agent.stdlib.react_agent import ReactAgent
 
+                # Mutable container to capture report_result content
+                reported: dict = {}
+                def on_report(text, _reported=reported):
+                    _reported["result"] = text
+
                 sub_agent = ReactAgent(
                     system_prompt=target.soul.system_prompt,
-                    actions=self._build_sub_agent_actions(target.protected_by),
+                    actions=self._build_sub_agent_actions(
+                        target.protected_by,
+                        report_callback=on_report,
+                    ),
                     call_llm=self._call_llm,
-                    max_iterations=10,
+                    max_iterations=9999,
                 )
                 result = sub_agent.run(context=task_description)
-                return result.output if result.output else "Agent completed with no output."
+                output = reported.get("result") or result.output or "Agent completed with no output."
+                return output
             else:
                 return f"Agent not found: {agent_id_param}"
 

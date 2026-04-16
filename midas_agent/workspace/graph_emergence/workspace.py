@@ -89,7 +89,7 @@ class GraphEmergenceWorkspace(Workspace):
             system_prompt=self._responsible_agent.soul.system_prompt,
             actions=actions,
             call_llm=self._call_llm,
-            max_iterations=50,
+            max_iterations=9999,
             market_info_provider=lambda: self._build_market_info(),
             balance_provider=balance_provider,
             max_tool_output_chars=self._max_tool_output_chars,

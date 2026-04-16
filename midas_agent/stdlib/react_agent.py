@@ -177,8 +177,8 @@ class ReactAgent:
                         "content": tool_content,
                     })
 
-                    # Check for task_done action
-                    if tool_call.name == "task_done":
+                    # Check for task_done or report_result action
+                    if tool_call.name in ("task_done", "report_result"):
                         logger.info("  Task done.")
                         return AgentResult(
                             output=result,

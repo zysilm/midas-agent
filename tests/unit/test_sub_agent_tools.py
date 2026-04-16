@@ -69,8 +69,8 @@ class TestProtectedAgentTools:
     """Spawned (protected) agents get basic tools + report_result,
     but NOT use_agent. Design doc 04-04 §3.2."""
 
-    def test_protected_agent_has_basic_actions(self):
-        """Protected sub-agent must have all 6 basic actions:
+    def test_protected_worker_has_basic_actions(self):
+        """Protected worker sub-agent must have all 6 basic actions:
         bash, read_file, edit_file, write_file, search_code, find_files."""
         training_log = _make_log()
         pricing_engine = PricingEngine(training_log=training_log)
@@ -104,7 +104,7 @@ class TestProtectedAgentTools:
 
         action.execute(
             task_description="Analyze the bug",
-            spawn=["analyzer"],
+            spawn=["worker: analyzer"],
         )
 
         basic_tools = {"bash", "read_file", "edit_file", "write_file",
