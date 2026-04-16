@@ -97,7 +97,20 @@ class GraphEmergenceWorkspace(Workspace):
             max_tool_output_chars=self._max_tool_output_chars,
             action_log=self._action_log,
         )
-        self._last_result = agent.run(context=issue.description)
+        context = (
+            "<instructions>\n"
+            "1. Read the issue below carefully. If it proposes a specific fix, error "
+            "message format, or approach — follow it exactly.\n"
+            "2. Locate the relevant code with search_code and read_file.\n"
+            "3. Write a short Python script to reproduce the bug, run it to confirm.\n"
+            "4. Make the minimal fix. Match existing code style.\n"
+            "5. Re-run your reproduction script, then run pytest on related tests.\n"
+            "</instructions>\n\n"
+            "<issue>\n"
+            + issue.description
+            + "\n</issue>"
+        )
+        self._last_result = agent.run(context=context)
 
     def _build_market_info(self) -> str:
         """Build market info for the planning phase. Data only — guidance
