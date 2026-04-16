@@ -63,21 +63,30 @@ def build_compacted_history(
 
     Algorithm:
     1. Extract only ``role="user"`` messages from *old_messages*.
-    2. Walk from newest to oldest, accumulating messages until
-       *max_user_message_tokens* is exhausted. If a message does not fully
-       fit, it is truncated (middle-elision) to fill the remaining budget,
-       then iteration stops.
-    3. Reverse the collected messages back to chronological order.
-    4. Append a final user message containing ``SUMMARY_PREFIX + summary``.
+    2. Reserve the first user message (the issue description) — it is always
+       kept in full and placed first in the result.
+    3. Walk the remaining user messages from newest to oldest, accumulating
+       until *max_user_message_tokens* is exhausted.  If a message does not
+       fully fit, it is truncated (middle-elision) to fill the remaining
+       budget, then iteration stops.
+    4. Reverse the collected messages back to chronological order.
+    5. Build result: ``[first_user_message] + [recent messages] + [summary]``.
     """
     user_messages = [m for m in old_messages if m.get("role") == "user"]
+
+    # --- Reserve the first user message (the issue) -----------------------
+    first_user_msg: dict | None = None
+    remaining_user_messages: list[dict] = user_messages
+    if user_messages:
+        first_user_msg = user_messages[0]
+        remaining_user_messages = user_messages[1:]
 
     budget_chars = max_user_message_tokens * 4  # inverse of token estimate
     collected: list[dict] = []
     used_chars = 0
 
-    # Iterate newest-first
-    for msg in reversed(user_messages):
+    # Iterate newest-first over remaining (non-issue) user messages
+    for msg in reversed(remaining_user_messages):
         content = msg["content"]
         msg_chars = len(content)
 
@@ -97,7 +106,13 @@ def build_compacted_history(
     # Reverse to chronological order
     collected.reverse()
 
-    # Append compaction summary
-    collected.append({"role": "user", "content": SUMMARY_PREFIX + "\n" + summary})
+    # Build result: issue first, then recent messages, then summary
+    result: list[dict] = []
+    if first_user_msg is not None:
+        result.append({"role": "user", "content": first_user_msg["content"]})
+    result.extend(collected)
 
-    return collected
+    # Append compaction summary
+    result.append({"role": "user", "content": SUMMARY_PREFIX + "\n" + summary})
+
+    return result
