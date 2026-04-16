@@ -60,7 +60,7 @@ class SWEBenchScorer(ExecutionScorer):
                 test_spec=test_spec,
                 pred=prediction,
                 rm_image=False,
-                force_rebuild=False,
+                force_rebuild=True,
                 client=client,
                 run_id=self._run_id,
                 timeout=self._timeout,
