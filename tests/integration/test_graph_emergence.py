@@ -474,32 +474,54 @@ class TestIT68PostEpisodeSkillReviewer:
     def test_post_episode_calls_skill_reviewer(self):
         responsible_agent = _make_agent("lead-1", agent_type="workspace_bound")
 
-        call_llm = MagicMock(return_value=_make_response())
+        # Scripted LLM: plan → search_code → read_file → task_done
+        responses = [
+            _make_response(content="I will search for the bug and fix it."),
+            _make_response(tool_calls=[ToolCall(id="c1", name="search_code", arguments={"pattern": "parse_edge_case"})]),
+            _make_response(tool_calls=[ToolCall(id="c2", name="read_file", arguments={"path": "parser.py"})]),
+            _make_response(tool_calls=[ToolCall(id="c3", name="task_done", arguments={"summary": "Fixed the parsing bug"})]),
+        ]
+        call_index = {"i": 0}
+
+        def scripted_call_llm(request):
+            idx = call_index["i"]
+            call_index["i"] += 1
+            return responses[idx] if idx < len(responses) else responses[-1]
+
         system_llm = MagicMock(return_value=_make_response())
 
-        # Use a real-ish SkillReviewer (but still stub) -- we spy on review()
         skill_reviewer = MagicMock(spec=SkillReviewer)
         free_agent_manager = MagicMock(spec=FreeAgentManager)
+        free_agent_manager.free_agents = {}
 
         ws = GraphEmergenceWorkspace(
             workspace_id="ws-ge-1",
             responsible_agent=responsible_agent,
-            call_llm=call_llm,
+            call_llm=scripted_call_llm,
             system_llm=system_llm,
             free_agent_manager=free_agent_manager,
             skill_reviewer=skill_reviewer,
         )
 
+        issue = _make_issue()
+        ws.execute(issue)
+
+        # Realistic eval_results in the format main_training.py sends
         eval_results = {
-            "agent_id": "free-1",
-            "score": 0.85,
-            "summary": "Good performance on parsing task",
+            "ws-ge-1": {"s_exec": 0.85, "s_w": 0.85},
         }
 
         result = ws.post_episode(eval_results, evicted_ids=[])
 
-        # SkillReviewer.review() was called with the responsible agent, eval_results, and action_history
-        skill_reviewer.review.assert_called_once_with(responsible_agent, eval_results, [])
+        # SkillReviewer.review() was called with non-empty action_history
+        skill_reviewer.review.assert_called_once()
+        call_args = skill_reviewer.review.call_args
+        assert call_args[0][0] == responsible_agent
+        assert call_args[0][1] == eval_results
+        action_history = call_args[0][2]
+        assert len(action_history) >= 1, (
+            f"action_history should be populated after execute(), got: {action_history}"
+        )
 
         # post_episode returns None for GraphEmergenceWorkspace
         assert result is None

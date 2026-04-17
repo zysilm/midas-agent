@@ -24,14 +24,22 @@ class TestGraphEmergenceWorkspace:
     """Tests for the GraphEmergenceWorkspace class."""
 
     def _make_call_llm(self):
-        """Create a fake call_llm callback."""
-        return MagicMock(
-            return_value=LLMResponse(
-                content="response",
-                tool_calls=None,
-                usage=TokenUsage(input_tokens=10, output_tokens=5),
-            )
-        )
+        """Create a scripted call_llm that returns plan -> task_done."""
+        from midas_agent.llm.types import ToolCall
+
+        responses = [
+            LLMResponse(content="Plan: fix the bug.", tool_calls=None, usage=TokenUsage(input_tokens=10, output_tokens=5)),
+            LLMResponse(content=None, tool_calls=[ToolCall(id="c1", name="search_code", arguments={"pattern": "bug"})], usage=TokenUsage(input_tokens=10, output_tokens=5)),
+            LLMResponse(content=None, tool_calls=[ToolCall(id="c2", name="task_done", arguments={})], usage=TokenUsage(input_tokens=10, output_tokens=5)),
+        ]
+        idx = {"i": 0}
+
+        def call_llm(request):
+            i = idx["i"]
+            idx["i"] += 1
+            return responses[i] if i < len(responses) else responses[-1]
+
+        return call_llm
 
     def _make_agent(self) -> Agent:
         """Create a test responsible Agent."""
@@ -144,7 +152,7 @@ class TestGraphEmergenceWorkspace:
         """post_episode() always returns None for GraphEmergenceWorkspace (no config evolution)."""
         ws = self._make_workspace()
 
-        result = ws.post_episode({"score": 0.8, "cost": 300}, evicted_ids=[])
+        result = ws.post_episode({"ws-ge-1": {"s_exec": 0.8, "s_w": 0.8}}, evicted_ids=[])
 
         assert result is None
 

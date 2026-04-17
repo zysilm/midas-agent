@@ -50,14 +50,33 @@ class TestDAGExecutor:
         )
 
     def _make_call_llm(self, content: str = "done"):
-        """Create a fake call_llm callback."""
-        return MagicMock(
-            return_value=LLMResponse(
+        """Create a scripted call_llm that returns a tool call then text.
+
+        For DAG steps, the ReactAgent runs with the step's tools. A realistic
+        mock returns a tool call (search_code) then a text summary.
+        """
+        from midas_agent.llm.types import ToolCall
+
+        responses = [
+            LLMResponse(
+                content=None,
+                tool_calls=[ToolCall(id="c1", name="search_code", arguments={"pattern": "bug"})],
+                usage=TokenUsage(input_tokens=10, output_tokens=5),
+            ),
+            LLMResponse(
                 content=content,
                 tool_calls=None,
                 usage=TokenUsage(input_tokens=10, output_tokens=5),
-            )
-        )
+            ),
+        ]
+        idx = {"i": 0}
+
+        def call_llm(request):
+            i = idx["i"]
+            idx["i"] += 1
+            return responses[i] if i < len(responses) else responses[-1]
+
+        return call_llm
 
     def test_construction(self):
         """DAGExecutor can be constructed with an ActionRegistry."""

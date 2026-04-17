@@ -107,10 +107,20 @@ class TestSpawnExecutesTask:
             free_agent_manager.register(agent)
             return agent
 
-        # Sub-agent LLM: would return a text finding
-        sub_agent_llm = MagicMock(return_value=_make_response(
-            content="Found the bug in foo.py line 42: off-by-one error."
-        ))
+        # Sub-agent LLM: search_code tool call, then report results
+        sub_call_index = {"i": 0}
+        sub_responses = [
+            _make_response(
+                content=None,
+                tool_calls=[ToolCall(id="sc1", name="task_done",
+                    arguments={"summary": "Found the bug in foo.py line 42: off-by-one error."})],
+            ),
+        ]
+
+        def sub_agent_llm(request):
+            idx = sub_call_index["i"]
+            sub_call_index["i"] += 1
+            return sub_responses[idx] if idx < len(sub_responses) else sub_responses[-1]
 
         action = DelegateTaskAction(
             find_candidates=lambda desc: free_agent_manager.match(desc),
@@ -158,10 +168,20 @@ class TestHireExecutesTask:
         )
         free_agent_manager.register(existing_agent)
 
-        # Sub-agent LLM: returns analysis
-        sub_agent_llm = MagicMock(return_value=_make_response(
-            content="Analysis: the bug is in _cstack function, line 240."
-        ))
+        # Sub-agent LLM: returns analysis via tool call
+        sub_call_index = {"i": 0}
+        sub_responses = [
+            _make_response(
+                content=None,
+                tool_calls=[ToolCall(id="sc1", name="task_done",
+                    arguments={"summary": "Analysis: the bug is in _cstack function, line 240."})],
+            ),
+        ]
+
+        def sub_agent_llm(request):
+            idx = sub_call_index["i"]
+            sub_call_index["i"] += 1
+            return sub_responses[idx] if idx < len(sub_responses) else sub_responses[-1]
 
         action = DelegateTaskAction(
             find_candidates=lambda desc: free_agent_manager.match(desc),
@@ -219,7 +239,11 @@ class TestSubAgentCleanContext:
 
         def capturing_sub_llm(request: LLMRequest) -> LLMResponse:
             captured_sub_messages.append(list(request.messages))
-            return _make_response(content="Found the issue in line 42.")
+            return _make_response(
+                content=None,
+                tool_calls=[ToolCall(id="sc1", name="task_done",
+                    arguments={"summary": "Found the issue in line 42."})],
+            )
 
         training_log, _, _ = _make_log()
         pricing_engine = PricingEngine(training_log=training_log)
@@ -299,7 +323,9 @@ class TestSubAgentCostAttribution:
             nonlocal sub_llm_calls
             sub_llm_calls += 1
             return _make_response(
-                content="Done.",
+                content=None,
+                tool_calls=[ToolCall(id=f"sc{sub_llm_calls}", name="task_done",
+                    arguments={"summary": "Done."})],
                 input_tokens=100, output_tokens=50,
             )
 
@@ -431,12 +457,14 @@ class TestFullDelegationLifecycle:
             free_agent_manager.register(agent)
             return agent
 
-        # Sub-agent LLM returns a finding
+        # Sub-agent LLM returns a finding via tool call
         def sub_llm(request):
             return _make_response(
-                content="The bug is in separable.py:195 — _coord_matrix "
+                content=None,
+                tool_calls=[ToolCall(id="sc1", name="task_done",
+                    arguments={"summary": "The bug is in separable.py:195 — _coord_matrix "
                         "calls model.separable which raises NotImplementedError "
-                        "for CompoundModel. Fix: wrap in try/except."
+                        "for CompoundModel. Fix: wrap in try/except."})],
             )
 
         action = DelegateTaskAction(
@@ -470,8 +498,10 @@ class TestFullDelegationLifecycle:
 
         def sub_llm(request):
             return _make_response(
-                content="Root cause identified: recursive _cstack call "
-                        "does not properly propagate the matrix dimensions."
+                content=None,
+                tool_calls=[ToolCall(id="sc1", name="task_done",
+                    arguments={"summary": "Root cause identified: recursive _cstack call "
+                        "does not properly propagate the matrix dimensions."})],
             )
 
         action = DelegateTaskAction(

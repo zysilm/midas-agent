@@ -97,7 +97,7 @@ class TestSkillEvolutionE2E:
         # Episode 1: creation (skill=None, S_exec > 0)
         reviewer.review(
             agent=agent,
-            eval_results={"s_exec": 0.6},
+            eval_results={"ws-0": {"s_exec": 0.6, "s_w": 0.6}},
             action_history=_make_action_history(),
         )
         assert agent.skill is not None
@@ -108,7 +108,7 @@ class TestSkillEvolutionE2E:
         mock_dspy.GEPA.return_value = _mock_gepa("V2: Use logging, check stack traces.")
         reviewer.review(
             agent=agent,
-            eval_results={"s_exec": 0.75},
+            eval_results={"ws-0": {"s_exec": 0.75, "s_w": 0.75}},
             action_history=_make_action_history(),
         )
         v2 = agent.skill.content
@@ -119,7 +119,7 @@ class TestSkillEvolutionE2E:
         mock_dspy.GEPA.return_value = _mock_gepa("V3: Prioritize stack trace, then logging.")
         reviewer.review(
             agent=agent,
-            eval_results={"s_exec": 0.85},
+            eval_results={"ws-0": {"s_exec": 0.85, "s_w": 0.85}},
             action_history=_make_action_history(),
         )
         v3 = agent.skill.content
@@ -148,7 +148,7 @@ class TestSkillEvolutionE2E:
             for a in agents:
                 reviewer.review(
                     agent=a,
-                    eval_results={"s_exec": 0.8},
+                    eval_results={"ws-0": {"s_exec": 0.8, "s_w": 0.8}},
                     action_history=_make_action_history(),
                 )
 
@@ -184,8 +184,8 @@ class TestSkillEvolutionE2E:
         reviewer = _make_reviewer(system_llm, manager)
 
         # Episode 1: both get different initial skills
-        reviewer.review(agent=agent_a, eval_results={"s_exec": 0.7}, action_history=_make_action_history())
-        reviewer.review(agent=agent_b, eval_results={"s_exec": 0.6}, action_history=_make_action_history())
+        reviewer.review(agent=agent_a, eval_results={"ws-0": {"s_exec": 0.7, "s_w": 0.7}}, action_history=_make_action_history())
+        reviewer.review(agent=agent_b, eval_results={"ws-0": {"s_exec": 0.6, "s_w": 0.6}}, action_history=_make_action_history())
 
         assert agent_a.skill.name != agent_b.skill.name
         assert agent_a.skill.content != agent_b.skill.content
@@ -208,7 +208,7 @@ class TestSkillEvolutionE2E:
         manager.register(agent)
 
         # Create skill
-        reviewer.review(agent=agent, eval_results={"s_exec": 0.8}, action_history=_make_action_history())
+        reviewer.review(agent=agent, eval_results={"ws-0": {"s_exec": 0.8, "s_w": 0.8}}, action_history=_make_action_history())
         assert agent.skill is not None
 
         # Export to artifact
@@ -248,19 +248,19 @@ class TestSkillEvolutionE2E:
         manager.register(agent)
 
         # Episode 1: create skill
-        reviewer.review(agent=agent, eval_results={"s_exec": 0.6}, action_history=_make_action_history())
+        reviewer.review(agent=agent, eval_results={"ws-0": {"s_exec": 0.6, "s_w": 0.6}}, action_history=_make_action_history())
         assert agent.skill is not None
         original = agent.skill.content
 
         # Episode 2: GEPA fails
         mock_dspy.GEPA.return_value.compile.side_effect = RuntimeError("API error")
-        reviewer.review(agent=agent, eval_results={"s_exec": 0.7}, action_history=_make_action_history())
+        reviewer.review(agent=agent, eval_results={"ws-0": {"s_exec": 0.7, "s_w": 0.7}}, action_history=_make_action_history())
         assert agent.skill.content == original  # unchanged
 
         # Episode 3: GEPA succeeds again
         mock_dspy.GEPA.return_value.compile.side_effect = None
         mock_dspy.GEPA.return_value = _mock_gepa("Recovered and improved.")
-        reviewer.review(agent=agent, eval_results={"s_exec": 0.8}, action_history=_make_action_history())
+        reviewer.review(agent=agent, eval_results={"ws-0": {"s_exec": 0.8, "s_w": 0.8}}, action_history=_make_action_history())
         assert agent.skill.content != original  # evolved
 
     @patch("midas_agent.workspace.graph_emergence.skill.dspy")
@@ -277,16 +277,16 @@ class TestSkillEvolutionE2E:
         manager.register(agent)
 
         # Episode 1: create
-        reviewer.review(agent=agent, eval_results={"s_exec": 0.5}, action_history=_make_action_history())
+        reviewer.review(agent=agent, eval_results={"ws-0": {"s_exec": 0.5, "s_w": 0.5}}, action_history=_make_action_history())
         v1 = agent.skill.content
 
         # Episode 2: GEPA produces too-long result -> rejected
         mock_dspy.GEPA.return_value = _mock_gepa("x" * 6000)
-        reviewer.review(agent=agent, eval_results={"s_exec": 0.7}, action_history=_make_action_history())
+        reviewer.review(agent=agent, eval_results={"ws-0": {"s_exec": 0.7, "s_w": 0.7}}, action_history=_make_action_history())
         assert agent.skill.content == v1  # unchanged
 
         # Episode 3: GEPA produces good result -> accepted
         mock_dspy.GEPA.return_value = _mock_gepa("V2 concise improvement.")
-        reviewer.review(agent=agent, eval_results={"s_exec": 0.8}, action_history=_make_action_history())
+        reviewer.review(agent=agent, eval_results={"ws-0": {"s_exec": 0.8, "s_w": 0.8}}, action_history=_make_action_history())
         assert agent.skill.content != v1  # updated
         assert agent.skill.content == "V2 concise improvement."

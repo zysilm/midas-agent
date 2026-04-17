@@ -7,12 +7,30 @@ from midas_agent.llm.types import LLMRequest, LLMResponse, TokenUsage
 
 
 def _dummy_call_llm(req: LLMRequest) -> LLMResponse:
-    """Stub LLM callback that returns an empty response."""
+    """Stub LLM callback that returns a text response (plan or done)."""
     return LLMResponse(
         content="done",
         tool_calls=None,
         usage=TokenUsage(input_tokens=10, output_tokens=5),
     )
+
+
+def _scripted_call_llm() -> callable:
+    """Create a scripted LLM callback for plan+execute phases."""
+    from midas_agent.llm.types import ToolCall
+
+    responses = [
+        LLMResponse(content="Plan: analyze and fix.", tool_calls=None, usage=TokenUsage(10, 5)),
+        LLMResponse(content=None, tool_calls=[ToolCall(id="c1", name="task_done", arguments={})], usage=TokenUsage(10, 5)),
+    ]
+    idx = {"i": 0}
+
+    def call_llm(req: LLMRequest) -> LLMResponse:
+        i = idx["i"]
+        idx["i"] += 1
+        return responses[i] if i < len(responses) else responses[-1]
+
+    return call_llm
 
 
 def _dummy_market_info_provider() -> str:
@@ -41,35 +59,45 @@ class TestPlanExecuteAgent:
 
     def test_run_returns_agent_result(self):
         """run() returns an AgentResult instance."""
+        from midas_agent.stdlib.actions.task_done import TaskDoneAction
+
         agent = PlanExecuteAgent(
             system_prompt="You are a planning agent.",
-            actions=[],
-            call_llm=_dummy_call_llm,
+            actions=[TaskDoneAction()],
+            call_llm=_scripted_call_llm(),
         )
         result = agent.run()
         assert isinstance(result, AgentResult)
+        assert len(result.action_history) >= 1
 
     def test_plan_phase_uses_market_info(self):
         """Market info from the provider is injected during the planning phase."""
+        from midas_agent.stdlib.actions.task_done import TaskDoneAction
+
         agent = PlanExecuteAgent(
             system_prompt="You are a planning agent.",
-            actions=[],
-            call_llm=_dummy_call_llm,
+            actions=[TaskDoneAction()],
+            call_llm=_scripted_call_llm(),
             market_info_provider=_dummy_market_info_provider,
         )
         result = agent.run()
         assert isinstance(result, AgentResult)
+        assert len(result.action_history) >= 1
 
     def test_execute_phase_follows_plan(self):
         """After planning, the agent enters the standard ReAct loop for execution."""
+        from midas_agent.stdlib.actions.task_done import TaskDoneAction
+
         agent = PlanExecuteAgent(
             system_prompt="You are a planning agent.",
-            actions=[],
-            call_llm=_dummy_call_llm,
+            actions=[TaskDoneAction()],
+            call_llm=_scripted_call_llm(),
             max_iterations=10,
         )
         result = agent.run(context="Execute the plan step by step.")
         assert isinstance(result, AgentResult)
+        assert result.termination_reason == "done"
+        assert len(result.action_history) >= 1
 
     def test_accepts_balance_provider(self):
         """PlanExecuteAgent constructor accepts balance_provider and propagates it to ReactAgent."""

@@ -95,7 +95,7 @@ class TestSkillCreationFlow:
 
         reviewer.review(
             agent=agent,
-            eval_results={"s_exec": 0.7},
+            eval_results={"ws-0": {"s_exec": 0.7, "s_w": 0.7}},
             action_history=_make_action_history(),
         )
 
@@ -118,7 +118,7 @@ class TestSkillCreationFlow:
 
         agent = _make_agent(skill=None)
         manager.register(agent)
-        reviewer.review(agent=agent, eval_results={"s_exec": 0.6}, action_history=_make_action_history())
+        reviewer.review(agent=agent, eval_results={"ws-0": {"s_exec": 0.6, "s_w": 0.6}}, action_history=_make_action_history())
 
         assert len(agent.skill.content) <= 5000
 
@@ -137,7 +137,7 @@ class TestSkillCreationFlow:
 
         agent = _make_agent("django-agent", skill=None)
         manager.register(agent)
-        reviewer.review(agent=agent, eval_results={"s_exec": 0.8}, action_history=_make_action_history())
+        reviewer.review(agent=agent, eval_results={"ws-0": {"s_exec": 0.8, "s_w": 0.8}}, action_history=_make_action_history())
 
         # Agent should now be matchable
         candidates = manager.match("Django ORM bug", top_k=5)
@@ -159,7 +159,7 @@ class TestSkillCreationFlow:
 
         agent = _make_agent(skill=None)
         manager.register(agent)
-        reviewer.review(agent=agent, eval_results={"s_exec": 0.0}, action_history=_make_action_history())
+        reviewer.review(agent=agent, eval_results={"ws-0": {"s_exec": 0.0, "s_w": 0.0}}, action_history=_make_action_history())
 
         assert agent.skill is None
 
@@ -187,14 +187,14 @@ class TestSkillEvolutionFlow:
 
         agent = _make_agent(skill=None)
         manager.register(agent)
-        reviewer.review(agent=agent, eval_results={"s_exec": 0.6}, action_history=_make_action_history())
+        reviewer.review(agent=agent, eval_results={"ws-0": {"s_exec": 0.6, "s_w": 0.6}}, action_history=_make_action_history())
         assert agent.skill is not None
         original_content = agent.skill.content
 
         # Episode 2: evolution via GEPA
         evolved_text = "## Procedure\n1. Improved search\n2. Better edit"
         mock_dspy.GEPA.return_value = _mock_gepa(evolved_text)
-        reviewer.review(agent=agent, eval_results={"s_exec": 0.8}, action_history=_make_action_history())
+        reviewer.review(agent=agent, eval_results={"ws-0": {"s_exec": 0.8, "s_w": 0.8}}, action_history=_make_action_history())
 
         assert agent.skill.content != original_content
 
@@ -214,7 +214,7 @@ class TestSkillEvolutionFlow:
         manager.register(agent)
 
         mock_dspy.GEPA.return_value = _mock_gepa("x" * 6000)
-        reviewer.review(agent=agent, eval_results={"s_exec": 0.9}, action_history=_make_action_history())
+        reviewer.review(agent=agent, eval_results={"ws-0": {"s_exec": 0.9, "s_w": 0.9}}, action_history=_make_action_history())
 
         assert agent.skill.content == "Original."
 
@@ -235,17 +235,17 @@ class TestSkillEvolutionFlow:
         contents = []
 
         # Episode 1: creation
-        reviewer.review(agent=agent, eval_results={"s_exec": 0.5}, action_history=_make_action_history())
+        reviewer.review(agent=agent, eval_results={"ws-0": {"s_exec": 0.5, "s_w": 0.5}}, action_history=_make_action_history())
         contents.append(agent.skill.content)
 
         # Episode 2: evolution
         mock_dspy.GEPA.return_value = _mock_gepa("V2 content improved")
-        reviewer.review(agent=agent, eval_results={"s_exec": 0.7}, action_history=_make_action_history())
+        reviewer.review(agent=agent, eval_results={"ws-0": {"s_exec": 0.7, "s_w": 0.7}}, action_history=_make_action_history())
         contents.append(agent.skill.content)
 
         # Episode 3: further evolution
         mock_dspy.GEPA.return_value = _mock_gepa("V3 content refined")
-        reviewer.review(agent=agent, eval_results={"s_exec": 0.8}, action_history=_make_action_history())
+        reviewer.review(agent=agent, eval_results={"ws-0": {"s_exec": 0.8, "s_w": 0.8}}, action_history=_make_action_history())
         contents.append(agent.skill.content)
 
         # All 3 versions should be different

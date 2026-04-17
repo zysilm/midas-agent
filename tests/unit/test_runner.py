@@ -9,8 +9,9 @@ from midas_agent.inference.runner import run_inference, _build_market_info
 from midas_agent.inference.schemas import GraphEmergenceArtifact
 from midas_agent.workspace.graph_emergence.agent import Agent, Soul
 from midas_agent.workspace.graph_emergence.skill import Skill
-from midas_agent.llm.types import LLMResponse, TokenUsage
+from midas_agent.llm.types import LLMResponse, TokenUsage, ToolCall
 from midas_agent.stdlib.action import ActionRegistry
+from midas_agent.stdlib.actions.task_done import TaskDoneAction
 from midas_agent.types import Issue
 
 try:
@@ -85,8 +86,16 @@ class TestRunInference:
         finally:
             os.unlink(config_path)
 
-    def test_graph_emergence_basic(self, fake_llm_provider):
+    def test_graph_emergence_basic(self):
         """Graph emergence mode loads JSON artifact and runs PlanExecuteAgent."""
+        from tests.unit.conftest import FakeLLMProvider
+
+        # Scripted responses: plan -> task_done
+        provider = FakeLLMProvider(responses=[
+            LLMResponse(content="Plan: fix the issue.", tool_calls=None, usage=TokenUsage(10, 5)),
+            LLMResponse(content=None, tool_calls=[ToolCall(id="c1", name="task_done", arguments={})], usage=TokenUsage(10, 5)),
+        ])
+
         artifact = GraphEmergenceArtifact(
             responsible_agent=_make_responsible_agent("You are a coordinator."),
             free_agents=[
@@ -107,9 +116,8 @@ class TestRunInference:
 
         try:
             result = run_inference(
-                config_path, _make_issue(), fake_llm_provider, _make_action_registry(),
+                config_path, _make_issue(), provider, _make_action_registry(),
             )
-            # PlanExecuteAgent will call LLM for planning then execution
             assert result is not None
         finally:
             os.unlink(config_path)
