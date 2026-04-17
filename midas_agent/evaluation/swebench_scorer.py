@@ -56,6 +56,21 @@ class SWEBenchScorer(ExecutionScorer):
             test_spec = make_test_spec(instance, namespace="swebench")
             client = docker.from_env()
 
+            # Purge any cached report from a previous run so run_instance
+            # always re-evaluates the current patch instead of returning
+            # a stale result from disk.
+            from swebench.harness.constants import RUN_EVALUATION_LOG_DIR, LOG_REPORT
+            model_name = prediction["model_name_or_path"].replace("/", "__")
+            cached_report = (
+                RUN_EVALUATION_LOG_DIR
+                / self._run_id
+                / model_name
+                / issue.issue_id
+                / LOG_REPORT
+            )
+            if cached_report.exists():
+                cached_report.unlink()
+
             result = run_instance(
                 test_spec=test_spec,
                 pred=prediction,
