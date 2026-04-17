@@ -17,6 +17,7 @@ from midas_agent.stdlib.actions.file_ops import (
 from midas_agent.stdlib.actions.search import FindFilesAction, SearchCodeAction
 from midas_agent.stdlib.actions.task_done import TaskDoneAction
 from midas_agent.stdlib.actions.think import ThinkAction
+from midas_agent.stdlib.actions.update_plan import UpdatePlanAction
 from midas_agent.stdlib.plan_execute_agent import PlanExecuteAgent
 from midas_agent.types import Issue
 from midas_agent.workspace.base import Workspace
@@ -95,7 +96,7 @@ class GraphEmergenceWorkspace(Workspace):
             bash_action.execute(command="git reset")
             return diff
 
-        actions = list(self._extra_actions) + base_actions + [ThinkAction(), TaskDoneAction(get_diff=_get_diff), delegate]
+        actions = list(self._extra_actions) + base_actions + [ThinkAction(), UpdatePlanAction(), TaskDoneAction(get_diff=_get_diff), delegate]
 
         agent = PlanExecuteAgent(
             system_prompt=self._responsible_agent.soul.system_prompt,
