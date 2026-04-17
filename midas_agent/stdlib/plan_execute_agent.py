@@ -143,13 +143,17 @@ class PlanExecuteAgent(ReactAgent):
                     })
 
                     if tool_call.name == "task_done":
-                        logger.info("  Task done at iter %d", iterations)
-                        return AgentResult(
-                            output=result,
-                            iterations=iterations,
-                            termination_reason="done",
-                            action_history=action_history,
-                        )
+                        from midas_agent.stdlib.actions.task_done import DONE_SENTINEL
+                        if result.startswith(DONE_SENTINEL):
+                            logger.info("  Task done at iter %d", iterations)
+                            return AgentResult(
+                                output=result,
+                                iterations=iterations,
+                                termination_reason="done",
+                                action_history=action_history,
+                            )
+                        # First call — review prompt returned, continue loop
+                        logger.info("  Review gate triggered at iter %d", iterations)
 
                 # Compaction check after processing all tool calls
                 if self.max_context_tokens and self.system_llm:

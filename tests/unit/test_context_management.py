@@ -160,7 +160,8 @@ class TestReactAgentTruncation:
             @property
             def parameters(self): return {}
             def execute(self, **kwargs):
-                return "done"
+                from midas_agent.stdlib.actions.task_done import DONE_SENTINEL
+                return DONE_SENTINEL + " done"
 
         call_count = 0
 
@@ -222,7 +223,8 @@ class TestReactAgentTruncation:
             @property
             def parameters(self): return {}
             def execute(self, **kwargs):
-                return "done"
+                from midas_agent.stdlib.actions.task_done import DONE_SENTINEL
+                return DONE_SENTINEL + " done"
 
         call_count = 0
 

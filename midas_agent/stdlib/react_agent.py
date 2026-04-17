@@ -101,8 +101,14 @@ class ReactAgent:
             required = []
             for param_name, param_def in action.parameters.items():
                 prop = {"type": param_def.get("type", "string")}
+                if "description" in param_def:
+                    prop["description"] = param_def["description"]
                 if "default" in param_def:
                     prop["default"] = param_def["default"]
+                if "enum" in param_def:
+                    prop["enum"] = param_def["enum"]
+                if "items" in param_def:
+                    prop["items"] = param_def["items"]
                 properties[param_name] = prop
                 if param_def.get("required", False):
                     required.append(param_name)
@@ -239,7 +245,7 @@ class ReactAgent:
                     })
 
                     # Check for task_done or report_result action
-                    if tool_call.name in ("task_done", "report_result"):
+                    if tool_call.name == "report_result":
                         logger.info("  Task done.")
                         return AgentResult(
                             output=result,
@@ -247,6 +253,17 @@ class ReactAgent:
                             termination_reason="done",
                             action_history=action_history,
                         )
+                    if tool_call.name == "task_done":
+                        from midas_agent.stdlib.actions.task_done import DONE_SENTINEL
+                        if result.startswith(DONE_SENTINEL):
+                            logger.info("  Task done.")
+                            return AgentResult(
+                                output=result,
+                                iterations=iterations,
+                                termination_reason="done",
+                                action_history=action_history,
+                            )
+                        # Review gate — continue loop
 
                 # Check if agent is stuck
                 stuck_msg = ReactAgent._check_stuck(action_history)

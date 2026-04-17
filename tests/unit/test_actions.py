@@ -493,13 +493,12 @@ class TestDelegateTaskAction:
         for agent/pricing info, not duplicate it in the tool description."""
         action = DelegateTaskAction(find_candidates=lambda desc: [])
         desc = action.description
-        # Should reference planning phase / market info
-        assert "plan" in desc.lower() or "market" in desc.lower(), \
-            f"Description should reference planning context: {desc}"
-        # Should NOT contain the full delegation strategy guide —
-        # that belongs in market_info during planning phase
-        assert "when to delegate" not in desc.lower(), \
-            f"Delegation strategy should be in market_info, not tool desc: {desc}"
+        # Tool description should contain delegation guidance
+        # (Codex pattern: detailed guidance lives in the tool description)
+        assert "sub-agent" in desc.lower() or "spawn" in desc.lower(), \
+            f"Description should reference sub-agent spawning: {desc}"
+        assert "delegate" in desc.lower() or "subtask" in desc.lower(), \
+            f"Description should reference delegation: {desc}"
 
     def test_delegate_task_output_includes_balance(self):
         """When balance_provider is set and querying candidates (no agent_id,

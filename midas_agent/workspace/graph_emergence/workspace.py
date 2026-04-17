@@ -86,7 +86,16 @@ class GraphEmergenceWorkspace(Workspace):
             parent_actions=base_actions,
         )
 
-        actions = list(self._extra_actions) + base_actions + [ThinkAction(), TaskDoneAction(), delegate]
+        # Wire up get_diff for the review gate: use the active bash action
+        # (Docker or local) to run git diff inside the working environment.
+        bash_action = ov.get("bash", base_actions[0])
+        def _get_diff() -> str:
+            bash_action.execute(command="git add -A")
+            diff = bash_action.execute(command="git diff --cached")
+            bash_action.execute(command="git reset")
+            return diff
+
+        actions = list(self._extra_actions) + base_actions + [ThinkAction(), TaskDoneAction(get_diff=_get_diff), delegate]
 
         agent = PlanExecuteAgent(
             system_prompt=self._responsible_agent.soul.system_prompt,
@@ -98,22 +107,8 @@ class GraphEmergenceWorkspace(Workspace):
             max_tool_output_chars=self._max_tool_output_chars,
             action_log=self._action_log,
         )
-        context = (
-            "I've uploaded a code repository. Consider the following issue:\n\n"
-            "<issue>\n"
-            + issue.description
-            + "\n</issue>\n\n"
-            "I've already taken care of all changes to any of the test files described in the issue. "
-            "This means you DON'T have to modify the testing logic or any of the tests in any way!\n"
-            "Your task is to make the minimal changes to non-tests files to ensure the issue is resolved.\n\n"
-            "Follow these steps to resolve the issue:\n"
-            "1. As a first step, find and read code relevant to the issue\n"
-            "2. Create a script to reproduce the error and execute it with `python <filename.py>` using bash, to confirm the error\n"
-            "3. Edit the source code of the repo to resolve the issue\n"
-            "4. Rerun your reproduce script and confirm that the error is fixed!\n"
-            "5. Think about edge cases and make sure your fix handles them as well\n"
-            "Your thinking should be thorough and so it's fine if it's very long."
-        )
+        from midas_agent.prompts import TASK_PROMPT_TEMPLATE
+        context = TASK_PROMPT_TEMPLATE.format(issue_description=issue.description)
         self._last_result = agent.run(context=context)
 
     def _build_market_info(self) -> str:

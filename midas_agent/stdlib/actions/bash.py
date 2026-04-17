@@ -19,7 +19,7 @@ class BashAction(Action):
     @property
     def parameters(self) -> dict:
         return {
-            "command": {"type": "string", "required": True},
+            "command": {"type": "string", "required": True, "description": "The bash command to execute."},
         }
 
     def execute(self, **kwargs) -> str:
