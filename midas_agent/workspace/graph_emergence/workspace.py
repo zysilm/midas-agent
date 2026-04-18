@@ -70,7 +70,9 @@ class GraphEmergenceWorkspace(Workspace):
         # Build responsible agent's action set:
         # bash, str_replace_editor, search_code, find_files,
         # task_done, delegate_task
-        cwd = self.work_dir or None
+        # In Docker mode, use /testbed as cwd (inside the container).
+        # In local mode, use the local work_dir.
+        cwd = "/testbed" if self._io is not None else (self.work_dir or None)
         balance_provider = lambda: self._budget
 
         ov = self._action_overrides
