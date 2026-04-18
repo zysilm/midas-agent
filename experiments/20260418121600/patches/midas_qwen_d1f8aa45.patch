@@ -1,0 +1,273 @@
+diff --git a/astropy/io/ascii/html.py b/astropy/io/ascii/html.py
+index 266cf229c..2406559f2 100644
+--- a/astropy/io/ascii/html.py
++++ b/astropy/io/ascii/html.py
+@@ -87,9 +87,9 @@ class HTMLInputter(core.BaseInputter):
+             with warnings.catch_warnings():
+                 # Ignore bs4 parser warning #4550.
+                 warnings.filterwarnings('ignore', '.*no parser was explicitly specified.*')
+-                soup = BeautifulSoup('\n'.join(lines))
++                soup = BeautifulSoup('\\\\n'.join(lines))
+         else:  # use a custom backend parser
+-            soup = BeautifulSoup('\n'.join(lines), self.html['parser'])
++            soup = BeautifulSoup('\\\\n'.join(lines), self.html['parser'])
+         tables = soup.find_all('table')
+         for i, possible_table in enumerate(tables):
+             if identify_table(possible_table, self.html, i + 1):
+@@ -355,6 +355,13 @@ class HTML(core.BaseReader):
+ 
+         self.data._set_fill_values(cols)
+ 
++        # DEBUG: Print what formats are set
++        print(f"DEBUG HTML write: self.data.formats = {self.data.formats}")
++        print(f"DEBUG HTML write: self.data.cols = {self.data.cols}")
++        for i, col in enumerate(cols):
++            print(f"DEBUG HTML write: col {i} ({col.info.name}) format = {col.info.format}")
++            print(f"DEBUG HTML write: col {i} ({col.info.name}) info.name in self.data.formats = {col.info.name in self.data.formats}")
++
+         lines = []
+ 
+         # Set HTML escaping to False for any column in the raw_html_cols input
+diff --git a/debug_detailed.py b/debug_detailed.py
+new file mode 100644
+index 000000000..b2d27787d
+--- /dev/null
++++ b/debug_detailed.py
+@@ -0,0 +1,44 @@
++from astropy.table import Table
++from io import StringIO
++
++# Monkey patch to add debugging
++original_write = None
++
++def debug_write(self, table):
++    print("DEBUG: HTML.write() called")
++    print(f"DEBUG: self.formats = {self.formats}")
++    
++    # Check if formats is set
++    if 'formats' in self.formats:
++        print(f"DEBUG: formats parameter found: {self.formats['formats']}")
++    
++    # Check the data object
++    print(f"DEBUG: self.data.formats = {self.data.formats}")
++    
++    # Check the columns
++    cols = list(table.columns.values())
++    for i, col in enumerate(cols):
++        print(f"DEBUG: Column {i} ({col.info.name}):")
++        print(f"  - col.info.format = {col.info.format}")
++        print(f"  - col.info.name = {col.info.name}")
++        print(f"  - col.info.format in self.formats = {col.info.name in self.formats}")
++        if col.info.name in self.formats:
++            print(f"  - self.formats[{col.info.name}] = {self.formats[col.info.name]}")
++    
++    # Call original method
++    return original_write(self, table)
++
++# Apply monkey patch
++from astropy.io.ascii import html
++original_write = html.HTML.write
++html.HTML.write = debug_write
++
++# generate table
++t = Table([(1.23875234858e-24, 3.2348748432e-15), (2, 4)], names=('a', 'b'))
++tc = t.copy()  # copy table
++
++print("Calling write with formats parameter:")
++with StringIO() as sp:
++    tc.write(sp, format="html", formats={"a": lambda x: f"{x:.2e}"})
++    print("HTML Output:")
++    print(sp.getvalue())
+\ No newline at end of file
+diff --git a/debug_issue.py b/debug_issue.py
+new file mode 100644
+index 000000000..bc56a01b3
+--- /dev/null
++++ b/debug_issue.py
+@@ -0,0 +1,28 @@
++from astropy.table import Table
++from io import StringIO
++
++# generate table
++t = Table([(1.23875234858e-24, 3.2348748432e-15), (2, 4)], names=('a', 'b'))
++tc = t.copy()  # copy table
++
++print("Before write:")
++print(f"Column a format: {tc['a'].info.format}")
++print(f"Column a str_vals: {list(tc['a'].info.iter_str_vals())}")
++
++# Let's manually set the format and see what happens
++tc['a'].info.format = '{:.2e}'
++print("\\nAfter setting format manually:")
++print(f"Column a format: {tc['a'].info.format}")
++print(f"Column a str_vals: {list(tc['a'].info.iter_str_vals())}")
++
++# Now let's see what happens with the write method
++print("\\nTesting write with formats parameter:")
++with StringIO() as sp:
++    tc.write(sp, format="html", formats={"a": lambda x: f"{x:.2e}"})
++    html_output = sp.getvalue()
++    print("HTML Output:")
++    print(html_output)
++    
++# Let's also check what happens with the column's format after write
++print(f"Column a format after write: {tc['a'].info.format}")
++print(f"Column a str_vals after write: {list(tc['a'].info.iter_str_vals())}")
+\ No newline at end of file
+diff --git a/exact_issue.py b/exact_issue.py
+new file mode 100644
+index 000000000..c72eb410d
+--- /dev/null
++++ b/exact_issue.py
+@@ -0,0 +1,11 @@
++from astropy.table import Table
++from io import StringIO
++
++# generate table
++t = Table([(1.23875234858e-24, 3.2348748432e-15), (2, 4)], names=('a', 'b'))
++tc = t.copy()  # copy table
++
++# print HTML table with "a" column formatted to show 2 decimal places
++with StringIO() as sp:
++    tc.write(sp, format="html", formats={"a": lambda x: f"{x:.2e}"})
++    print(sp.getvalue())
+\ No newline at end of file
+diff --git a/final_debug.py b/final_debug.py
+new file mode 100644
+index 000000000..2e0cb9214
+--- /dev/null
++++ b/final_debug.py
+@@ -0,0 +1,38 @@
++from astropy.table import Table
++from io import StringIO
++
++# generate table
++t = Table([(1.23875234858e-24, 3.2348748432e-15), (2, 4)], names=('a', 'b'))
++tc = t.copy()  # copy table
++
++print("=== BEFORE WRITE ===")
++print(f"Column a info.format: {tc['a'].info.format}")
++print(f"Column a str_vals: {list(tc['a'].info.iter_str_vals())}")
++
++# Let's manually set the format to see what happens
++tc['a'].info.format = '{:.2e}'
++print("\\n=== AFTER MANUAL FORMAT SET ===")
++print(f"Column a info.format: {tc['a'].info.format}")
++print(f"Column a str_vals: {list(tc['a'].info.iter_str_vals())}")
++
++# Now let's see what happens with the write method
++print("\\n=== TESTING WRITE WITH FORMATS PARAMETER ===")
++with StringIO() as sp:
++    tc.write(sp, format="html", formats={"a": lambda x: f"{x:.2e}"})
++    html_output = sp.getvalue()
++    print("HTML Output:")
++    print(html_output)
++    
++print("\\n=== AFTER WRITE ===")
++print(f"Column a info.format: {tc['a'].info.format}")
++print(f"Column a str_vals: {list(tc['a'].info.iter_str_vals())}")
++
++# Let's also test with a string format
++print("\\n=== TESTING WRITE WITH STRING FORMAT ===")
++tc2 = t.copy()
++tc2['a'].info.format = '{:.2e}'
++with StringIO() as sp:
++    tc2.write(sp, format="html")
++    html_output2 = sp.getvalue()
++    print("HTML Output with string format:")
++    print(html_output2)
+\ No newline at end of file
+diff --git a/reproduce_issue.py b/reproduce_issue.py
+new file mode 100644
+index 000000000..520b33d4d
+--- /dev/null
++++ b/reproduce_issue.py
+@@ -0,0 +1,40 @@
++from astropy.table import Table
++from io import StringIO
++
++# generate table
++t = Table([(1.23875234858e-24, 3.2348748432e-15), (2, 4)], names=('a', 'b'))
++tc = t.copy()  # copy table
++
++# print HTML table with "a" column formatted to show 2 decimal places
++with StringIO() as sp:
++    tc.write(sp, format="html", formats={"a": lambda x: f"{x:.2e}"})
++    html_output = sp.getvalue()
++    print("HTML Output:")
++    print(html_output)
++    
++# print CSV table with same formatting for comparison
++with StringIO() as sp:
++    tc.write(sp, format="csv", formats={"a": lambda x: f"{x:.2e}"})
++    csv_output = sp.getvalue()
++    print("\\nCSV Output (for comparison):")
++    print(csv_output)
++
++# Now let's try to see what's happening with the column info
++print("\\nColumn info:")
++print(f"Column a format before write: {tc['a'].info.format}")
++
++# Let's try to set the format directly and see if it works
++print("\\nSetting format directly:")
++tc['a'].info.format = '{:.2e}'
++with StringIO() as sp:
++    tc.write(sp, format="html")
++    html_output2 = sp.getvalue()
++    print(html_output2)
++
++# Also try with the CSV format
++tc['a'].info.format = '{:.2e}'
++with StringIO() as sp:
++    tc.write(sp, format="csv")
++    csv_output2 = sp.getvalue()
++    print("\\nCSV with direct format:")
++    print(csv_output2)
+\ No newline at end of file
+diff --git a/test_exact_issue.py b/test_exact_issue.py
+new file mode 100644
+index 000000000..c72eb410d
+--- /dev/null
++++ b/test_exact_issue.py
+@@ -0,0 +1,11 @@
++from astropy.table import Table
++from io import StringIO
++
++# generate table
++t = Table([(1.23875234858e-24, 3.2348748432e-15), (2, 4)], names=('a', 'b'))
++tc = t.copy()  # copy table
++
++# print HTML table with "a" column formatted to show 2 decimal places
++with StringIO() as sp:
++    tc.write(sp, format="html", formats={"a": lambda x: f"{x:.2e}"})
++    print(sp.getvalue())
+\ No newline at end of file
+diff --git a/test_format_lambda.py b/test_format_lambda.py
+new file mode 100644
+index 000000000..8d9c9772b
+--- /dev/null
++++ b/test_format_lambda.py
+@@ -0,0 +1,22 @@
++from astropy.table import Table
++from io import StringIO
++
++# generate table
++t = Table([(1.23875234858e-24, 3.2348748432e-15), (2, 4)], names=('a', 'b'))
++tc = t.copy()  # copy table
++
++print("Testing format with lambda function:")
++tc['a'].info.format = lambda x: f"{x:.2e}"
++print(f"Column a format: {tc['a'].info.format}")
++try:
++    print(f"Column a str_vals: {list(tc['a'].info.iter_str_vals())}")
++except Exception as e:
++    print(f"Error: {e}")
++
++print("\\nTesting format with string:")
++tc['a'].info.format = '{:.2e}'
++print(f"Column a format: {tc['a'].info.format}")
++try:
++    print(f"Column a str_vals: {list(tc['a'].info.iter_str_vals())}")
++except Exception as e:
++    print(f"Error: {e}")
+\ No newline at end of file

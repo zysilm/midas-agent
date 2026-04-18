@@ -80,7 +80,16 @@ class LiteLLMProvider(LLMProvider):
             for tc in message.tool_calls:
                 args = tc.function.arguments
                 if isinstance(args, str):
-                    args = json.loads(args)
+                    try:
+                        args = json.loads(args)
+                    except json.JSONDecodeError:
+                        # LLM produced invalid JSON escaping — try to salvage
+                        import re
+                        fixed = re.sub(r'\\(?!["\\/bfnrtu])', r'\\\\', args)
+                        try:
+                            args = json.loads(fixed)
+                        except json.JSONDecodeError:
+                            args = {"raw": args}
                 tool_calls.append(ToolCall(
                     id=tc.id,
                     name=tc.function.name,

@@ -1,0 +1,243 @@
+diff --git a/astropy/modeling/separable.py b/astropy/modeling/separable.py
+index a308e2729..7243d6f41 100644
+--- a/astropy/modeling/separable.py
++++ b/astropy/modeling/separable.py
+@@ -47,7 +47,7 @@ def is_separable(transform):
+         array([ True,  True]...)
+     >>> is_separable(Shift(1) & Shift(2) | Rotation2D(2))
+         array([False, False]...)
+-    >>> is_separable(Shift(1) & Shift(2) | Mapping([0, 1, 0, 1]) | \
++    >>> is_separable(Shift(1) & Shift(2) | Mapping([0, 1, 0, 1]) | \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+         Polynomial2D(1) & Polynomial2D(2))
+         array([False, False]...)
+     >>> is_separable(Shift(1) & Shift(2) | Mapping([0, 1, 0, 1]))
+@@ -87,7 +87,7 @@ def separability_matrix(transform):
+         array([[ True, False], [False,  True]]...)
+     >>> separability_matrix(Shift(1) & Shift(2) | Rotation2D(2))
+         array([[ True,  True], [ True,  True]]...)
+-    >>> separability_matrix(Shift(1) & Shift(2) | Mapping([0, 1, 0, 1]) | \
++    >>> separability_matrix(Shift(1) & Shift(2) | Mapping([0, 1, 0, 1]) | \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+         Polynomial2D(1) & Polynomial2D(2))
+         array([[ True,  True], [ True,  True]]...)
+     >>> separability_matrix(Shift(1) & Shift(2) | Mapping([0, 1, 0, 1]))
+@@ -242,7 +242,7 @@ def _cstack(left, right):
+         cright = _coord_matrix(right, 'right', noutp)
+     else:
+         cright = np.zeros((noutp, right.shape[1]))
+-        cright[-right.shape[0]:, -right.shape[1]:] = 1
++        cright[-right.shape[0]:, -right.shape[1]:] = right
+ 
+     return np.hstack([cleft, cright])
+ 
+diff --git a/debug_separability.py b/debug_separability.py
+new file mode 100644
+index 000000000..3ae596bba
+--- /dev/null
++++ b/debug_separability.py
+@@ -0,0 +1,58 @@
++import numpy as np
++from astropy.modeling import models as m
++from astropy.modeling.separable import separability_matrix, _coord_matrix, _cstack, _separable
++
++print("Debugging separability step by step:")
++
++# Create the models
++pix2sky = m.Pix2Sky_TAN()
++linear1 = m.Linear1D(10)
++linear2 = m.Linear1D(5)
++cm = linear1 & linear2
++
++print("Pix2Sky_TAN:")
++print("  n_inputs:", pix2sky.n_inputs)
++print("  n_outputs:", pix2sky.n_outputs)
++print("  separable:", pix2sky.separable)
++
++print("\\nLinear1D(10) & Linear1D(5):")
++print("  n_inputs:", cm.n_inputs)
++print("  n_outputs:", cm.n_outputs)
++# print("  separable:", cm.separable)  # This will fail
++
++print("\\nTesting _coord_matrix for Pix2Sky_TAN:")
++c1 = _coord_matrix(pix2sky, 'left', 4)
++print("  _coord_matrix(Pix2Sky_TAN(), 'left', 4):")
++print(c1)
++
++c2 = _coord_matrix(pix2sky, 'right', 4)
++print("  _coord_matrix(Pix2Sky_TAN(), 'right', 4):")
++print(c2)
++
++print("\\nTesting _coord_matrix for cm:")
++c3 = _coord_matrix(cm, 'left', 4)
++print("  _coord_matrix(cm, 'left', 4):")
++print(c3)
++
++c4 = _coord_matrix(cm, 'right', 4)
++print("  _coord_matrix(cm, 'right', 4):")
++print(c4)
++
++print("\\nTesting _cstack:")
++result = _cstack(pix2sky, cm)
++print("  _cstack(Pix2Sky_TAN(), cm):")
++print(result)
++
++print("\\nFull separability matrix:")
++full_result = separability_matrix(m.Pix2Sky_TAN() & cm)
++print(full_result)
++
++print("\\nExpected:")
++expected = np.array([[ True,  True, False, False],
++                     [ True,  True, False, False],
++                     [False, False,  True, False],
++                     [False, False, False,  True]])
++print(expected)
++
++print("\\nAre they equal?")
++print(np.array_equal(full_result, expected))
+\ No newline at end of file
+diff --git a/reproduce_issue.py b/reproduce_issue.py
+new file mode 100644
+index 000000000..b4afc318b
+--- /dev/null
++++ b/reproduce_issue.py
+@@ -0,0 +1,81 @@
++import numpy as np
++from astropy.modeling import models as m
++from astropy.modeling.separable import separability_matrix
++
++# Test case from the issue
++print("Testing the issue described:")
++
++# Simple case - should be diagonal
++print("Simple compound model:")
++cm = m.Linear1D(10) & m.Linear1D(5)
++print("Model:", cm)
++print("Separability matrix:")
++print(separability_matrix(cm))
++
++# More complex case - should be diagonal blocks
++print("\\nComplex compound model:")
++cm2 = m.Pix2Sky_TAN() & m.Linear1D(10) & m.Linear1D(5)
++print("Model:", cm2)
++print("Separability matrix:")
++print(separability_matrix(cm2))
++
++# Nested compound model - this is the problematic case
++print("\\nNested compound model:")
++cm3 = m.Pix2Sky_TAN() & cm
++print("Model:", cm3)
++print("Separability matrix:")
++print(separability_matrix(cm3))
++
++# Let's also check the expected vs actual
++print("\\nExpected separability matrix for nested model (diagonal blocks):")
++expected = np.array([[ True,  True, False, False],
++                     [ True,  True, False, False],
++                     [False, False,  True, False],
++                     [False, False, False,  True]])
++print(expected)
++
++print("\\nActual separability matrix:")
++actual = separability_matrix(cm3)
++print(actual)
++
++print("\\nAre they equal?")
++print(np.array_equal(actual, expected))
++
++# Verify the number of inputs and outputs
++print("\\nModel properties:")
++print("cm3.n_inputs:", cm3.n_inputs)
++print("cm3.n_outputs:", cm3.n_outputs)
++print("cm.n_inputs:", cm.n_inputs)
++print("cm.n_outputs:", cm.n_outputs)
++print("Pix2Sky_TAN.n_inputs:", m.Pix2Sky_TAN().n_inputs)
++print("Pix2Sky_TAN.n_outputs:", m.Pix2Sky_TAN().n_outputs)
++print("Linear1D(10).n_inputs:", m.Linear1D(10).n_inputs)
++print("Linear1D(10).n_outputs:", m.Linear1D(10).n_outputs)
++print("Linear1D(5).n_inputs:", m.Linear1D(5).n_inputs)
++print("Linear1D(5).n_outputs:", m.Linear1D(5).n_outputs)
++
++# Check the separability of the nested model components
++print("\\nComponent separability:")
++print("Pix2Sky_TAN().separable:", m.Pix2Sky_TAN().separable)
++print("cm.separable:", cm.separable)
++print("cm3.separable:", cm3.separable)
++
++# Let's see what the _separable function returns for each component
++print("\\nInternal separability matrices:")
++try:
++    print("_separable(Pix2Sky_TAN()):")
++    print(np.array(m.Pix2Sky_TAN()._calculate_separability_matrix()))
++except:
++    print("Pix2Sky_TAN() doesn't have _calculate_separability_matrix")
++    
++try:
++    print("_separable(cm):")
++    print(np.array(cm._calculate_separability_matrix()))
++except:
++    print("cm doesn't have _calculate_separability_matrix")
++    
++try:
++    print("_separable(cm3):")
++    print(np.array(cm3._calculate_separability_matrix()))
++except:
++    print("cm3 doesn't have _calculate_separability_matrix")
+\ No newline at end of file
+diff --git a/simple_test.py b/simple_test.py
+new file mode 100644
+index 000000000..0b7766e40
+--- /dev/null
++++ b/simple_test.py
+@@ -0,0 +1,52 @@
++import numpy as np
++from astropy.modeling import models as m
++from astropy.modeling.separable import separability_matrix
++
++# Test the exact case from the issue
++print("=== Issue reproduction ===")
++
++# Simple case - should be diagonal
++print("Simple case:")
++cm = m.Linear1D(10) & m.Linear1D(5)
++print("cm:", cm)
++print("separability_matrix(cm):")
++print(separability_matrix(cm))
++
++# Complex case - should be diagonal blocks
++print("\\nComplex case:")
++cm2 = m.Pix2Sky_TAN() & m.Linear1D(10) & m.Linear1D(5)
++print("cm2:", cm2)
++print("separability_matrix(cm2):")
++print(separability_matrix(cm2))
++
++# Nested case - this is the problem
++print("\\nNested case:")
++cm3 = m.Pix2Sky_TAN() & cm
++print("cm3:", cm3)
++print("separability_matrix(cm3):")
++print(separability_matrix(cm3))
++
++print("\\nExpected for nested case:")
++expected = np.array([[ True,  True, False, False],
++                     [ True,  True, False, False],
++                     [False, False,  True, False],
++                     [False, False, False,  True]])
++print(expected)
++
++print("\\nActual for nested case:")
++actual = separability_matrix(cm3)
++print(actual)
++
++print("\\nAre they equal?")
++print(np.array_equal(actual, expected))
++
++# Let's also test what happens with just the Linear1D models
++print("\\n=== Testing Linear1D models separately ===")
++l1 = m.Linear1D(10)
++l2 = m.Linear1D(5)
++print("l1:", l1)
++print("l2:", l2)
++print("l1.n_inputs:", l1.n_inputs)
++print("l1.n_outputs:", l1.n_outputs)
++print("l2.n_inputs:", l2.n_inputs)
++print("l2.n_outputs:", l2.n_outputs)
+\ No newline at end of file

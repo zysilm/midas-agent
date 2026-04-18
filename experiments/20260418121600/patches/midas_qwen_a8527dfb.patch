@@ -1,0 +1,220 @@
+diff --git a/astropy/timeseries/core.py b/astropy/timeseries/core.py
+index c279f35f8..bdf0bb474 100644
+--- a/astropy/timeseries/core.py
++++ b/astropy/timeseries/core.py
+@@ -76,9 +76,15 @@ class BaseTimeSeries(QTable):
+ 
+             elif self.colnames[:len(required_columns)] != required_columns:
+ 
+-                raise ValueError("{} object is invalid - expected '{}' "
+-                                 "as the first column{} but found '{}'"
+-                                 .format(self.__class__.__name__, required_columns[0], plural, self.colnames[0]))
++                if len(self.colnames) < len(required_columns):
++                    raise ValueError("{} object is invalid - missing required column{}: {}"
++                                     .format(self.__class__.__name__, plural, ', '.join(required_columns[len(self.colnames):])))
++                else:
++                    # This is the case where we have the same number of columns but they don't match required order
++                    # This is the original error case that should be preserved for backward compatibility
++                    raise ValueError("{} object is invalid - expected '{}' "
++                                     "as the first column{} but found '{}'"
++                                     .format(self.__class__.__name__, required_columns[0], plural, self.colnames[0]))
+ 
+             if (self._required_columns_relax
+                     and self._required_columns == self.colnames[:len(self._required_columns)]):
+diff --git a/debug_issue.py b/debug_issue.py
+new file mode 100644
+index 000000000..6821b74e8
+--- /dev/null
++++ b/debug_issue.py
+@@ -0,0 +1,31 @@
++#!/usr/bin/env python
++
++import numpy as np
++from astropy.time import Time
++from astropy.timeseries import TimeSeries
++
++# Debug the exact scenario
++time = Time(np.arange(100000, 100003), format='jd')
++ts = TimeSeries(time=time, data={"flux": [99.9, 99.8, 99.7]})
++ts._required_columns = ["time", "flux"]                                   
++
++print("=== DEBUG INFO ===")
++print("Required columns:", ts._required_columns)
++print("Actual columns:", ts.colnames)
++print("Length of required columns:", len(ts._required_columns))
++print("Length of actual columns:", len(ts.colnames))
++print("First len(required_columns) actual columns:", ts.colnames[:len(ts._required_columns)])
++
++# Simulate the check that's failing
++required_columns = ts._required_columns
++actual_columns = ts.colnames
++print("\\n=== CHECK LOGIC ===")
++print("required_columns:", required_columns)
++print("actual_columns[:len(required_columns)]:", actual_columns[:len(required_columns)])
++print("Are they equal?", actual_columns[:len(required_columns)] == required_columns)
++
++# What should be the correct error message?
++print("\\n=== ANALYSIS ===")
++print("We have", len(required_columns), "required columns:", required_columns)
++print("We have", len(actual_columns), "actual columns:", actual_columns)
++print("The issue is that we're missing required columns, not that the first column is wrong")
+\ No newline at end of file
+diff --git a/debug_issue2.py b/debug_issue2.py
+new file mode 100644
+index 000000000..1c40b3ad6
+--- /dev/null
++++ b/debug_issue2.py
+@@ -0,0 +1,35 @@
++#!/usr/bin/env python
++
++import numpy as np
++from astropy.time import Time
++from astropy.timeseries import TimeSeries
++
++# Reproduce the exact issue from the bug report step by step
++time = Time(np.arange(100000, 100003), format='jd')
++ts = TimeSeries(time=time, data={"flux": [99.9, 99.8, 99.7]})
++ts._required_columns = ["time", "flux"]                                   
++
++print("=== BEFORE REMOVING COLUMN ===")
++print("Required columns:", ts._required_columns)
++print("Actual columns:", ts.colnames)
++print("Length of required columns:", len(ts._required_columns))
++print("Length of actual columns:", len(ts.colnames))
++
++# Now remove the column
++print("\\n=== REMOVING FLUX COLUMN ===")
++ts.remove_column("flux")
++
++print("=== AFTER REMOVING COLUMN ===")
++print("Required columns:", ts._required_columns)
++print("Actual columns:", ts.colnames)
++print("Length of required columns:", len(ts._required_columns))
++print("Length of actual columns:", len(ts.colnames))
++print("First len(required_columns) actual columns:", ts.colnames[:len(ts._required_columns)])
++
++# Simulate the check that's failing
++required_columns = ts._required_columns
++actual_columns = ts.colnames
++print("\\n=== CHECK LOGIC ===")
++print("required_columns:", required_columns)
++print("actual_columns[:len(required_columns)]:", actual_columns[:len(required_columns)])
++print("Are they equal?", actual_columns[:len(required_columns)] == required_columns)
+\ No newline at end of file
+diff --git a/final_test.py b/final_test.py
+new file mode 100644
+index 000000000..ce462db45
+--- /dev/null
++++ b/final_test.py
+@@ -0,0 +1,30 @@
++#!/usr/bin/env python
++"""
++Final test to verify the exact issue from the bug report is fixed.
++"""
++
++import numpy as np
++from astropy.time import Time
++from astropy.timeseries import TimeSeries
++
++# Exact reproduction from the issue
++time = Time(np.arange(100000, 100003), format='jd')
++ts = TimeSeries(time=time, data={"flux": [99.9, 99.8, 99.7]})
++ts._required_columns = ["time", "flux"]                                   
++print("Before removing flux column:")
++print("Columns:", ts.colnames)
++print("Required columns:", ts._required_columns)
++
++try:
++    ts.remove_column("flux")
++    print("ERROR: Should have failed!")
++except ValueError as e:
++    print("Error message:", str(e))
++    # Check that the error message is no longer misleading
++    error_msg = str(e)
++    if "expected 'time' as the first columns but found 'time'" in error_msg:
++        print("FAIL: Error message is still misleading!")
++    elif "missing required columns" in error_msg:
++        print("SUCCESS: Error message is now clear and helpful!")
++    else:
++        print("UNEXPECTED: Different error message than expected")
+\ No newline at end of file
+diff --git a/reproduce_issue.py b/reproduce_issue.py
+new file mode 100644
+index 000000000..4bfc3f6bd
+--- /dev/null
++++ b/reproduce_issue.py
+@@ -0,0 +1,19 @@
++#!/usr/bin/env python
++
++import numpy as np
++from astropy.time import Time
++from astropy.timeseries import TimeSeries
++
++# Reproduce the exact issue from the bug report
++time = Time(np.arange(100000, 100003), format='jd')
++ts = TimeSeries(time=time, data={"flux": [99.9, 99.8, 99.7]})
++ts._required_columns = ["time", "flux"]                                   
++print("Before removing flux column:")
++print("Columns:", ts.colnames)
++print("Required columns:", ts._required_columns)
++
++try:
++    ts.remove_column("flux")
++    print("Successfully removed flux column")
++except Exception as e:
++    print("Error occurred:", type(e).__name__, "-", str(e))
+\ No newline at end of file
+diff --git a/test_edge_cases.py b/test_edge_cases.py
+new file mode 100644
+index 000000000..762076867
+--- /dev/null
++++ b/test_edge_cases.py
+@@ -0,0 +1,47 @@
++#!/usr/bin/env python
++
++import numpy as np
++from astropy.time import Time
++from astropy.timeseries import TimeSeries
++
++print("=== Test 1: Original issue - removing one required column ===")
++try:
++    time = Time(np.arange(100000, 100003), format='jd')
++    ts = TimeSeries(time=time, data={"flux": [99.9, 99.8, 99.7]})
++    ts._required_columns = ["time", "flux"]                                   
++    ts.remove_column("flux")
++    print("ERROR: Should have failed!")
++except ValueError as e:
++    print("Got expected error:", str(e))
++
++print("\\n=== Test 2: Removing multiple required columns ===")
++try:
++    time = Time(np.arange(100000, 100003), format='jd')
++    ts = TimeSeries(time=time, data={"flux": [99.9, 99.8, 99.7], "magnitude": [10.5, 10.6, 10.7]})
++    ts._required_columns = ["time", "flux", "magnitude"]                                   
++    ts.remove_column("flux")
++    ts.remove_column("magnitude")
++    print("ERROR: Should have failed!")
++except ValueError as e:
++    print("Got expected error:", str(e))
++
++print("\\n=== Test 3: Removing non-required column (should work) ===")
++try:
++    time = Time(np.arange(100000, 100003), format='jd')
++    ts = TimeSeries(time=time, data={"flux": [99.9, 99.8, 99.7], "extra": [1, 2, 3]})
++    ts._required_columns = ["time", "flux"]                                   
++    ts.remove_column("extra")
++    print("Successfully removed extra column")
++    print("Columns now:", ts.colnames)
++except Exception as e:
++    print("Unexpected error:", type(e).__name__, "-", str(e))
++
++print("\\n=== Test 4: Removing first required column (should fail with different message) ===")
++try:
++    time = Time(np.arange(100000, 100003), format='jd')
++    ts = TimeSeries(time=time, data={"flux": [99.9, 99.8, 99.7]})
++    ts._required_columns = ["time", "flux"]                                   
++    ts.remove_column("time")
++    print("ERROR: Should have failed!")
++except ValueError as e:
++    print("Got expected error:", str(e))
+\ No newline at end of file

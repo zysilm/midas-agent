@@ -1,0 +1,412 @@
+diff --git a/astropy/coordinates/builtin_frames/__init__.py b/astropy/coordinates/builtin_frames/__init__.py
+index 6fd688c28..a2e3bf7cd 100644
+--- a/astropy/coordinates/builtin_frames/__init__.py
++++ b/astropy/coordinates/builtin_frames/__init__.py
+@@ -50,6 +50,7 @@ from . import cirs_observed_transforms
+ from . import icrs_observed_transforms
+ from . import intermediate_rotation_transforms
+ from . import ecliptic_transforms
++from . import itrs_observed_transforms
+ 
+ # Import this after importing other frames, since this requires various
+ # transformtions to set up the LSR frames
+@@ -115,7 +116,7 @@ def make_transform_graph_docs(transform_graph):
+ 
+     """
+ 
+-    docstr = dedent(docstr) + '        ' + graphstr.replace('\n', '\n        ')
++    docstr = dedent(docstr) + '        ' + graphstr.replace('\\n', '\\n        ')
+ 
+     # colors are in dictionary at the bottom of transformations.py
+     from astropy.coordinates.transformations import trans_to_color
+@@ -131,7 +132,7 @@ def make_transform_graph_docs(transform_graph):
+         """
+         html_list_items.append(block)
+ 
+-    nl = '\n'
++    nl = '\\n'
+     graph_legend = f"""
+     .. raw:: html
+ 
+diff --git a/astropy/coordinates/builtin_frames/itrs_observed_transforms.py b/astropy/coordinates/builtin_frames/itrs_observed_transforms.py
+new file mode 100644
+index 000000000..2c510fcc7
+--- /dev/null
++++ b/astropy/coordinates/builtin_frames/itrs_observed_transforms.py
+@@ -0,0 +1,113 @@
++# Licensed under a 3-clause BSD style license - see LICENSE.rst
++"""
++Contains the transformation functions for getting to/from ITRS to observed systems.
++This implements a direct approach that stays within the ITRS reference frame.
++"""
++import numpy as np
++
++from astropy import units as u
++from astropy.coordinates.builtin_frames.utils import PIOVER2
++from astropy.coordinates.matrix_utilities import rotation_matrix, matrix_transpose
++from astropy.coordinates.baseframe import frame_transform_graph
++from astropy.coordinates.transformations import FunctionTransformWithFiniteDifference
++from astropy.coordinates.representation import CartesianRepresentation
++
++from .itrs import ITRS
++from .altaz import AltAz
++from .hadec import HADec
++
++
++def itrs_to_observed_mat(observed_frame):
++    """
++    Create the rotation matrix for transforming from ITRS to observed frame.
++
++    Parameters
++    ----------
++    observed_frame : `~astropy.coordinates.AltAz` or `~astropy.coordinates.HADec`
++        The observed frame to transform to
++
++    Returns
++    -------
++    `~numpy.ndarray`
++        3x3 rotation matrix
++    """
++    lon, lat, height = observed_frame.location.to_geodetic('WGS84')
++    elong = lon.to_value(u.radian)
++
++    if isinstance(observed_frame, AltAz):
++        # form ITRS to AltAz matrix
++        elat = lat.to_value(u.radian)
++        # AltAz frame is left handed
++        minus_x = np.eye(3)
++        minus_x[0][0] = -1.0
++        mat = (minus_x
++               @ rotation_matrix(PIOVER2 - elat, 'y', unit=u.radian)
++               @ rotation_matrix(elong, 'z', unit=u.radian))
++
++    else:
++        # form ITRS to HADec matrix
++        # HADec frame is left handed
++        minus_y = np.eye(3)
++        minus_y[1][1] = -1.0
++        mat = (minus_y
++               @ rotation_matrix(elong, 'z', unit=u.radian))
++    return mat
++
++
++@frame_transform_graph.transform(FunctionTransformWithFiniteDifference, ITRS, AltAz)
++@frame_transform_graph.transform(FunctionTransformWithFiniteDifference, ITRS, HADec)
++def itrs_to_observed(itrs_coo, observed_frame):
++    """
++    Transform from ITRS to AltAz or HADec frame, staying within ITRS.
++
++    This approach treats ITRS positions as time-invariant, which avoids the 
++    geocentric vs topocentric aberration issues of the traditional approach.
++    
++    Parameters
++    ----------
++    itrs_coo : `~astropy.coordinates.ITRS`
++        The ITRS coordinate to transform
++    observed_frame : `~astropy.coordinates.AltAz` or `~astropy.coordinates.HADec`
++        The observed frame to transform to
++
++    Returns
++    -------
++    `~astropy.coordinates.AltAz` or `~astropy.coordinates.HADec`
++        The transformed coordinate in the observed frame
++    """
++    # Trying to synchronize the obstimes here makes no sense. In fact,
++    # it's a real gotcha as doing an ITRS->ITRS transform references 
++    # ITRS coordinates, which should be tied to the Earth, to the SSB.
++    # Instead, we treat ITRS coordinates as time invariant here.
++
++    # form the Topocentric ITRS position
++    topocentric_itrs_repr = (itrs_coo.cartesian
++                             - observed_frame.location.get_itrs().cartesian)
++    rep = topocentric_itrs_repr.transform(itrs_to_observed_mat(observed_frame))
++    return observed_frame.realize_frame(rep)
++
++
++@frame_transform_graph.transform(FunctionTransformWithFiniteDifference, AltAz, ITRS)
++@frame_transform_graph.transform(FunctionTransformWithFiniteDifference, HADec, ITRS)
++def observed_to_itrs(observed_coo, itrs_frame):
++    """
++    Transform from AltAz or HADec frame to ITRS, staying within ITRS.
++
++    Parameters
++    ----------
++    observed_coo : `~astropy.coordinates.AltAz` or `~astropy.coordinates.HADec`
++        The observed coordinate to transform
++    itrs_frame : `~astropy.coordinates.ITRS`
++        The ITRS frame to transform to
++
++    Returns
++    -------
++    `~astropy.coordinates.ITRS`
++        The transformed coordinate in the ITRS frame
++    """
++    # form the Topocentric ITRS position
++    topocentric_itrs_repr = observed_coo.cartesian.transform(matrix_transpose(
++                            itrs_to_observed_mat(observed_coo)))
++    # form the Geocentric ITRS position
++    rep = topocentric_itrs_repr + observed_coo.location.get_itrs().cartesian
++    return itrs_frame.realize_frame(rep)
+\ No newline at end of file
+diff --git a/debug_transforms.py b/debug_transforms.py
+new file mode 100644
+index 000000000..0e0fe4131
+--- /dev/null
++++ b/debug_transforms.py
+@@ -0,0 +1,71 @@
++#!/usr/bin/env python
++"""
++Debug script to understand current transformation paths.
++"""
++
++from astropy import units as u
++from astropy.coordinates import ITRS, AltAz, HADec, EarthLocation, CIRS, GCRS
++from astropy.time import Time
++from astropy.coordinates.baseframe import frame_transform_graph
++
++def find_transform_path():
++    """Find the transformation path from ITRS to AltAz."""
++    print("=== Finding Transformation Path ===")
++    
++    try:
++        print("Checking if there are direct transforms...")
++        print(f"ITRS -> AltAz: {ITRS in frame_transform_graph._graph and AltAz in frame_transform_graph._graph[ITRS]}")
++        print(f"AltAz -> ITRS: {AltAz in frame_transform_graph._graph and ITRS in frame_transform_graph._graph[AltAz]}")
++        
++        print("\\nTrying to find shortest path...")
++        path = frame_transform_graph.find_shortest_path(ITRS, AltAz)
++        print("Path from ITRS to AltAz:")
++        for i, frame in enumerate(path):
++            print(f"  {i}: {frame.__name__}")
++        
++        print("\\nPath from AltAz to ITRS:")
++        path = frame_transform_graph.find_shortest_path(AltAz, ITRS)
++        for i, frame in enumerate(path):
++            print(f"  {i}: {frame.__name__}")
++        
++        print("\\nPath from ITRS to HADec:")
++        path = frame_transform_graph.find_shortest_path(ITRS, HADec)
++        for i, frame in enumerate(path):
++            print(f"  {i}: {frame.__name__}")
++        
++        print("\\nPath from HADec to ITRS:")
++        path = frame_transform_graph.find_shortest_path(HADec, ITRS)
++        for i, frame in enumerate(path):
++            print(f"  {i}: {frame.__name__}")
++    except Exception as e:
++        print(f"Error finding path: {e}")
++        import traceback
++        traceback.print_exc()
++
++def test_simple_transform():
++    """Test a simple transform to see what happens."""
++    print("\\n=== Testing Simple Transform ===")
++    
++    # Create a test location (e.g., at Greenwich)
++    location = EarthLocation(lat=51.4769*u.deg, lon=0.0005*u.deg, height=0*u.m)
++    
++    # Create an ITRS coordinate at that location (straight overhead for geocentric observer)
++    t = Time('J2010')
++    itrs_coord = location.get_itrs(t)
++    
++    print(f"ITRS coordinate: {itrs_coord}")
++    
++    # Transform to AltAz
++    altaz_frame = AltAz(location=location, obstime=t)
++    try:
++        altaz_coord = itrs_coord.transform_to(altaz_frame)
++        print(f"AltAz coordinate: {altaz_coord}")
++        print(f"AltAz altitude: {altaz_coord.alt}")
++    except Exception as e:
++        print(f"Error in AltAz transform: {e}")
++        import traceback
++        traceback.print_exc()
++
++if __name__ == "__main__":
++    find_transform_path()
++    test_simple_transform()
+\ No newline at end of file
+diff --git a/reproduce_issue.py b/reproduce_issue.py
+new file mode 100644
+index 000000000..d6472b186
+--- /dev/null
++++ b/reproduce_issue.py
+@@ -0,0 +1,82 @@
++#!/usr/bin/env python
++"""
++Reproduction script for ITRS to Observed transformations issue.
++This script demonstrates the problem with current ITRS to AltAz/HADec transforms.
++"""
++
++import numpy as np
++from astropy import units as u
++from astropy.coordinates import ITRS, AltAz, HADec, EarthLocation, CIRS
++from astropy.time import Time
++
++def test_current_behavior():
++    """Test current behavior to understand the issue."""
++    print("=== Testing Current ITRS to Observed Transformations ===")
++    
++    # Create a test location (e.g., at Greenwich)
++    location = EarthLocation(lat=51.4769*u.deg, lon=0.0005*u.deg, height=0*u.m)
++    
++    # Create an ITRS coordinate at that location (straight overhead for geocentric observer)
++    t = Time('J2010')
++    itrs_coord = location.get_itrs(t)
++    
++    print(f"ITRS coordinate at location: {itrs_coord}")
++    print(f"ITRS coordinate position: {itrs_coord.cartesian}")
++    
++    # Transform to AltAz
++    altaz_frame = AltAz(location=location, obstime=t)
++    try:
++        altaz_coord = itrs_coord.transform_to(altaz_frame)
++        print(f"AltAz coordinate: {altaz_coord}")
++        print(f"AltAz altitude: {altaz_coord.alt}")
++    except Exception as e:
++        print(f"Error in AltAz transform: {e}")
++    
++    # Transform to HADec
++    hadec_frame = HADec(location=location, obstime=t)
++    try:
++        hadec_coord = itrs_coord.transform_to(hadec_frame)
++        print(f"HADec coordinate: {hadec_coord}")
++        print(f"HADec declination: {hadec_coord.dec}")
++        print(f"HADec hour angle: {hadec_coord.ha}")
++    except Exception as e:
++        print(f"Error in HADec transform: {e}")
++
++def test_problematic_case():
++    """Test the specific case mentioned in the issue."""
++    print("\\\\\\\\n=== Testing Problematic Case (Straight Overhead) ===")
++    
++    t = Time('J2010')
++    obj = EarthLocation(-1*u.deg, 52*u.deg, height=10.*u.km)
++    home = EarthLocation(-1*u.deg, 52*u.deg, height=0.*u.km)
++
++    # An object that appears straight overhead - FOR A GEOCENTRIC OBSERVER.
++    # Note, this won't be overhead for a topocentric observer because of
++    # aberration.
++    cirs_geo = obj.get_itrs(t).transform_to(CIRS(obstime=t))
++
++    # now get the Geocentric CIRS position of observatory
++    obsrepr = home.get_itrs(t).transform_to(CIRS(obstime=t)).cartesian
++
++    # topocentric CIRS position of a straight overhead object
++    cirs_repr = cirs_geo.cartesian - obsrepr
++
++    # create a CIRS object that appears straight overhead for a TOPOCENTRIC OBSERVER
++    topocentric_cirs_frame = CIRS(obstime=t, location=home)
++    cirs_topo = topocentric_cirs_frame.realize_frame(cirs_repr)
++
++    # Check AltAz (though Azimuth can be anything so is not tested).
++    aa = cirs_topo.transform_to(AltAz(obstime=t, location=home))
++    print(f"Altitude when assuming CIRS: {aa.alt}")
++    
++    # Check HADec.
++    hd = cirs_topo.transform_to(HADec(obstime=t, location=home))
++    print(f"Declination when assuming CIRS: {hd.dec}")
++    print(f"Hour angle when assuming CIRS: {hd.ha}")
++    
++    print("\\\\nThis demonstrates the complexity of the current approach.")
++    print("The issue wants to stay within ITRS and treat ITRS positions as time-invariant.")
++
++if __name__ == "__main__":
++    test_current_behavior()
++    test_problematic_case()
+\ No newline at end of file
+diff --git a/test_fix.py b/test_fix.py
+new file mode 100644
+index 000000000..77405aacb
+--- /dev/null
++++ b/test_fix.py
+@@ -0,0 +1,88 @@
++#!/usr/bin/env python
++"""
++Test script to verify the ITRS to Observed transforms work correctly.
++"""
++
++import numpy as np
++from astropy import units as u
++from astropy.coordinates import ITRS, AltAz, HADec, EarthLocation
++from astropy.time import Time
++
++def test_itrs_to_altaz():
++    """Test ITRS to AltAz transformation."""
++    print("=== Testing ITRS to AltAz ===")
++    
++    # Create a test location (e.g., at Greenwich)
++    location = EarthLocation(lat=51.4769*u.deg, lon=0.0005*u.deg, height=0*u.m)
++    
++    # Create an ITRS coordinate at that location (straight overhead for geocentric observer)
++    t = Time('J2010')
++    itrs_coord = location.get_itrs(t)
++    
++    print(f"ITRS coordinate: {itrs_coord}")
++    
++    # Transform to AltAz
++    altaz_frame = AltAz(location=location, obstime=t)
++    altaz_coord = itrs_coord.transform_to(altaz_frame)
++    print(f"AltAz coordinate: {altaz_coord}")
++    print(f"AltAz altitude: {altaz_coord.alt}")
++    print(f"AltAz azimuth: {altaz_coord.az}")
++    
++    # Test round-trip
++    itrs_back = altaz_coord.transform_to(ITRS(obstime=t))
++    print(f"Round-trip ITRS: {itrs_back}")
++    print(f"Position difference: {np.linalg.norm(itrs_coord.cartesian.xyz - itrs_back.cartesian.xyz)}")
++
++def test_itrs_to_hadec():
++    """Test ITRS to HADec transformation."""
++    print("\\n=== Testing ITRS to HADec ===")
++    
++    # Create a test location (e.g., at Greenwich)
++    location = EarthLocation(lat=51.4769*u.deg, lon=0.0005*u.deg, height=0*u.m)
++    
++    # Create an ITRS coordinate at that location
++    t = Time('J2010')
++    itrs_coord = location.get_itrs(t)
++    
++    print(f"ITRS coordinate: {itrs_coord}")
++    
++    # Transform to HADec
++    hadec_frame = HADec(location=location, obstime=t)
++    hadec_coord = itrs_coord.transform_to(hadec_frame)
++    print(f"HADec coordinate: {hadec_coord}")
++    print(f"HADec declination: {hadec_coord.dec}")
++    print(f"HADec hour angle: {hadec_coord.ha}")
++    
++    # Test round-trip
++    itrs_back = hadec_coord.transform_to(ITRS(obstime=t))
++    print(f"Round-trip ITRS: {itrs_back}")
++    print(f"Position difference: {np.linalg.norm(itrs_coord.cartesian.xyz - itrs_back.cartesian.xyz)}")
++
++def test_straight_overhead():
++    """Test the specific case from the issue."""
++    print("\\n=== Testing Straight Overhead Case ===")
++    
++    t = Time('J2010')
++    obj = EarthLocation(-1*u.deg, 52*u.deg, height=10.*u.km)
++    home = EarthLocation(-1*u.deg, 52*u.deg, height=0.*u.km)
++
++    # Create ITRS coordinate at object location
++    obj_itrs = obj.get_itrs(t)
++    
++    # Transform to AltAz using our new approach
++    altaz_frame = AltAz(location=home, obstime=t)
++    altaz_coord = obj_itrs.transform_to(altaz_frame)
++    print(f"AltAz from ITRS: {altaz_coord}")
++    print(f"Altitude: {altaz_coord.alt}")
++    
++    # Transform to HADec using our new approach
++    hadec_frame = HADec(location=home, obstime=t)
++    hadec_coord = obj_itrs.transform_to(hadec_frame)
++    print(f"HADec from ITRS: {hadec_coord}")
++    print(f"Declination: {hadec_coord.dec}")
++    print(f"Hour angle: {hadec_coord.ha}")
++
++if __name__ == "__main__":
++    test_itrs_to_altaz()
++    test_itrs_to_hadec()
++    test_straight_overhead()
+\ No newline at end of file

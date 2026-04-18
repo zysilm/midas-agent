@@ -1,6 +1,8 @@
 """TaskDone action — signal task completion."""
 from midas_agent.stdlib.action import Action
 
+DONE_SENTINEL = "<<TASK_DONE_CONFIRMED>>"
+
 
 class TaskDoneAction(Action):
     @property
@@ -20,4 +22,4 @@ class TaskDoneAction(Action):
         return {}
 
     def execute(self, **kwargs) -> str:
-        return kwargs.get("summary", "Task completed.")
+        return DONE_SENTINEL + " " + kwargs.get("summary", "Task completed.")

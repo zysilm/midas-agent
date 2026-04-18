@@ -1,0 +1,71 @@
+diff --git a/astropy/units/quantity.py b/astropy/units/quantity.py
+index b98abfafb..2c0aaac47 100644
+--- a/astropy/units/quantity.py
++++ b/astropy/units/quantity.py
+@@ -477,10 +477,10 @@ class Quantity(np.ndarray):
+                 # the float function below and ensure things like 1.2.3deg
+                 # will not work.
+                 pattern = (
+-                    r"\s*[+-]?"
+-                    r"((\d+\.?\d*)|(\.\d+)|([nN][aA][nN])|"
++                    r"\\\\\\\\s*[+-]?"
++                    r"((\\\\\\\\d+\\\\\\\\.?\\\\\\\\d*)|(\\\\\\\\.\\\\\\\\d+)|([nN][aA][nN])|"
+                     r"([iI][nN][fF]([iI][nN][iI][tT][yY]){0,1}))"
+-                    r"([eE][+-]?\d+)?"
++                    r"([eE][+-]?\\\\\\\\d+)?"
+                     r"[.+-]?"
+                 )
+ 
+@@ -667,7 +667,15 @@ class Quantity(np.ndarray):
+         arrays = []
+         for input_, converter in zip(inputs, converters):
+             input_ = getattr(input_, "value", input_)
+-            arrays.append(converter(input_) if converter else input_)
++            if converter:
++                try:
++                    arrays.append(converter(input_))
++                except ValueError:
++                    # If converter fails (e.g., with incompatible input types),
++                    # return NotImplemented to allow other operands to handle it.
++                    return NotImplemented
++            else:
++                arrays.append(input_)
+ 
+         # Call our superclass's __array_ufunc__
+         result = super().__array_ufunc__(function, method, *arrays, **kwargs)
+@@ -1402,7 +1410,7 @@ class Quantity(np.ndarray):
+ 
+             - 'inline': Use ``$ ... $`` as delimiters.
+ 
+-            - 'display': Use ``$\\displaystyle ... $`` as delimiters.
++            - 'display': Use ``$\\\\\\\\\\\\\\\\displaystyle ... $`` as delimiters.
+ 
+         Returns
+         -------
+@@ -1419,7 +1427,7 @@ class Quantity(np.ndarray):
+             "latex": {
+                 None: ("$", "$"),
+                 "inline": ("$", "$"),
+-                "display": (r"$\displaystyle ", r"$"),
++                "display": (r"$\\\\\\\\displaystyle ", r"$"),
+             },
+         }
+         formats["latex_inline"] = formats["latex"]
+@@ -1470,7 +1478,7 @@ class Quantity(np.ndarray):
+             separator=",~",
+         )
+ 
+-        latex_value = latex_value.replace("...", r"\dots")
++        latex_value = latex_value.replace("...", r"\\\\\\\\dots")
+ 
+         # Format unit
+         # [1:-1] strips the '$' on either side needed for math mode
+@@ -1483,7 +1491,7 @@ class Quantity(np.ndarray):
+ 
+         delimiter_left, delimiter_right = formats[format][subfmt]
+ 
+-        return rf"{delimiter_left}{latex_value} \; {latex_unit}{delimiter_right}"
++        return rf"{delimiter_left}{latex_value} \\\\\\\\; {latex_unit}{delimiter_right}"
+ 
+     def __str__(self):
+         return self.to_string()

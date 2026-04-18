@@ -1,0 +1,58 @@
+diff --git a/astropy/io/ascii/html.py b/astropy/io/ascii/html.py
+index 266cf229c..c552f9712 100644
+--- a/astropy/io/ascii/html.py
++++ b/astropy/io/ascii/html.py
+@@ -87,9 +87,9 @@ class HTMLInputter(core.BaseInputter):
+             with warnings.catch_warnings():
+                 # Ignore bs4 parser warning #4550.
+                 warnings.filterwarnings('ignore', '.*no parser was explicitly specified.*')
+-                soup = BeautifulSoup('\n'.join(lines))
++                soup = BeautifulSoup('\\n'.join(lines))
+         else:  # use a custom backend parser
+-            soup = BeautifulSoup('\n'.join(lines), self.html['parser'])
++            soup = BeautifulSoup('\\n'.join(lines), self.html['parser'])
+         tables = soup.find_all('table')
+         for i, possible_table in enumerate(tables):
+             if identify_table(possible_table, self.html, i + 1):
+@@ -349,11 +349,13 @@ class HTML(core.BaseReader):
+         cols = list(table.columns.values())
+ 
+         self.data.header.cols = cols
++        self.data.cols = cols
+ 
+         if isinstance(self.data.fill_values, tuple):
+             self.data.fill_values = [self.data.fill_values]
+ 
+         self.data._set_fill_values(cols)
++        self.data._set_col_formats()
+ 
+         lines = []
+ 
+diff --git a/final_test.py b/final_test.py
+new file mode 100644
+index 000000000..c8bcb61ec
+--- /dev/null
++++ b/final_test.py
+@@ -0,0 +1,21 @@
++#!/usr/bin/env python
++"""Final test to confirm the fix works"""
++
++from astropy.table import Table
++from io import StringIO
++
++# Test the exact example from the issue
++t = Table([(1.23875234858e-24, 3.2348748432e-15), (2, 4)], names=('a', 'b'))
++tc = t.copy()  # copy table
++
++# print HTML table with "a" column formatted to show 2 decimal places
++with StringIO() as sp:
++    tc.write(sp, format="html", formats={"a": lambda x: f"{x:.2e}"})
++    html_output = sp.getvalue()
++    print(html_output)
++
++# Verify it contains the formatted values
++if "1.24e-24" in html_output and "3.23e-15" in html_output:
++    print("SUCCESS: HTML format now respects the formats parameter!")
++else:
++    print("FAILURE: HTML format still ignores the formats parameter")
+\ No newline at end of file

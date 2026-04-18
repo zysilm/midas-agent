@@ -33,9 +33,7 @@ def _scripted_call_llm() -> callable:
     return call_llm
 
 
-def _dummy_market_info_provider() -> str:
-    """Stub market info provider returning a static string."""
-    return "market info: budget=1000, agents=4"
+_DUMMY_ENV_CONTEXT_XML = "<environment_context>\n  <balance>1000</balance>\n</environment_context>"
 
 
 @pytest.mark.unit
@@ -46,14 +44,14 @@ class TestPlanExecuteAgent:
         """PlanExecuteAgent is a subclass of ReactAgent."""
         assert issubclass(PlanExecuteAgent, ReactAgent)
 
-    def test_construction_with_market_info(self):
-        """PlanExecuteAgent can be constructed with a market_info_provider parameter."""
+    def test_construction_with_env_context_xml(self):
+        """PlanExecuteAgent can be constructed with an env_context_xml parameter."""
         agent = PlanExecuteAgent(
             system_prompt="You are a planning agent.",
             actions=[],
             call_llm=_dummy_call_llm,
             max_iterations=20,
-            market_info_provider=_dummy_market_info_provider,
+            env_context_xml=_DUMMY_ENV_CONTEXT_XML,
         )
         assert agent is not None
 
@@ -70,15 +68,15 @@ class TestPlanExecuteAgent:
         assert isinstance(result, AgentResult)
         assert len(result.action_history) >= 1
 
-    def test_plan_phase_uses_market_info(self):
-        """Market info from the provider is injected during the planning phase."""
+    def test_plan_phase_uses_env_context(self):
+        """env_context_xml is injected during the planning phase."""
         from midas_agent.stdlib.actions.task_done import TaskDoneAction
 
         agent = PlanExecuteAgent(
             system_prompt="You are a planning agent.",
             actions=[TaskDoneAction()],
             call_llm=_scripted_call_llm(),
-            market_info_provider=_dummy_market_info_provider,
+            env_context_xml=_DUMMY_ENV_CONTEXT_XML,
         )
         result = agent.run()
         assert isinstance(result, AgentResult)

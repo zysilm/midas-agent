@@ -1,0 +1,326 @@
+diff --git a/astropy/units/quantity.py b/astropy/units/quantity.py
+index b98abfafb..814b88f9f 100644
+--- a/astropy/units/quantity.py
++++ b/astropy/units/quantity.py
+@@ -477,10 +477,10 @@ class Quantity(np.ndarray):
+                 # the float function below and ensure things like 1.2.3deg
+                 # will not work.
+                 pattern = (
+-                    r"\s*[+-]?"
+-                    r"((\d+\.?\d*)|(\.\d+)|([nN][aA][nN])|"
++                    r"\\s*[+-]?"
++                    r"((\\d+\\.?\\d*)|(\\.\\d+)|([nN][aA][nN])|"
+                     r"([iI][nN][fF]([iI][nN][iI][tT][yY]){0,1}))"
+-                    r"([eE][+-]?\d+)?"
++                    r"([eE][+-]?\\d+)?"
+                     r"[.+-]?"
+                 )
+ 
+@@ -667,7 +667,15 @@ class Quantity(np.ndarray):
+         arrays = []
+         for input_, converter in zip(inputs, converters):
+             input_ = getattr(input_, "value", input_)
+-            arrays.append(converter(input_) if converter else input_)
++            if converter:
++                try:
++                    arrays.append(converter(input_))
++                except ValueError:
++                    # If converter fails (e.g., incompatible input like a duck array),
++                    # return NotImplemented to allow other operands to handle it
++                    return NotImplemented
++            else:
++                arrays.append(input_)
+ 
+         # Call our superclass's __array_ufunc__
+         result = super().__array_ufunc__(function, method, *arrays, **kwargs)
+@@ -1402,7 +1410,7 @@ class Quantity(np.ndarray):
+ 
+             - 'inline': Use ``$ ... $`` as delimiters.
+ 
+-            - 'display': Use ``$\\displaystyle ... $`` as delimiters.
++            - 'display': Use ``$\\\\displaystyle ... $`` as delimiters.
+ 
+         Returns
+         -------
+@@ -1419,7 +1427,7 @@ class Quantity(np.ndarray):
+             "latex": {
+                 None: ("$", "$"),
+                 "inline": ("$", "$"),
+-                "display": (r"$\displaystyle ", r"$"),
++                "display": (r"$\\displaystyle ", r"$"),
+             },
+         }
+         formats["latex_inline"] = formats["latex"]
+@@ -1470,7 +1478,7 @@ class Quantity(np.ndarray):
+             separator=",~",
+         )
+ 
+-        latex_value = latex_value.replace("...", r"\dots")
++        latex_value = latex_value.replace("...", r"\\dots")
+ 
+         # Format unit
+         # [1:-1] strips the '$' on either side needed for math mode
+@@ -1483,7 +1491,7 @@ class Quantity(np.ndarray):
+ 
+         delimiter_left, delimiter_right = formats[format][subfmt]
+ 
+-        return rf"{delimiter_left}{latex_value} \; {latex_unit}{delimiter_right}"
++        return rf"{delimiter_left}{latex_value} \\; {latex_unit}{delimiter_right}"
+ 
+     def __str__(self):
+         return self.to_string()
+diff --git a/comprehensive_test.py b/comprehensive_test.py
+new file mode 100644
+index 000000000..f16de6fdb
+--- /dev/null
++++ b/comprehensive_test.py
+@@ -0,0 +1,96 @@
++#!/usr/bin/env python3
++"""
++Comprehensive test for the Quantity.__array_ufunc__ fix.
++"""
++
++import dataclasses
++import numpy as np
++import astropy.units as u
++
++
++@dataclasses.dataclass
++class DuckArray(np.lib.mixins.NDArrayOperatorsMixin):
++    ndarray: u.Quantity
++
++    @property
++    def unit(self) -> u.UnitBase:
++        return self.ndarray.unit
++
++    def __array_ufunc__(self, function, method, *inputs, **kwargs):
++        inputs = [inp.ndarray if isinstance(inp, DuckArray) else inp for inp in inputs]
++
++        for inp in inputs:
++            if isinstance(inp, np.ndarray):
++                result = inp.__array_ufunc__(function, method, *inputs, **kwargs)
++                if result is not NotImplemented:
++                    return DuckArray(result)
++
++        return NotImplemented
++
++
++def test_comprehensive():
++    print("Running comprehensive tests...")
++    
++    # Test 1: Basic operations that should work
++    print("Test 1: Basic Quantity operations")
++    try:
++        q1 = 5 * u.m
++        q2 = 3 * u.m
++        result = q1 + q2
++        print(f"  {q1} + {q2} = {result}")
++    except Exception as e:
++        print(f"  Error: {e}")
++    
++    # Test 2: DuckArray with compatible units
++    print("Test 2: DuckArray with compatible units")
++    try:
++        result = DuckArray(1 * u.mm) + (1 * u.m)
++        print(f"  DuckArray(1 * u.mm) + (1 * u.m) = {result}")
++    except Exception as e:
++        print(f"  Error: {e}")
++    
++    # Test 3: DuckArray with same units
++    print("Test 3: DuckArray with same units")
++    try:
++        result = (1 * u.mm) + DuckArray(1 * u.mm)
++        print(f"  (1 * u.mm) + DuckArray(1 * u.mm) = {result}")
++    except Exception as e:
++        print(f"  Error: {e}")
++    
++    # Test 4: DuckArray with different units (the main issue)
++    print("Test 4: DuckArray with different units (main issue)")
++    try:
++        result = (1 * u.m) + DuckArray(1 * u.mm)
++        print(f"  (1 * u.m) + DuckArray(1 * u.mm) = {result}")
++    except Exception as e:
++        print(f"  Error: {e}")
++    
++    # Test 5: Other operations
++    print("Test 5: Other operations with DuckArray")
++    try:
++        result = (1 * u.m) * DuckArray(2 * u.mm)
++        print(f"  (1 * u.m) * DuckArray(2 * u.mm) = {result}")
++    except Exception as e:
++        print(f"  Error: {e}")
++    
++    # Test 6: Reverse operations
++    print("Test 6: Reverse operations")
++    try:
++        result = DuckArray(2 * u.mm) * (1 * u.m)
++        print(f"  DuckArray(2 * u.mm) * (1 * u.m) = {result}")
++    except Exception as e:
++        print(f"  Error: {e}")
++    
++    # Test 7: Operations that should still raise errors
++    print("Test 7: Operations that should still raise errors")
++    try:
++        result = (1 * u.m) + (1 * u.s)  # incompatible units
++        print(f"  (1 * u.m) + (1 * u.s) = {result}")
++    except Exception as e:
++        print(f"  Expected error: {type(e).__name__}: {e}")
++    
++    print("All tests completed.")
++
++
++if __name__ == "__main__":
++    test_comprehensive()
+\ No newline at end of file
+diff --git a/edge_case_test.py b/edge_case_test.py
+new file mode 100644
+index 000000000..2b25b90a2
+--- /dev/null
++++ b/edge_case_test.py
+@@ -0,0 +1,78 @@
++#!/usr/bin/env python3
++"""
++Edge case tests for the Quantity.__array_ufunc__ fix.
++"""
++
++import dataclasses
++import numpy as np
++import astropy.units as u
++
++
++@dataclasses.dataclass
++class DuckArray(np.lib.mixins.NDArrayOperatorsMixin):
++    ndarray: u.Quantity
++
++    @property
++    def unit(self) -> u.UnitBase:
++        return self.ndarray.unit
++
++    def __array_ufunc__(self, function, method, *inputs, **kwargs):
++        inputs = [inp.ndarray if isinstance(inp, DuckArray) else inp for inp in inputs]
++
++        for inp in inputs:
++            if isinstance(inp, np.ndarray):
++                result = inp.__array_ufunc__(function, method, *inputs, **kwargs)
++                if result is not NotImplemented:
++                    return DuckArray(result)
++
++        return NotImplemented
++
++
++def test_edge_cases():
++    print("Testing edge cases...")
++    
++    # Test 1: Multiple incompatible operands
++    print("Test 1: Multiple incompatible operands")
++    try:
++        result = (1 * u.m) + DuckArray(1 * u.mm) + (2 * u.m)
++        print(f"  Result: {result}")
++    except Exception as e:
++        print(f"  Error: {e}")
++    
++    # Test 2: Incompatible operation that should still fail
++    print("Test 2: Incompatible units that should fail")
++    try:
++        result = (1 * u.m) + (1 * u.s)  # time and length
++        print(f"  Unexpected success: {result}")
++    except Exception as e:
++        print(f"  Expected error: {type(e).__name__}: {e}")
++    
++    # Test 3: DuckArray with different operations
++    print("Test 3: DuckArray with different operations")
++    try:
++        result = (1 * u.m) * DuckArray(2 * u.mm)
++        print(f"  Multiplication: {result}")
++    except Exception as e:
++        print(f"  Error: {e}")
++    
++    # Test 4: Reverse operations
++    print("Test 4: Reverse operations")
++    try:
++        result = DuckArray(2 * u.mm) * (1 * u.m)
++        print(f"  Reverse multiplication: {result}")
++    except Exception as e:
++        print(f"  Error: {e}")
++    
++    # Test 5: Comparison operations
++    print("Test 5: Comparison operations")
++    try:
++        result = (1 * u.m) > DuckArray(500 * u.mm)
++        print(f"  Comparison: {result}")
++    except Exception as e:
++        print(f"  Error: {e}")
++    
++    print("Edge case tests completed.")
++
++
++if __name__ == "__main__":
++    test_edge_cases()
+\ No newline at end of file
+diff --git a/reproduce_issue.py b/reproduce_issue.py
+new file mode 100644
+index 000000000..0b3f5d1ed
+--- /dev/null
++++ b/reproduce_issue.py
+@@ -0,0 +1,60 @@
++#!/usr/bin/env python3
++"""
++Reproduction script for the Quantity.__array_ufunc__ issue.
++"""
++
++import dataclasses
++import numpy as np
++import astropy.units as u
++
++
++@dataclasses.dataclass
++class DuckArray(np.lib.mixins.NDArrayOperatorsMixin):
++    ndarray: u.Quantity
++
++    @property
++    def unit(self) -> u.UnitBase:
++        return self.ndarray.unit
++
++    def __array_ufunc__(self, function, method, *inputs, **kwargs):
++        inputs = [inp.ndarray if isinstance(inp, DuckArray) else inp for inp in inputs]
++
++        for inp in inputs:
++            if isinstance(inp, np.ndarray):
++                result = inp.__array_ufunc__(function, method, *inputs, **kwargs)
++                if result is not NotImplemented:
++                    return DuckArray(result)
++
++        return NotImplemented
++
++
++def test_issue():
++    print("Testing the issue with DuckArray and Quantity...")
++    
++    # This should work
++    print("Test 1: DuckArray(1 * u.mm) + (1 * u.m)")
++    try:
++        result = DuckArray(1 * u.mm) + (1 * u.m)
++        print(f"  Result: {result}")
++    except Exception as e:
++        print(f"  Error: {e}")
++    
++    # This should work
++    print("Test 2: (1 * u.mm) + DuckArray(1 * u.mm)")
++    try:
++        result = (1 * u.mm) + DuckArray(1 * u.mm)
++        print(f"  Result: {result}")
++    except Exception as e:
++        print(f"  Error: {e}")
++    
++    # This should fail with the current implementation
++    print("Test 3: (1 * u.m) + DuckArray(1 * u.mm)")
++    try:
++        result = (1 * u.m) + DuckArray(1 * u.mm)
++        print(f"  Result: {result}")
++    except Exception as e:
++        print(f"  Error: {type(e).__name__}: {e}")
++
++
++if __name__ == "__main__":
++    test_issue()
+\ No newline at end of file

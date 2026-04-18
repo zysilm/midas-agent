@@ -1,0 +1,39 @@
+diff --git a/astropy/modeling/separable.py b/astropy/modeling/separable.py
+index a308e2729..7f38f56a7 100644
+--- a/astropy/modeling/separable.py
++++ b/astropy/modeling/separable.py
+@@ -47,7 +47,7 @@ def is_separable(transform):
+         array([ True,  True]...)
+     >>> is_separable(Shift(1) & Shift(2) | Rotation2D(2))
+         array([False, False]...)
+-    >>> is_separable(Shift(1) & Shift(2) | Mapping([0, 1, 0, 1]) | \
++    >>> is_separable(Shift(1) & Shift(2) | Mapping([0, 1, 0, 1]) | \\
+         Polynomial2D(1) & Polynomial2D(2))
+         array([False, False]...)
+     >>> is_separable(Shift(1) & Shift(2) | Mapping([0, 1, 0, 1]))
+@@ -87,7 +87,7 @@ def separability_matrix(transform):
+         array([[ True, False], [False,  True]]...)
+     >>> separability_matrix(Shift(1) & Shift(2) | Rotation2D(2))
+         array([[ True,  True], [ True,  True]]...)
+-    >>> separability_matrix(Shift(1) & Shift(2) | Mapping([0, 1, 0, 1]) | \
++    >>> separability_matrix(Shift(1) & Shift(2) | Mapping([0, 1, 0, 1]) | \\
+         Polynomial2D(1) & Polynomial2D(2))
+         array([[ True,  True], [ True,  True]]...)
+     >>> separability_matrix(Shift(1) & Shift(2) | Mapping([0, 1, 0, 1]))
+@@ -236,13 +236,15 @@ def _cstack(left, right):
+     if isinstance(left, Model):
+         cleft = _coord_matrix(left, 'left', noutp)
+     else:
++        # If left is already a coordinate matrix (array), use it directly
+         cleft = np.zeros((noutp, left.shape[1]))
+         cleft[: left.shape[0], : left.shape[1]] = left
+     if isinstance(right, Model):
+         cright = _coord_matrix(right, 'right', noutp)
+     else:
++        # If right is already a coordinate matrix (array), use it directly
+         cright = np.zeros((noutp, right.shape[1]))
+-        cright[-right.shape[0]:, -right.shape[1]:] = 1
++        cright[-right.shape[0]:, -right.shape[1]:] = right
+ 
+     return np.hstack([cleft, cright])
+ 

@@ -4,8 +4,10 @@ from __future__ import annotations
 import os
 import subprocess
 import uuid
+from datetime import date
 from typing import Callable
 
+from midas_agent.context.environment import EnvironmentContext
 from midas_agent.llm.types import LLMRequest, LLMResponse
 from midas_agent.stdlib.actions.bash import BashAction
 from midas_agent.stdlib.actions.delegate_task import DelegateTaskAction
@@ -16,12 +18,15 @@ from midas_agent.stdlib.actions.file_ops import (
 )
 from midas_agent.stdlib.actions.search import FindFilesAction, SearchCodeAction
 from midas_agent.stdlib.actions.task_done import TaskDoneAction
-from midas_agent.stdlib.actions.think import ThinkAction
+from midas_agent.stdlib.actions.update_plan import UpdatePlanAction
 from midas_agent.stdlib.plan_execute_agent import PlanExecuteAgent
 from midas_agent.types import Issue
 from midas_agent.workspace.base import Workspace
 from midas_agent.workspace.graph_emergence.agent import Agent, Soul
-from midas_agent.workspace.graph_emergence.free_agent_manager import FreeAgentManager
+from midas_agent.workspace.graph_emergence.free_agent_manager import (
+    FreeAgentManager,
+    compute_bankruptcy_rate,
+)
 from midas_agent.workspace.graph_emergence.skill import SkillReviewer
 
 
@@ -38,6 +43,8 @@ class GraphEmergenceWorkspace(Workspace):
         max_tool_output_chars: int | None = None,
         extra_actions: list | None = None,
         action_log: "IO | None" = None,
+        training_log: "object | None" = None,
+        evicted_ws_ids: "set[str] | None" = None,
     ) -> None:
         super().__init__(workspace_id, call_llm, system_llm)
         self._responsible_agent = responsible_agent
@@ -49,6 +56,8 @@ class GraphEmergenceWorkspace(Workspace):
         self._max_tool_output_chars = max_tool_output_chars
         self._extra_actions = extra_actions or []
         self._action_log = action_log
+        self._training_log = training_log
+        self._evicted_ws_ids = evicted_ws_ids or set()
         self._budget = 0
         self._last_result = None
         self._patches_dir: str = "/tmp/patches"
@@ -77,6 +86,31 @@ class GraphEmergenceWorkspace(Workspace):
             ov.get("find_files", FindFilesAction(cwd=cwd)),
         ]
 
+        # Build environment context (replaces _build_market_info)
+        agent_lines = []
+        agents = self._free_agent_manager.free_agents
+        for agent_id, agent in agents.items():
+            price = self._free_agent_manager._pricing_engine.calculate_price(agent)
+            skill_name = agent.skill.name if agent.skill else "general"
+            if self._training_log is not None:
+                br = compute_bankruptcy_rate(
+                    agent_id, self._training_log, self._evicted_ws_ids,
+                )
+            else:
+                br = 0.0
+            agent_lines.append(
+                f"{agent_id}: {skill_name} (price={price}, bankruptcy={br:.2f})"
+            )
+
+        env_context = EnvironmentContext(
+            cwd="/testbed",
+            shell="bash",
+            current_date=str(date.today()),
+            balance=self._budget,
+            available_agents=agent_lines,
+        )
+        env_context_xml = env_context.serialize_to_xml()
+
         delegate = DelegateTaskAction(
             find_candidates=lambda desc: self._free_agent_manager.match(desc),
             spawn_callback=lambda desc: self._spawn_agent(desc),
@@ -84,55 +118,25 @@ class GraphEmergenceWorkspace(Workspace):
             calling_agent_id=self._responsible_agent.agent_id,
             call_llm=self._call_llm,
             parent_actions=base_actions,
+            parent_system_prompt=self._responsible_agent.soul.system_prompt,
+            env_context_xml=env_context_xml,
         )
 
-        actions = list(self._extra_actions) + base_actions + [ThinkAction(), TaskDoneAction(), delegate]
+        actions = list(self._extra_actions) + base_actions + [UpdatePlanAction(), TaskDoneAction(), delegate]
 
         agent = PlanExecuteAgent(
             system_prompt=self._responsible_agent.soul.system_prompt,
             actions=actions,
             call_llm=self._call_llm,
             max_iterations=9999,
-            market_info_provider=lambda: self._build_market_info(),
+            env_context_xml=env_context_xml,
             balance_provider=balance_provider,
             max_tool_output_chars=self._max_tool_output_chars,
             action_log=self._action_log,
         )
-        context = (
-            "I've uploaded a code repository. Consider the following issue:\n\n"
-            "<issue>\n"
-            + issue.description
-            + "\n</issue>\n\n"
-            "I've already taken care of all changes to any of the test files described in the issue. "
-            "This means you DON'T have to modify the testing logic or any of the tests in any way!\n"
-            "Your task is to make the minimal changes to non-tests files to ensure the issue is resolved.\n\n"
-            "Follow these steps to resolve the issue:\n"
-            "1. As a first step, find and read code relevant to the issue\n"
-            "2. Create a script to reproduce the error and execute it with `python <filename.py>` using bash, to confirm the error\n"
-            "3. Edit the source code of the repo to resolve the issue\n"
-            "4. Rerun your reproduce script and confirm that the error is fixed!\n"
-            "5. Think about edge cases and make sure your fix handles them as well\n"
-            "Your thinking should be thorough and so it's fine if it's very long."
-        )
+        from midas_agent.prompts import TASK_PROMPT_TEMPLATE
+        context = TASK_PROMPT_TEMPLATE.format(issue_description=issue.description)
         self._last_result = agent.run(context=context)
-
-    def _build_market_info(self) -> str:
-        """Build market info for the planning phase. Data only — guidance
-        is in the system prompt."""
-        lines = [f"Your balance: {self._budget}"]
-
-        agents = self._free_agent_manager.free_agents
-        if agents:
-            lines.append("")
-            lines.append("Available agents:")
-            for agent_id, agent in agents.items():
-                price = self._free_agent_manager._pricing_engine.calculate_price(agent)
-                skill_name = agent.skill.name if agent.skill else "general"
-                protected = getattr(agent, "protected_by", None)
-                label = " [幼年agent]" if protected == self._responsible_agent.agent_id else ""
-                lines.append(f"  - {agent_id}: {skill_name} (price={price}){label}")
-
-        return "\n".join(lines)
 
     def _spawn_agent(self, task_description: str) -> Agent:
         """Spawn a new free agent with protection relationship."""

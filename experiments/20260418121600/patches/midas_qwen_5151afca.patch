@@ -1,0 +1,501 @@
+diff --git a/astropy/modeling/separable.py b/astropy/modeling/separable.py
+index a308e2729..b2c6a0eec 100644
+--- a/astropy/modeling/separable.py
++++ b/astropy/modeling/separable.py
+@@ -47,7 +47,7 @@ def is_separable(transform):
+         array([ True,  True]...)
+     >>> is_separable(Shift(1) & Shift(2) | Rotation2D(2))
+         array([False, False]...)
+-    >>> is_separable(Shift(1) & Shift(2) | Mapping([0, 1, 0, 1]) | \
++    >>> is_separable(Shift(1) & Shift(2) | Mapping([0, 1, 0, 1]) | \\\\\\\\
+         Polynomial2D(1) & Polynomial2D(2))
+         array([False, False]...)
+     >>> is_separable(Shift(1) & Shift(2) | Mapping([0, 1, 0, 1]))
+@@ -87,7 +87,7 @@ def separability_matrix(transform):
+         array([[ True, False], [False,  True]]...)
+     >>> separability_matrix(Shift(1) & Shift(2) | Rotation2D(2))
+         array([[ True,  True], [ True,  True]]...)
+-    >>> separability_matrix(Shift(1) & Shift(2) | Mapping([0, 1, 0, 1]) | \
++    >>> separability_matrix(Shift(1) & Shift(2) | Mapping([0, 1, 0, 1]) | \\\\\\\\
+         Polynomial2D(1) & Polynomial2D(2))
+         array([[ True,  True], [ True,  True]]...)
+     >>> separability_matrix(Shift(1) & Shift(2) | Mapping([0, 1, 0, 1]))
+@@ -236,13 +236,15 @@ def _cstack(left, right):
+     if isinstance(left, Model):
+         cleft = _coord_matrix(left, 'left', noutp)
+     else:
++        # left is already a separability matrix
+         cleft = np.zeros((noutp, left.shape[1]))
+         cleft[: left.shape[0], : left.shape[1]] = left
+     if isinstance(right, Model):
+         cright = _coord_matrix(right, 'right', noutp)
+     else:
++        # right is already a separability matrix
+         cright = np.zeros((noutp, right.shape[1]))
+-        cright[-right.shape[0]:, -right.shape[1]:] = 1
++        cright[-right.shape[0]:, -right.shape[1]:] = right
+ 
+     return np.hstack([cleft, cright])
+ 
+diff --git a/compare_working.py b/compare_working.py
+new file mode 100644
+index 000000000..47169c000
+--- /dev/null
++++ b/compare_working.py
+@@ -0,0 +1,95 @@
++#!/usr/bin/env python
++
++from astropy.modeling import models as m
++from astropy.modeling.separable import separability_matrix, _separable, _coord_matrix, _cstack
++import numpy as np
++
++print("Comparing working vs non-working cases...")
++
++# Working case: Pix2Sky_TAN() & Linear1D(10) & Linear1D(5)
++# This is equivalent to: (Pix2Sky_TAN() & Linear1D(10)) & Linear1D(5) 
++# But the issue says it works correctly
++
++# Let's see what the working case produces
++cm_working = m.Pix2Sky_TAN() & m.Linear1D(10) & m.Linear1D(5)
++print("Working case structure:")
++print(f"  Type: {type(cm_working)}")
++print(f"  Op: {cm_working.op}")
++print(f"  Left: {type(cm_working.left)} - n_inputs: {cm_working.left.n_inputs}, n_outputs: {cm_working.left.n_outputs}")
++print(f"  Right: {type(cm_working.right)} - n_inputs: {cm_working.right.n_inputs}, n_outputs: {cm_working.right.n_outputs}")
++
++print("\\nWorking case separability matrix:")
++result_working = separability_matrix(cm_working)
++print(result_working)
++
++# Let's trace the working case manually
++print("\\nTracing working case:")
++print("1. Left model (Pix2Sky_TAN() & Linear1D(10)):")
++left_working = cm_working.left
++print(f"   Type: {type(left_working)}")
++print(f"   n_inputs: {left_working.n_inputs}, n_outputs: {left_working.n_outputs}")
++
++left_separable = _separable(left_working)
++print(f"   Separable result shape: {left_separable.shape}")
++print(f"   Separable result:\\n{left_separable}")
++
++print("2. Right model (Linear1D(5)):")
++right_working = cm_working.right
++print(f"   Type: {type(right_working)}")
++print(f"   n_inputs: {right_working.n_inputs}, n_outputs: {right_working.n_outputs}")
++
++right_separable = _separable(right_working)
++print(f"   Separable result shape: {right_separable.shape}")
++print(f"   Separable result:\\n{right_separable}")
++
++print("3. _cstack result:")
++result_cstack = _cstack(left_separable, right_separable)
++print(f"   Final result:\\n{result_cstack}")
++
++# Now let's see what the nested case produces
++print("\\n" + "="*50)
++print("Nested case analysis:")
++
++cm_nested = m.Pix2Sky_TAN() & (m.Linear1D(10) & m.Linear1D(5))
++print("Nested case structure:")
++print(f"  Type: {type(cm_nested)}")
++print(f"  Op: {cm_nested.op}")
++print(f"  Left: {type(cm_nested.left)} - n_inputs: {cm_nested.left.n_inputs}, n_outputs: {cm_nested.left.n_outputs}")
++print(f"  Right: {type(cm_nested.right)} - n_inputs: {cm_nested.right.n_inputs}, n_outputs: {cm_nested.right.n_outputs}")
++
++print("\\nNested case separability matrix:")
++result_nested = separability_matrix(cm_nested)
++print(result_nested)
++
++print("\\nTracing nested case:")
++print("1. Left model (Pix2Sky_TAN):")
++left_nested = cm_nested.left
++print(f"   Type: {type(left_nested)}")
++print(f"   n_inputs: {left_nested.n_inputs}, n_outputs: {left_nested.n_outputs}")
++
++left_separable_nested = _separable(left_nested)
++print(f"   Separable result shape: {left_separable_nested.shape}")
++print(f"   Separable result:\\n{left_separable_nested}")
++
++print("2. Right model (Linear1D(10) & Linear1D(5)):")
++right_nested = cm_nested.right
++print(f"   Type: {type(right_nested)}")
++print(f"   n_inputs: {right_nested.n_inputs}, n_outputs: {right_nested.n_outputs}")
++
++right_separable_nested = _separable(right_nested)
++print(f"   Separable result shape: {right_separable_nested.shape}")
++print(f"   Separable result:\\n{right_separable_nested}")
++
++print("3. _cstack result:")
++result_cstack_nested = _cstack(left_separable_nested, right_separable_nested)
++print(f"   Final result:\\n{result_cstack_nested}")
++
++# Let's also test what _coord_matrix produces for Pix2Sky_TAN directly
++print("\\nDirect _coord_matrix test:")
++pix2sky = m.Pix2Sky_TAN()
++print(f"  Pix2Sky_TAN n_inputs: {pix2sky.n_inputs}")
++print(f"  Pix2Sky_TAN n_outputs: {pix2sky.n_outputs}")
++print(f"  Pix2Sky_TAN separable: {pix2sky.separable}")
++
++coord_direct = _coord_matrix(pix2sky, 'left', 4)  # 4 = total outputs
++print(f"  Direct _coord_matrix result:\\n{coord_direct}")
+\ No newline at end of file
+diff --git a/debug_issue.py b/debug_issue.py
+new file mode 100644
+index 000000000..a92bbc4d0
+--- /dev/null
++++ b/debug_issue.py
+@@ -0,0 +1,48 @@
++#!/usr/bin/env python
++
++from astropy.modeling import models as m
++from astropy.modeling.separable import separability_matrix, _separable, _coord_matrix, _cstack
++import numpy as np
++
++print("Debugging separability matrix issue...")
++
++# Create the problematic case
++cm_nested = m.Pix2Sky_TAN() & (m.Linear1D(10) & m.Linear1D(5))
++print("Nested model structure:")
++print(f"  Type: {type(cm_nested)}")
++print(f"  Op: {cm_nested.op}")
++print(f"  Left: {type(cm_nested.left)} - n_inputs: {cm_nested.left.n_inputs}, n_outputs: {cm_nested.left.n_outputs}")
++print(f"  Right: {type(cm_nested.right)} - n_inputs: {cm_nested.right.n_inputs}, n_outputs: {cm_nested.right.n_outputs}")
++
++# Let's manually trace what should happen
++print("\\nManual trace:")
++print("1. Left model (Pix2Sky_TAN):")
++left_model = cm_nested.left
++left_coord = _coord_matrix(left_model, 'left', 4)  # 4 = total outputs
++print(f"   Coord matrix:\\n{left_coord}")
++
++print("2. Right model (Linear1D(10) & Linear1D(5)):")
++right_model = cm_nested.right
++print(f"   Type: {type(right_model)}")
++print(f"   n_inputs: {right_model.n_inputs}, n_outputs: {right_model.n_outputs}")
++
++# Let's see what _separable returns for the right model
++print("3. _separable for right model:")
++right_separable = _separable(right_model)
++print(f"   Result:\\n{right_separable}")
++
++print("4. Now applying _cstack:")
++result = _cstack(left_coord, right_separable)
++print(f"   Final result:\\n{result}")
++
++print("\\n5. Compare with working case:")
++cm_working = m.Pix2Sky_TAN() & m.Linear1D(10) & m.Linear1D(5)
++print(f"Working model right side type: {type(cm_working.right)}")
++print(f"Working model right side n_inputs: {cm_working.right.n_inputs}")
++print(f"Working model right side n_outputs: {cm_working.right.n_outputs}")
++
++# Let's also check the _calculate_separability_matrix method
++print("\\n6. Checking _calculate_separability_matrix:")
++print(f"Nested model _calculate_separability_matrix: {cm_nested._calculate_separability_matrix()}")
++print(f"Right model _calculate_separability_matrix: {cm_nested.right._calculate_separability_matrix()}")
++print(f"Left model _calculate_separability_matrix: {cm_nested.left._calculate_separability_matrix()}")
+\ No newline at end of file
+diff --git a/deep_debug.py b/deep_debug.py
+new file mode 100644
+index 000000000..c2e6f1f63
+--- /dev/null
++++ b/deep_debug.py
+@@ -0,0 +1,63 @@
++#!/usr/bin/env python
++
++from astropy.modeling import models as m
++from astropy.modeling.separable import separability_matrix, _separable, _coord_matrix, _cstack, _compute_n_outputs
++import numpy as np
++
++print("Deep debugging...")
++
++# Test the exact problematic case
++cm_nested = m.Pix2Sky_TAN() & (m.Linear1D(10) & m.Linear1D(5))
++print("Nested model structure:")
++print(f"  Type: {type(cm_nested)}")
++print(f"  Op: {cm_nested.op}")
++print(f"  Left: {type(cm_nested.left)} - n_inputs: {cm_nested.left.n_inputs}, n_outputs: {cm_nested.left.n_outputs}")
++print(f"  Right: {type(cm_nested.right)} - n_inputs: {cm_nested.right.n_inputs}, n_outputs: {cm_nested.right.n_outputs}")
++
++# Let's manually trace the _separable call for the nested case
++print("\\nTracing _separable for nested model:")
++print("1. Calling _separable on left model (Pix2Sky_TAN):")
++left_separable = _separable(cm_nested.left)
++print(f"   Result shape: {left_separable.shape}")
++print(f"   Result:\\n{left_separable}")
++
++print("2. Calling _separable on right model (Linear1D(10) & Linear1D(5)):")
++right_separable = _separable(cm_nested.right)
++print(f"   Result shape: {right_separable.shape}")
++print(f"   Result:\\n{right_separable}")
++
++print("3. Calling _cstack with these results:")
++noutp = _compute_n_outputs(left_separable, right_separable)
++print(f"   noutp: {noutp}")
++result = _cstack(left_separable, right_separable)
++print(f"   Final result:\\n{result}")
++
++print("\\n4. What should happen for the right model:")
++print("   Right model is Linear1D(10) & Linear1D(5)")
++print("   This should be handled by _separable recursively")
++print("   Let's trace that:")
++print("   - Linear1D(10) has n_inputs=1, n_outputs=1")
++print("   - Linear1D(5) has n_inputs=1, n_outputs=1")
++print("   - Combined should have n_inputs=2, n_outputs=2")
++print("   - Expected separability matrix should be [[True, False], [False, True]]")
++
++# Let's also test the working case for comparison
++print("\\n5. Working case comparison:")
++cm_working = m.Pix2Sky_TAN() & m.Linear1D(10) & m.Linear1D(5)
++print(f"Working model right side type: {type(cm_working.right)}")
++print(f"Working model right side n_inputs: {cm_working.right.n_inputs}")
++print(f"Working model right side n_outputs: {cm_working.right.n_outputs}")
++
++# Let's see what _coord_matrix does for a simple Linear1D
++print("\\n6. Testing _coord_matrix on simple Linear1D:")
++simple_linear = m.Linear1D(10)
++print(f"Simple Linear1D n_inputs: {simple_linear.n_inputs}")
++print(f"Simple Linear1D n_outputs: {simple_linear.n_outputs}")
++coord_simple = _coord_matrix(simple_linear, 'left', 2)  # 2 outputs total
++print(f"Coord matrix for simple Linear1D:\\n{coord_simple}")
++
++# Let's also test what happens when we call _separable on a simple Linear1D
++print("\\n7. Testing _separable on simple Linear1D:")
++sep_simple = _separable(simple_linear)
++print(f"Separability result for simple Linear1D:\\n{sep_simple}")
++print(f"Shape: {sep_simple.shape}")
+\ No newline at end of file
+diff --git a/reproduce_issue.py b/reproduce_issue.py
+new file mode 100644
+index 000000000..8fa8d557a
+--- /dev/null
++++ b/reproduce_issue.py
+@@ -0,0 +1,49 @@
++#!/usr/bin/env python
++
++from astropy.modeling import models as m
++from astropy.modeling.separable import separability_matrix
++
++print("Testing separability matrix issue...")
++
++# Test case 1: Simple compound model
++print("\\n1. Simple compound model (Linear1D & Linear1D):")
++cm = m.Linear1D(10) & m.Linear1D(5)
++result1 = separability_matrix(cm)
++print("Result:")
++print(result1)
++print("Expected: diagonal matrix")
++
++# Test case 2: More complex compound model
++print("\\n2. Complex compound model (Pix2Sky_TAN() & Linear1D & Linear1D):")
++result2 = separability_matrix(m.Pix2Sky_TAN() & m.Linear1D(10) & m.Linear1D(5))
++print("Result:")
++print(result2)
++print("Expected: separable structure")
++
++# Test case 3: Nested compound model (the problematic case)
++print("\\n3. Nested compound model (Pix2Sky_TAN() & (Linear1D & Linear1D)):")
++cm_nested = m.Pix2Sky_TAN() & (m.Linear1D(10) & m.Linear1D(5))
++result3 = separability_matrix(cm_nested)
++print("Result:")
++print(result3)
++print("This should be the same as case 2 but it's not!")
++
++# Test case 4: Let's also test the individual components
++print("\\n4. Individual components:")
++print("Pix2Sky_TAN n_inputs:", m.Pix2Sky_TAN().n_inputs)
++print("Pix2Sky_TAN n_outputs:", m.Pix2Sky_TAN().n_outputs)
++print("Linear1D(10) n_inputs:", m.Linear1D(10).n_inputs)
++print("Linear1D(10) n_outputs:", m.Linear1D(10).n_outputs)
++print("Linear1D(5) n_inputs:", m.Linear1D(5).n_inputs)
++print("Linear1D(5) n_outputs:", m.Linear1D(5).n_outputs)
++
++print("\\n5. Testing with explicit parentheses:")
++cm_explicit = m.Pix2Sky_TAN() & (m.Linear1D(10) & m.Linear1D(5))
++print("cm_explicit type:", type(cm_explicit))
++print("cm_explicit.op:", cm_explicit.op)
++print("cm_explicit.left type:", type(cm_explicit.left))
++print("cm_explicit.right type:", type(cm_explicit.right))
++print("cm_explicit.left.n_inputs:", cm_explicit.left.n_inputs)
++print("cm_explicit.left.n_outputs:", cm_explicit.left.n_outputs)
++print("cm_explicit.right.n_inputs:", cm_explicit.right.n_inputs)
++print("cm_explicit.right.n_outputs:", cm_explicit.right.n_outputs)
+\ No newline at end of file
+diff --git a/test_edge_cases.py b/test_edge_cases.py
+new file mode 100644
+index 000000000..72b9ad97c
+--- /dev/null
++++ b/test_edge_cases.py
+@@ -0,0 +1,39 @@
++#!/usr/bin/env python
++
++from astropy.modeling import models as m
++from astropy.modeling.separable import separability_matrix
++import numpy as np
++
++print("Testing edge cases...")
++
++# Test 1: Simple case that should still work
++print("1. Simple Linear1D & Linear1D:")
++result1 = separability_matrix(m.Linear1D(10) & m.Linear1D(5))
++print(result1)
++print()
++
++# Test 2: More complex nested case
++print("2. More complex nested case:")
++result2 = separability_matrix(m.Pix2Sky_TAN() & (m.Linear1D(10) & m.Linear1D(5) & m.Linear1D(3)))
++print(result2)
++print()
++
++# Test 3: Deeply nested case
++print("3. Deeply nested case:")
++result3 = separability_matrix((m.Linear1D(1) & m.Linear1D(2)) & (m.Linear1D(3) & m.Linear1D(4)))
++print(result3)
++print()
++
++# Test 4: Mixed operations
++print("4. Mixed operations:")
++result4 = separability_matrix(m.Pix2Sky_TAN() & (m.Linear1D(10) & m.Linear1D(5)) | m.Linear1D(2))
++print("This should not crash...")
++print()
++
++# Test 5: Single model (should work as before)
++print("5. Single model:")
++result5 = separability_matrix(m.Linear1D(10))
++print(result5)
++print()
++
++print("All edge case tests completed successfully!")
+\ No newline at end of file
+diff --git a/test_edge_cases_simple.py b/test_edge_cases_simple.py
+new file mode 100644
+index 000000000..a303a7b4d
+--- /dev/null
++++ b/test_edge_cases_simple.py
+@@ -0,0 +1,52 @@
++#!/usr/bin/env python
++
++from astropy.modeling import models as m
++from astropy.modeling.separable import separability_matrix
++import numpy as np
++
++print("Testing edge cases...")
++
++# Test 1: Simple case that should still work
++print("1. Simple Linear1D & Linear1D:")
++result1 = separability_matrix(m.Linear1D(10) & m.Linear1D(5))
++print(result1)
++print()
++
++# Test 2: More complex nested case
++print("2. More complex nested case:")
++result2 = separability_matrix(m.Pix2Sky_TAN() & (m.Linear1D(10) & m.Linear1D(5) & m.Linear1D(3)))
++print(result2)
++print()
++
++# Test 3: Deeply nested case
++print("3. Deeply nested case:")
++result3 = separability_matrix((m.Linear1D(1) & m.Linear1D(2)) & (m.Linear1D(3) & m.Linear1D(4)))
++print(result3)
++print()
++
++# Test 4: Single model (should work as before)
++print("4. Single model:")
++result4 = separability_matrix(m.Linear1D(10))
++print(result4)
++print()
++
++# Test 5: Test the original issue cases specifically
++print("5. Original issue cases:")
++cm1 = m.Linear1D(10) & m.Linear1D(5)
++cm2 = m.Pix2Sky_TAN() & m.Linear1D(10) & m.Linear1D(5)
++cm3 = m.Pix2Sky_TAN() & (m.Linear1D(10) & m.Linear1D(5))
++
++print("cm1 (Linear1D & Linear1D):")
++print(separability_matrix(cm1))
++print()
++
++print("cm2 (Pix2Sky_TAN() & Linear1D & Linear1D):")
++print(separability_matrix(cm2))
++print()
++
++print("cm3 (Pix2Sky_TAN() & (Linear1D & Linear1D)):")
++print(separability_matrix(cm3))
++print()
++
++print("cm2 and cm3 should be identical now!")
++print("Are they equal?", np.array_equal(separability_matrix(cm2), separability_matrix(cm3)))
+\ No newline at end of file
+diff --git a/trace_execution.py b/trace_execution.py
+new file mode 100644
+index 000000000..345d55ef6
+--- /dev/null
++++ b/trace_execution.py
+@@ -0,0 +1,67 @@
++#!/usr/bin/env python
++
++from astropy.modeling import models as m
++from astropy.modeling.separable import separability_matrix, _separable, _coord_matrix, _cstack, _compute_n_outputs
++import numpy as np
++
++print("Tracing exact execution path...")
++
++# Create the problematic nested case
++cm_nested = m.Pix2Sky_TAN() & (m.Linear1D(10) & m.Linear1D(5))
++print("Nested model structure:")
++print(f"  Type: {type(cm_nested)}")
++print(f"  Op: {cm_nested.op}")
++print(f"  Left: {type(cm_nested.left)} - n_inputs: {cm_nested.left.n_inputs}, n_outputs: {cm_nested.left.n_outputs}")
++print(f"  Right: {type(cm_nested.right)} - n_inputs: {cm_nested.right.n_inputs}, n_outputs: {cm_nested.right.n_outputs}")
++
++# Step 1: Call _separable on the nested model
++print("\\n=== Step 1: _separable(cm_nested) ===")
++print("This should call _separable on left and right recursively")
++
++print("1a. Calling _separable on left (Pix2Sky_TAN):")
++left_result = _separable(cm_nested.left)
++print(f"   Result shape: {left_result.shape}")
++print(f"   Result:\\n{left_result}")
++
++print("1b. Calling _separable on right (Linear1D(10) & Linear1D(5)):")
++right_result = _separable(cm_nested.right)
++print(f"   Result shape: {right_result.shape}")
++print(f"   Result:\\n{right_result}")
++
++print("1c. Calling _cstack with these results:")
++print(f"   left shape: {left_result.shape}")
++print(f"   right shape: {right_result.shape}")
++print(f"   noutp (computed): {_compute_n_outputs(left_result, right_result)}")
++cstack_result = _cstack(left_result, right_result)
++print(f"   Final _cstack result:\\n{cstack_result}")
++
++print("\\n=== Step 2: Compare with working case ===")
++cm_working = m.Pix2Sky_TAN() & m.Linear1D(10) & m.Linear1D(5)
++print("Working model structure:")
++print(f"  Type: {type(cm_working)}")
++print(f"  Op: {cm_working.op}")
++print(f"  Left: {type(cm_working.left)} - n_inputs: {cm_working.left.n_inputs}, n_outputs: {cm_working.left.n_outputs}")
++print(f"  Right: {type(cm_working.right)} - n_inputs: {cm_working.right.n_inputs}, n_outputs: {cm_working.right.n_outputs}")
++
++print("2a. Calling _separable on left (Pix2Sky_TAN() & Linear1D(10)):")
++left_working = _separable(cm_working.left)
++print(f"   Result shape: {left_working.shape}")
++print(f"   Result:\\n{left_working}")
++
++print("2b. Calling _separable on right (Linear1D(5)):")
++right_working = _separable(cm_working.right)
++print(f"   Result shape: {right_working.shape}")
++print(f"   Result:\\n{right_working}")
++
++print("2c. Calling _cstack with these results:")
++cstack_working = _cstack(left_working, right_working)
++print(f"   Final _cstack result:\\n{cstack_working}")
++
++print("\\n=== Step 3: Direct separability_matrix calls ===")
++print("Nested case result:")
++nested_result = separability_matrix(cm_nested)
++print(nested_result)
++
++print("Working case result:")
++working_result = separability_matrix(cm_working)
++print(working_result)
+\ No newline at end of file

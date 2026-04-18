@@ -1,0 +1,129 @@
+diff --git a/astropy/modeling/separable.py b/astropy/modeling/separable.py
+index a308e2729..b1b0afa58 100644
+--- a/astropy/modeling/separable.py
++++ b/astropy/modeling/separable.py
+@@ -47,7 +47,7 @@ def is_separable(transform):
+         array([ True,  True]...)
+     >>> is_separable(Shift(1) & Shift(2) | Rotation2D(2))
+         array([False, False]...)
+-    >>> is_separable(Shift(1) & Shift(2) | Mapping([0, 1, 0, 1]) | \
++    >>> is_separable(Shift(1) & Shift(2) | Mapping([0, 1, 0, 1]) | \\
+         Polynomial2D(1) & Polynomial2D(2))
+         array([False, False]...)
+     >>> is_separable(Shift(1) & Shift(2) | Mapping([0, 1, 0, 1]))
+@@ -87,7 +87,7 @@ def separability_matrix(transform):
+         array([[ True, False], [False,  True]]...)
+     >>> separability_matrix(Shift(1) & Shift(2) | Rotation2D(2))
+         array([[ True,  True], [ True,  True]]...)
+-    >>> separability_matrix(Shift(1) & Shift(2) | Mapping([0, 1, 0, 1]) | \
++    >>> separability_matrix(Shift(1) & Shift(2) | Mapping([0, 1, 0, 1]) | \\
+         Polynomial2D(1) & Polynomial2D(2))
+         array([[ True,  True], [ True,  True]]...)
+     >>> separability_matrix(Shift(1) & Shift(2) | Mapping([0, 1, 0, 1]))
+@@ -241,8 +241,10 @@ def _cstack(left, right):
+     if isinstance(right, Model):
+         cright = _coord_matrix(right, 'right', noutp)
+     else:
++        # When right is already a separability matrix (numpy array),
++        # we should use it directly instead of creating a matrix of 1s
+         cright = np.zeros((noutp, right.shape[1]))
+-        cright[-right.shape[0]:, -right.shape[1]:] = 1
++        cright[-right.shape[0]:, -right.shape[1]:] = right
+ 
+     return np.hstack([cleft, cright])
+ 
+diff --git a/test_fix.py b/test_fix.py
+new file mode 100644
+index 000000000..53ac3c477
+--- /dev/null
++++ b/test_fix.py
+@@ -0,0 +1,88 @@
++#!/usr/bin/env python
++"""
++Test script to verify the separability_matrix fix for nested CompoundModels
++"""
++from astropy.modeling import models as m
++from astropy.modeling.separable import separability_matrix
++
++def test_original_issue():
++    """Test the exact case from the issue"""
++    print("=== Testing Original Issue ===")
++    
++    # Basic compound model
++    cm = m.Linear1D(10) & m.Linear1D(5)
++    result1 = separability_matrix(cm)
++    print("Basic compound model:")
++    print(result1)
++    print()
++    
++    # Complex compound model
++    result2 = separability_matrix(m.Pix2Sky_TAN() & m.Linear1D(10) & m.Linear1D(5))
++    print("Complex compound model:")
++    print(result2)
++    print()
++    
++    # Nested compound model (the problematic case)
++    result3 = separability_matrix(m.Pix2Sky_TAN() & cm)
++    print("Nested compound model (should be fixed):")
++    print(result3)
++    print()
++    
++    # Verify the fix: the last 2 rows/columns should be independent (diagonal)
++    expected_last_2_rows_cols = [[True, False], [False, True]]
++    actual_last_2_rows_cols = result3[2:4, 2:4]
++    
++    print("Last 2x2 block of nested model:")
++    print(actual_last_2_rows_cols)
++    print("Expected diagonal pattern:")
++    print(expected_last_2_rows_cols)
++    
++    # Check if they match
++    if (actual_last_2_rows_cols == expected_last_2_rows_cols).all():
++        print("✓ PASS: Last 2x2 block is correctly diagonal")
++        return True
++    else:
++        print("✗ FAIL: Last 2x2 block is not diagonal as expected")
++        return False
++
++def test_additional_cases():
++    """Test additional edge cases"""
++    print("\\n=== Testing Additional Cases ===")
++    
++    # Test with more nesting
++    try:
++        nested1 = (m.Linear1D(1) & m.Linear1D(2)) & m.Linear1D(3)
++        result = separability_matrix(nested1)
++        print("Deeply nested compound model:")
++        print(result)
++        print("✓ PASS: Deep nesting works")
++        return True
++    except Exception as e:
++        print(f"✗ FAIL: Deep nesting failed with error: {e}")
++        return False
++
++def test_backward_compatibility():
++    """Test that existing functionality still works"""
++    print("\\n=== Testing Backward Compatibility ===")
++    
++    # Test simple models
++    try:
++        result = separability_matrix(m.Shift(1) & m.Shift(2))
++        print("Simple shift model:")
++        print(result)
++        print("✓ PASS: Simple models work")
++        return True
++    except Exception as e:
++        print(f"✗ FAIL: Simple models failed with error: {e}")
++        return False
++
++if __name__ == "__main__":
++    success1 = test_original_issue()
++    success2 = test_additional_cases()
++    success3 = test_backward_compatibility()
++    
++    if success1 and success2 and success3:
++        print("\\n🎉 ALL TESTS PASSED!")
++    else:
++        print("\\n❌ SOME TESTS FAILED!")
++        exit(1)
+\ No newline at end of file

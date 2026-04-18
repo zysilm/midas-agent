@@ -40,14 +40,13 @@ class TestReadFileAction:
         result = action.execute(path="/tmp/test.txt")
         assert isinstance(result, str)
 
-    def test_description_includes_cwd(self):
-        """When cwd is set, tool description must include the actual working
-        directory so the LLM knows where files are."""
+    def test_description_does_not_include_cwd(self):
+        """cwd is now provided via EnvironmentContext, not the tool
+        description. ReadFileAction description should be clean."""
         action = ReadFileAction(cwd="/tmp/workspace/repo")
         desc = action.description
-        assert "/tmp/workspace/repo" in desc
-        assert "must be an absolute path" not in desc.lower(), \
-            "Description should not mandate absolute paths — this causes LLM hallucination"
+        assert "/tmp/workspace/repo" not in desc
+        assert "Reads a file" in desc
 
     def test_description_without_cwd_no_path_leak(self):
         """When cwd is None, description must not contain a spurious working
@@ -55,8 +54,7 @@ class TestReadFileAction:
         action = ReadFileAction(cwd=None)
         desc = action.description
         assert "None" not in desc
-        # Still should not mandate absolute paths
-        assert "must be an absolute path" not in desc.lower()
+        assert "Reads a file" in desc
 
     def test_file_not_found_without_cwd_no_crash(self):
         """When cwd is not set, File not found still works without crash."""
@@ -493,13 +491,12 @@ class TestDelegateTaskAction:
         for agent/pricing info, not duplicate it in the tool description."""
         action = DelegateTaskAction(find_candidates=lambda desc: [])
         desc = action.description
-        # Should reference planning phase / market info
-        assert "plan" in desc.lower() or "market" in desc.lower(), \
-            f"Description should reference planning context: {desc}"
-        # Should NOT contain the full delegation strategy guide —
-        # that belongs in market_info during planning phase
-        assert "when to delegate" not in desc.lower(), \
-            f"Delegation strategy should be in market_info, not tool desc: {desc}"
+        # Tool description should contain delegation guidance
+        # (Codex pattern: detailed guidance lives in the tool description)
+        assert "sub-agent" in desc.lower() or "spawn" in desc.lower(), \
+            f"Description should reference sub-agent spawning: {desc}"
+        assert "delegate" in desc.lower() or "subtask" in desc.lower(), \
+            f"Description should reference delegation: {desc}"
 
     def test_delegate_task_output_includes_balance(self):
         """When balance_provider is set and querying candidates (no agent_id,

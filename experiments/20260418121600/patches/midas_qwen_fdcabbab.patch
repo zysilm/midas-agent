@@ -1,0 +1,147 @@
+diff --git a/astropy/table/table.py b/astropy/table/table.py
+index 5afe2127a..9a492a017 100644
+--- a/astropy/table/table.py
++++ b/astropy/table/table.py
+@@ -1243,6 +1243,9 @@ class Table:
+         # mixin class
+         if (not isinstance(data, Column) and not data_is_mixin
+                 and isinstance(data, np.ndarray) and len(data.dtype) > 1):
++            warnings.warn(
++                "Automatic conversion of structured ndarray to NdarrayMixin is deprecated and will be removed in astropy 5.2. To silence this warning and ensure future compatibility, wrap the data in a Column: Column(data).",
++                FutureWarning, stacklevel=2)
+             data = data.view(NdarrayMixin)
+             data_is_mixin = True
+ 
+diff --git a/debug_warning.py b/debug_warning.py
+new file mode 100644
+index 000000000..28ab62c7b
+--- /dev/null
++++ b/debug_warning.py
+@@ -0,0 +1,31 @@
++#!/usr/bin/env python
++"""
++Debug script to check if the FutureWarning is properly raised.
++"""
++import warnings
++import numpy as np
++from astropy.table import Table
++
++# Enable all warnings
++warnings.simplefilter('always')
++
++print("Testing FutureWarning for structured array conversion...")
++
++# Test if warnings module works
++print("Testing basic warning:")
++warnings.warn("Test warning", FutureWarning)
++
++# Create a structured array
++dtype = [('a', 'i4'), ('b', 'f4')]
++structured_data = np.array([(1, 2.0), (3, 4.0), (5, 6.0)], dtype=dtype)
++print(f"Original structured array: {structured_data}")
++
++# Add to Table - this should trigger the warning
++print("Creating table and adding structured array...")
++try:
++    t = Table()
++    t['col1'] = structured_data
++    print(f"Table column type: {type(t['col1'])}")
++    print("SUCCESS: Structured array was added to table")
++except Exception as e:
++    print(f"ERROR: {e}")
+\ No newline at end of file
+diff --git a/reproduce_issue.py b/reproduce_issue.py
+new file mode 100644
+index 000000000..9dc5a1fe2
+--- /dev/null
++++ b/reproduce_issue.py
+@@ -0,0 +1,55 @@
++#!/usr/bin/env python
++"""
++Script to reproduce the structured array auto-transform issue.
++"""
++import numpy as np
++from astropy.table import Table, Column, NdarrayMixin
++import warnings
++
++# Capture warnings
++warnings.simplefilter('always', FutureWarning)
++
++print("Testing structured array handling in Table...")
++
++# Create a structured array
++dtype = [('a', 'i4'), ('b', 'f4')]
++structured_data = np.array([(1, 2.0), (3, 4.0), (5, 6.0)], dtype=dtype)
++print(f"Original structured array: {structured_data}")
++print(f"Type: {type(structured_data)}")
++
++# Add to Table - this should trigger the auto-transform
++try:
++    t = Table()
++    t['col1'] = structured_data
++    print(f"Table column type: {type(t['col1'])}")
++    print(f"Table column data: {t['col1']}")
++    print("SUCCESS: Structured array was added to table")
++except Exception as e:
++    print(f"ERROR: {e}")
++
++# Also test with Column wrapping
++print("\\nTesting with explicit Column wrapping:")
++try:
++    t2 = Table()
++    t2['col2'] = Column(structured_data)
++    print(f"Table column type: {type(t2['col2'])}")
++    print(f"Table column data: {t2['col2']}")
++    print("SUCCESS: Column-wrapped structured array worked")
++except Exception as e:
++    print(f"ERROR: {e}")
++
++# Test with different structured array
++print("\\nTesting with different structured array:")
++dtype2 = [('x', 'f8'), ('y', 'i4'), ('z', 'u2')]
++structured_data2 = np.array([(1.1, 2, 3), (4.4, 5, 6)], dtype=dtype2)
++print(f"Original structured array: {structured_data2}")
++print(f"Type: {type(structured_data2)}")
++
++try:
++    t3 = Table()
++    t3['col3'] = structured_data2
++    print(f"Table column type: {type(t3['col3'])}")
++    print(f"Table column data: {t3['col3']}")
++    print("SUCCESS: Second structured array was added to table")
++except Exception as e:
++    print(f"ERROR: {e}")
+\ No newline at end of file
+diff --git a/test_warning.py b/test_warning.py
+new file mode 100644
+index 000000000..bcdd52b73
+--- /dev/null
++++ b/test_warning.py
+@@ -0,0 +1,26 @@
++#!/usr/bin/env python
++"""
++Test script to check if the FutureWarning is properly raised.
++"""
++import warnings
++import numpy as np
++from astropy.table import Table
++
++# Enable all warnings
++warnings.simplefilter('always', FutureWarning)
++
++print("Testing FutureWarning for structured array conversion...")
++
++# Create a structured array
++dtype = [('a', 'i4'), ('b', 'f4')]
++structured_data = np.array([(1, 2.0), (3, 4.0), (5, 6.0)], dtype=dtype)
++print(f"Original structured array: {structured_data}")
++
++# Add to Table - this should trigger the warning
++try:
++    t = Table()
++    t['col1'] = structured_data
++    print(f"Table column type: {type(t['col1'])}")
++    print("SUCCESS: Structured array was added to table")
++except Exception as e:
++    print(f"ERROR: {e}")
+\ No newline at end of file

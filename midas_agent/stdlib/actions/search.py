@@ -23,10 +23,10 @@ class SearchCodeAction(Action):
     @property
     def parameters(self) -> dict:
         return {
-            "pattern": {"type": "string", "required": True},
-            "path": {"type": "string", "required": False},
-            "include": {"type": "string", "required": False},
-            "max_results": {"type": "integer", "required": False},
+            "pattern": {"type": "string", "required": True, "description": "Regex pattern to search for in file contents."},
+            "path": {"type": "string", "required": False, "description": "Directory to search in. Defaults to cwd."},
+            "include": {"type": "string", "required": False, "description": "Glob pattern to filter files, e.g. '*.py'."},
+            "max_results": {"type": "integer", "required": False, "description": "Maximum number of matching lines to return. Defaults to 30."},
         }
 
     def _strip_cwd_prefix(self, output: str) -> str:
@@ -115,9 +115,9 @@ class FindFilesAction(Action):
     @property
     def parameters(self) -> dict:
         return {
-            "pattern": {"type": "string", "required": True},
-            "path": {"type": "string", "required": False},
-            "max_results": {"type": "integer", "required": False},
+            "pattern": {"type": "string", "required": True, "description": "Glob pattern to match file names, e.g. '*.py' or '**/*.yaml'."},
+            "path": {"type": "string", "required": False, "description": "Directory to search in. Defaults to cwd."},
+            "max_results": {"type": "integer", "required": False, "description": "Maximum number of file paths to return. Defaults to 50."},
         }
 
     def execute(self, **kwargs) -> str:

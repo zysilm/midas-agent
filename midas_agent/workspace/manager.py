@@ -221,15 +221,8 @@ class WorkspaceManager:
             free_agent_manager=free_agent_manager,
         )
 
-        soul_prompt = (
-            "You are a helpful assistant that can interact with a computer to solve tasks.\n"
-            "Your thinking should be thorough and so it's fine if it's very long.\n\n"
-            "## Delegation\n"
-            "You have a tool called `use_agent` to spawn or hire sub-agents. Use it when:\n"
-            "- A sub-task is independent and self-contained.\n"
-            "- Your context is already long — a fresh agent starts with a clean context window.\n"
-            "Do the work yourself when the next step depends on what you just learned.\n"
-        )
+        from midas_agent.prompts import SYSTEM_PROMPT
+        soul_prompt = SYSTEM_PROMPT
         if initial_config and "system_prompt" in initial_config:
             soul_prompt = initial_config["system_prompt"]
 

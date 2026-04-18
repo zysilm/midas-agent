@@ -38,10 +38,10 @@ class ReportResultAction(Action):
     @property
     def parameters(self) -> dict:
         return {
-            "result": {"type": "string", "required": True},
+            "result": {"type": "string", "required": True, "description": "Clear, actionable summary of your findings. Include file paths and line numbers."},
         }
 
     def execute(self, **kwargs) -> str:
-        result = kwargs["result"]
+        result = kwargs.get("result") or kwargs.get("summary") or str(kwargs) or "(no result provided)"
         self._report(result)
-        return f"Result reported."
+        return "Result reported."

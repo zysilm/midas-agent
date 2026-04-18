@@ -1,0 +1,123 @@
+diff --git a/astropy/timeseries/core.py b/astropy/timeseries/core.py
+index c279f35f8..0809dd34c 100644
+--- a/astropy/timeseries/core.py
++++ b/astropy/timeseries/core.py
+@@ -76,9 +76,15 @@ class BaseTimeSeries(QTable):
+ 
+             elif self.colnames[:len(required_columns)] != required_columns:
+ 
+-                raise ValueError("{} object is invalid - expected '{}' "
+-                                 "as the first column{} but found '{}'"
+-                                 .format(self.__class__.__name__, required_columns[0], plural, self.colnames[0]))
++                # Check if we have fewer columns than required
++                if len(self.colnames) < len(required_columns):
++                    missing_columns = required_columns[len(self.colnames):]
++                    raise ValueError("{} object is invalid - missing required column{}: {}"
++                                     .format(self.__class__.__name__, plural, ', '.join(missing_columns)))
++                else:
++                    raise ValueError("{} object is invalid - expected '{}' "
++                                     "as the first column{} but found '{}'"
++                                     .format(self.__class__.__name__, required_columns[0], plural, self.colnames[0]))
+ 
+             if (self._required_columns_relax
+                     and self._required_columns == self.colnames[:len(self._required_columns)]):
+diff --git a/reproduce_issue.py b/reproduce_issue.py
+new file mode 100644
+index 000000000..816b722ae
+--- /dev/null
++++ b/reproduce_issue.py
+@@ -0,0 +1,18 @@
++import numpy as np
++from astropy.time import Time
++from astropy.timeseries import TimeSeries
++
++# Reproduce the issue as described
++time = Time(np.arange(100000, 100003), format='jd')
++ts = TimeSeries(time=time, data={"flux": [99.9, 99.8, 99.7]})
++ts._required_columns = ["time", "flux"]                                   
++print("Before removing flux column:")
++print("Columns:", ts.colnames)
++print("Required columns:", ts._required_columns)
++
++try:
++    ts.remove_column("flux")
++    print("Column removed successfully")
++except Exception as e:
++    print("Error:", str(e))
++    print("Error type:", type(e).__name__)
+\ No newline at end of file
+diff --git a/test_comprehensive.py b/test_comprehensive.py
+new file mode 100644
+index 000000000..5230199e1
+--- /dev/null
++++ b/test_comprehensive.py
+@@ -0,0 +1,68 @@
++import numpy as np
++from astropy.time import Time
++from astropy.timeseries import TimeSeries
++
++print("=== Test 1: Original issue case ===")
++# Test the original issue
++time = Time(np.arange(100000, 100003), format='jd')
++ts = TimeSeries(time=time, data={"flux": [99.9, 99.8, 99.7]})
++ts._required_columns = ["time", "flux"]                                   
++print("Before removing flux column:")
++print("Columns:", ts.colnames)
++print("Required columns:", ts._required_columns)
++
++try:
++    ts.remove_column("flux")
++    print("Column removed successfully")
++except Exception as e:
++    print("Error:", str(e))
++    print("Error type:", type(e).__name__)
++
++print("\\n=== Test 2: Remove time column (should fail) ===")
++# Test removing time column
++time = Time(np.arange(100000, 100003), format='jd')
++ts = TimeSeries(time=time, data={"flux": [99.9, 99.8, 99.7]})
++ts._required_columns = ["time", "flux"]                                   
++print("Before removing time column:")
++print("Columns:", ts.colnames)
++
++try:
++    ts.remove_column("time")
++    print("Column removed successfully")
++except Exception as e:
++    print("Error:", str(e))
++    print("Error type:", type(e).__name__)
++
++print("\\n=== Test 3: Remove multiple columns ===")
++# Test removing multiple columns
++time = Time(np.arange(100000, 100005), format='jd')
++ts = TimeSeries(time=time, data={"flux": [99.9, 99.8, 99.7, 99.6, 99.5], "error": [0.1, 0.2, 0.3, 0.4, 0.5]})
++ts._required_columns = ["time", "flux", "error"]                                   
++print("Before removing columns:")
++print("Columns:", ts.colnames)
++print("Required columns:", ts._required_columns)
++
++try:
++    ts.remove_column("flux")
++    print("Column removed successfully")
++    print("Columns after removal:", ts.colnames)
++except Exception as e:
++    print("Error:", str(e))
++    print("Error type:", type(e).__name__)
++
++print("\\n=== Test 4: No required columns (should work) ===")
++# Test with no required columns
++time = Time(np.arange(100000, 100003), format='jd')
++ts = TimeSeries(time=time, data={"flux": [99.9, 99.8, 99.7]})
++ts._required_columns = None                                   
++print("Before removing flux column:")
++print("Columns:", ts.colnames)
++print("Required columns:", ts._required_columns)
++
++try:
++    ts.remove_column("flux")
++    print("Column removed successfully")
++    print("Columns after removal:", ts.colnames)
++except Exception as e:
++    print("Error:", str(e))
++    print("Error type:", type(e).__name__)
+\ No newline at end of file

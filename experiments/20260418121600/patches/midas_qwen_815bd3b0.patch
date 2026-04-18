@@ -1,0 +1,199 @@
+diff --git a/astropy/io/ascii/rst.py b/astropy/io/ascii/rst.py
+index abdeba8ef..78e42b7d6 100644
+--- a/astropy/io/ascii/rst.py
++++ b/astropy/io/ascii/rst.py
+@@ -57,8 +57,8 @@ class RST(FixedWidth):
+     data_class = SimpleRSTData
+     header_class = SimpleRSTHeader
+ 
+-    def __init__(self):
+-        super().__init__(delimiter_pad=None, bookend=False)
++    def __init__(self, header_rows=None):
++        super().__init__(delimiter_pad=None, bookend=False, header_rows=header_rows)
+ 
+     def write(self, lines):
+         lines = super().write(lines)
+diff --git a/comprehensive_test.py b/comprehensive_test.py
+new file mode 100644
+index 000000000..13ea834b8
+--- /dev/null
++++ b/comprehensive_test.py
+@@ -0,0 +1,58 @@
++#!/usr/bin/env python
++"""Comprehensive test for the RST header_rows fix."""
++
++from astropy.table import QTable
++import astropy.units as u
++import sys
++import io
++
++# Create test table
++tbl = QTable({'wave': [350,950]*u.nm, 'response': [0.7, 1.2]*u.count})
++
++print("=== Test 1: RST with default header_rows (should work like before) ===")
++try:
++    output = io.StringIO()
++    tbl.write(output, format="ascii.rst")
++    result = output.getvalue()
++    print("SUCCESS:")
++    print(result)
++except Exception as e:
++    print(f"ERROR: {e}")
++    import traceback
++    traceback.print_exc()
++
++print("\\n=== Test 2: RST with header_rows=['name', 'unit'] ===")
++try:
++    output = io.StringIO()
++    tbl.write(output, format="ascii.rst", header_rows=["name", "unit"])
++    result = output.getvalue()
++    print("SUCCESS:")
++    print(result)
++except Exception as e:
++    print(f"ERROR: {e}")
++    import traceback
++    traceback.print_exc()
++
++print("\\n=== Test 3: RST with header_rows=['name'] (should work) ===")
++try:
++    output = io.StringIO()
++    tbl.write(output, format="ascii.rst", header_rows=["name"])
++    result = output.getvalue()
++    print("SUCCESS:")
++    print(result)
++except Exception as e:
++    print(f"ERROR: {e}")
++    import traceback
++    traceback.print_exc()
++
++print("\\n=== Test 4: RST with empty header_rows (should work) ===")
++try:
++    output = io.StringIO()
++    tbl.write(output, format="ascii.rst", header_rows=[])
++    result = output.getvalue()
++    print("SUCCESS:")
++    print(result)
++except Exception as e:
++    print(f"ERROR: {e}")
++    import traceback
++    traceback.print_exc()
+\ No newline at end of file
+diff --git a/original_issue_test.py b/original_issue_test.py
+new file mode 100644
+index 000000000..2554e47ae
+--- /dev/null
++++ b/original_issue_test.py
+@@ -0,0 +1,26 @@
++#!/usr/bin/env python
++"""Test the exact examples from the original issue."""
++
++from astropy.table import QTable
++import astropy.units as u
++import sys
++import io
++
++# Create test table exactly as in the issue
++tbl = QTable({'wave': [350,950]*u.nm, 'response': [0.7, 1.2]*u.count})
++
++print("=== Original fixed_width example (should work) ===")
++try:
++    tbl.write(sys.stdout, format="ascii.fixed_width", header_rows=["name", "unit"])
++    print("\\nSUCCESS: fixed_width with header_rows works")
++except Exception as e:
++    print(f"ERROR: {e}")
++
++print("\\n=== Original RST example (should now work) ===")
++try:
++    tbl.write(sys.stdout, format="ascii.rst", header_rows=["name", "unit"])
++    print("\\nSUCCESS: RST with header_rows now works!")
++except Exception as e:
++    print(f"ERROR: {e}")
++    import traceback
++    traceback.print_exc()
+\ No newline at end of file
+diff --git a/reproduce_issue.py b/reproduce_issue.py
+new file mode 100644
+index 000000000..46510c5de
+--- /dev/null
++++ b/reproduce_issue.py
+@@ -0,0 +1,25 @@
++#!/usr/bin/env python
++"""Script to reproduce the RST header_rows issue."""
++
++from astropy.table import QTable
++import astropy.units as u
++import sys
++
++# Create test table
++tbl = QTable({'wave': [350,950]*u.nm, 'response': [0.7, 1.2]*u.count})
++
++print("Testing fixed_width with header_rows (should work):")
++try:
++    tbl.write(sys.stdout, format="ascii.fixed_width", header_rows=["name", "unit"])
++    print("SUCCESS: fixed_width with header_rows works")
++except Exception as e:
++    print(f"ERROR: {e}")
++
++print("\\nTesting RST with header_rows (should fail):")
++try:
++    tbl.write(sys.stdout, format="ascii.rst", header_rows=["name", "unit"])
++    print("SUCCESS: RST with header_rows works")
++except Exception as e:
++    print(f"ERROR: {e}")
++    import traceback
++    traceback.print_exc()
+\ No newline at end of file
+diff --git a/test_rst_header_rows.py b/test_rst_header_rows.py
+new file mode 100644
+index 000000000..ec7d6d944
+--- /dev/null
++++ b/test_rst_header_rows.py
+@@ -0,0 +1,47 @@
++#!/usr/bin/env python
++"""Test script to verify RST header_rows functionality."""
++
++import io
++from astropy.table import QTable
++import astropy.units as u
++
++
++def test_rst_header_rows():
++    """Test that RST format supports header_rows parameter."""
++    # Create test table
++    tbl = QTable({'wave': [350, 950]*u.nm, 'response': [0.7, 1.2]*u.count})
++    
++    # Test 1: Default behavior (should work as before)
++    output = io.StringIO()
++    tbl.write(output, format="ascii.rst")
++    result = output.getvalue()
++    assert "wave" in result
++    assert "response" in result
++    assert "350.0" in result
++    assert "950.0" in result
++    
++    # Test 2: With header_rows parameter
++    output = io.StringIO()
++    tbl.write(output, format="ascii.rst", header_rows=["name", "unit"])
++    result = output.getvalue()
++    assert "wave" in result
++    assert "response" in result
++    assert "nm" in result  # unit should appear
++    assert "ct" in result  # unit should appear
++    assert "350.0" in result
++    assert "950.0" in result
++    
++    # Test 3: With just name header row
++    output = io.StringIO()
++    tbl.write(output, format="ascii.rst", header_rows=["name"])
++    result = output.getvalue()
++    assert "wave" in result
++    assert "response" in result
++    assert "350.0" in result
++    assert "950.0" in result
++    
++    print("All RST header_rows tests passed!")
++
++
++if __name__ == "__main__":
++    test_rst_header_rows()
+\ No newline at end of file

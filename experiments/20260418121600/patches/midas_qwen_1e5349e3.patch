@@ -1,0 +1,167 @@
+diff --git a/astropy/timeseries/core.py b/astropy/timeseries/core.py
+index c279f35f8..2c9a20759 100644
+--- a/astropy/timeseries/core.py
++++ b/astropy/timeseries/core.py
+@@ -76,9 +76,8 @@ class BaseTimeSeries(QTable):
+ 
+             elif self.colnames[:len(required_columns)] != required_columns:
+ 
+-                raise ValueError("{} object is invalid - expected '{}' "
+-                                 "as the first column{} but found '{}'"
+-                                 .format(self.__class__.__name__, required_columns[0], plural, self.colnames[0]))
++                raise ValueError("{} object is invalid - expected {} as the first column{} but found {}"
++                                 .format(self.__class__.__name__, required_columns, plural, self.colnames[:len(required_columns)]))
+ 
+             if (self._required_columns_relax
+                     and self._required_columns == self.colnames[:len(self._required_columns)]):
+diff --git a/debug_test.py b/debug_test.py
+new file mode 100644
+index 000000000..75a0e6459
+--- /dev/null
++++ b/debug_test.py
+@@ -0,0 +1,23 @@
++import numpy as np
++from astropy.time import Time
++from astropy.timeseries import TimeSeries
++
++# Test what happens step by step
++time=Time(np.arange(100000, 100003), format='jd')
++ts = TimeSeries(time=time, data = {"flux": [99.9, 99.8, 99.7]})
++print("Initial columns:", ts.colnames)
++print("Required columns:", ts._required_columns)
++
++ts._required_columns = ["time", "flux"]
++print("After setting required columns:", ts._required_columns)
++
++# Remove flux
++ts.remove_column("flux")
++print("After removing flux:", ts.colnames)
++
++# Try to remove time
++try:
++    ts.remove_column("time")
++    print("After removing time:", ts.colnames)
++except Exception as e:
++    print("Error when removing time:", e)
+\ No newline at end of file
+diff --git a/final_test.py b/final_test.py
+new file mode 100644
+index 000000000..59f38fc7a
+--- /dev/null
++++ b/final_test.py
+@@ -0,0 +1,43 @@
++import numpy as np
++from astropy.time import Time
++from astropy.timeseries import TimeSeries
++
++print("=== Final test of the fix ===")
++
++# Reproduce the exact example from the issue
++print("1. Reproducing the exact issue example:")
++try:
++    time=Time(np.arange(100000, 100003), format='jd')
++    ts = TimeSeries(time=time, data = {"flux": [99.9, 99.8, 99.7]})
++    ts._required_columns = ["time", "flux"]                                   
++    ts.remove_column("flux")
++except ValueError as e:
++    print(f"Error message: {e}")
++    print("✓ Error message is now clear and informative!")
++
++print("\\n2. Testing that normal operations still work:")
++try:
++    time=Time(np.arange(100000, 100003), format='jd')
++    ts = TimeSeries(time=time, data = {"flux": [99.9, 99.8, 99.7]})
++    # This should work fine
++    ts.add_column([1, 2, 3], name='extra')
++    print("✓ Adding columns works")
++    
++    # This should also work
++    ts.remove_column('extra') 
++    print("✓ Removing columns works")
++    
++except Exception as e:
++    print(f"Unexpected error: {e}")
++
++print("\\n3. Testing with more required columns:")
++try:
++    time=Time(np.arange(100000, 100003), format='jd')
++    ts = TimeSeries(time=time, data = {"flux": [99.9, 99.8, 99.7], "magnitude": [5.0, 5.1, 5.2]})
++    ts._required_columns = ["time", "flux", "magnitude"]
++    ts.remove_column("flux")
++except ValueError as e:
++    print(f"Error message: {e}")
++    print("✓ Error message is clear about missing 'flux' column!")
++
++print("\\n=== All tests completed successfully ===")
+\ No newline at end of file
+diff --git a/reproduce_issue.py b/reproduce_issue.py
+new file mode 100644
+index 000000000..a1f7db3b7
+--- /dev/null
++++ b/reproduce_issue.py
+@@ -0,0 +1,9 @@
++import numpy as np
++from astropy.time import Time
++from astropy.timeseries import TimeSeries
++
++# Create a TimeSeries with required columns
++time=Time(np.arange(100000, 100003), format='jd')
++ts = TimeSeries(time=time, data = {"flux": [99.9, 99.8, 99.7]})
++ts._required_columns = ["time", "flux"]                                   
++ts.remove_column("flux")
+\ No newline at end of file
+diff --git a/test_edge_cases.py b/test_edge_cases.py
+new file mode 100644
+index 000000000..29c12ce36
+--- /dev/null
++++ b/test_edge_cases.py
+@@ -0,0 +1,48 @@
++import numpy as np
++from astropy.time import Time
++from astropy.timeseries import TimeSeries
++
++print("Testing edge cases for the fix...")
++
++# Test 1: Original issue case
++print("\\n1. Testing original issue case:")
++try:
++    time=Time(np.arange(100000, 100003), format='jd')
++    ts = TimeSeries(time=time, data = {"flux": [99.9, 99.8, 99.7]})
++    ts._required_columns = ["time", "flux"]                                   
++    ts.remove_column("flux")
++except ValueError as e:
++    print(f"Error: {e}")
++
++# Test 2: Remove first column
++print("\\n2. Testing removal of first required column:")
++try:
++    time=Time(np.arange(100000, 100003), format='jd')
++    ts = TimeSeries(time=time, data = {"flux": [99.9, 99.8, 99.7]})
++    ts._required_columns = ["time", "flux"]                                   
++    ts.remove_column("time")
++except ValueError as e:
++    print(f"Error: {e}")
++
++# Test 3: Empty time series
++print("\\n3. Testing empty time series:")
++try:
++    time=Time(np.arange(100000, 100003), format='jd')
++    ts = TimeSeries(time=time, data = {"flux": [99.9, 99.8, 99.7]})
++    ts._required_columns = ["time", "flux"]                                   
++    ts.remove_column("flux")
++    ts.remove_column("time")
++except ValueError as e:
++    print(f"Error: {e}")
++
++# Test 4: Multiple required columns
++print("\\n4. Testing with more required columns:")
++try:
++    time=Time(np.arange(100000, 100003), format='jd')
++    ts = TimeSeries(time=time, data = {"flux": [99.9, 99.8, 99.7], "magnitude": [5.0, 5.1, 5.2]})
++    ts._required_columns = ["time", "flux", "magnitude"]                                   
++    ts.remove_column("flux")
++except ValueError as e:
++    print(f"Error: {e}")
++
++print("\\nAll tests completed.")
+\ No newline at end of file

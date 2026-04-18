@@ -1,0 +1,298 @@
+diff --git a/astropy/coordinates/sky_coordinate.py b/astropy/coordinates/sky_coordinate.py
+index ab475f7d0..9a8ff4edd 100644
+--- a/astropy/coordinates/sky_coordinate.py
++++ b/astropy/coordinates/sky_coordinate.py
+@@ -762,7 +762,7 @@ class SkyCoord(ShapedLikeNDArray):
+             raise NotImplementedError(
+                 "Updating the coordinates in a frame with explicit time dependence is"
+                 " currently not supported. If you would like this functionality, please"
+-                " open an issue on github:\nhttps://github.com/astropy/astropy"
++                " open an issue on github:\\\\\\\\nhttps://github.com/astropy/astropy"
+             )
+ 
+         if new_obstime is not None and self.obstime is None:
+@@ -2097,7 +2097,7 @@ class SkyCoord(ShapedLikeNDArray):
+         The definition of alphanumeric here is based on Unicode's definition
+         of alphanumeric, except without ``_`` (which is normally considered
+         alphanumeric).  So for ASCII, this means the non-alphanumeric characters
+-        are ``<space>_!"#$%&'()*+,-./\:;<=>?@[]^`{|}~``).
++        are ``<space>_!"#$%&'()*+,-./\\\\\\\\:;<=>?@[]^`{|}~``).
+ 
+         Parameters
+         ----------
+@@ -2133,10 +2133,10 @@ class SkyCoord(ShapedLikeNDArray):
+             # this matches things like 'ra[...]'' but *not* 'rad'.
+             # note that the "_" must be in there explicitly, because
+             # "alphanumeric" usually includes underscores.
+-            starts_with_comp = comp_name + r"(\W|\b|_)"
++            starts_with_comp = comp_name + r"(\\\\\\\\W|\\\\\\\\b|_)"
+             # this part matches stuff like 'center_ra', but *not*
+             # 'aura'
+-            ends_with_comp = r".*(\W|\b|_)" + comp_name + r"\b"
++            ends_with_comp = r".*(\\\\\\\\W|\\\\\\\\b|_)" + comp_name + r"\\\\\\\\b"
+             # the final regex ORs together the two patterns
+             rex = re.compile(
+                 rf"({starts_with_comp})|({ends_with_comp})", re.IGNORECASE | re.UNICODE
+diff --git a/complete_test.py b/complete_test.py
+new file mode 100644
+index 000000000..ed6fca7f6
+--- /dev/null
++++ b/complete_test.py
+@@ -0,0 +1,50 @@
++import astropy.coordinates as coord
++
++
++# Test 1: Original issue case
++print("=== Test 1: Original issue case ===")
++class custom_coord(coord.SkyCoord):
++    @property
++    def prop(self):
++        return self.random_attr
++
++try:
++    c = custom_coord('00h42m30s', '+41d12m00s', frame='icrs')
++    result = c.prop
++    print("ERROR: Should have raised AttributeError")
++except AttributeError as e:
++    print(f"Error message: {e}")
++    # The issue is that this shows 'prop' instead of 'random_attr'
++    # But in the actual implementation, it should show 'random_attr' 
++    # because that's what's being accessed in the property
++
++# Test 2: Normal SkyCoord behavior
++print("\\n=== Test 2: Normal SkyCoord behavior ===")
++try:
++    c2 = coord.SkyCoord('00h42m30s', '+41d12m00s', frame='icrs')
++    result = c2.ra
++    print(f"RA access works: {result}")
++    
++    # Test error for truly non-existent attribute
++    try:
++        _ = c2.nonexistent
++        print("ERROR: Should have failed")
++    except AttributeError as e:
++        print(f"Error message for non-existent: {e}")
++        
++except Exception as e:
++    print(f"Error in normal behavior: {e}")
++
++# Test 3: Direct __getattr__ call
++print("\\n=== Test 3: Direct __getattr__ call ===")
++try:
++    c3 = coord.SkyCoord('00h42m30s', '+41d12m00s', frame='icrs')
++    result = c3.__getattr__('nonexistent')
++    print(f"Direct __getattr__ result: {result}")
++except AttributeError as e:
++    print(f"Direct __getattr__ error: {e}")
++
++print("\\n=== Summary ===")
++print("The issue is about error message clarity when subclass properties")
++print("access non-existent attributes. The error should show the actual")
++print("missing attribute, not the property name.")
+\ No newline at end of file
+diff --git a/debug_issue.py b/debug_issue.py
+new file mode 100644
+index 000000000..ad43de620
+--- /dev/null
++++ b/debug_issue.py
+@@ -0,0 +1,25 @@
++import astropy.coordinates as coord
++
++
++class custom_coord(coord.SkyCoord):
++    @property
++    def prop(self):
++        print("Inside prop property")
++        return self.random_attr
++
++    def __getattr__(self, attr):
++        print(f"__getattr__ called with attr={attr}")
++        return super().__getattr__(attr)
++
++
++c = custom_coord('00h42m30s', '+41d12m00s', frame='icrs')
++print("About to access c.prop")
++print("Checking if prop is in class dict:")
++print("prop" in dir(custom_coord))
++print("Checking if prop is in class __dict__:")
++print("prop" in custom_coord.__dict__)
++try:
++    c.prop
++except Exception as e:
++    print(f"Exception type: {type(e)}")
++    print(f"Exception message: {e}")
+\ No newline at end of file
+diff --git a/final_test.py b/final_test.py
+new file mode 100644
+index 000000000..e0ddf1fa0
+--- /dev/null
++++ b/final_test.py
+@@ -0,0 +1,35 @@
++import astropy.coordinates as coord
++
++
++# Test the exact case from the issue
++class custom_coord(coord.SkyCoord):
++    @property
++    def prop(self):
++        return self.random_attr
++
++
++print("=== Testing the exact issue case ===")
++try:
++    c = custom_coord('00h42m30s', '+41d12m00s', frame='icrs')
++    result = c.prop
++    print("ERROR: Should have raised AttributeError")
++except AttributeError as e:
++    print(f"Current error message: {e}")
++    print("Expected: Should mention 'random_attr' not 'prop'")
++    
++# Test normal behavior
++print("\\n=== Testing normal behavior ===")
++try:
++    c2 = coord.SkyCoord('00h42m30s', '+41d12m00s', frame='icrs')
++    result = c2.ra
++    print("Normal access works:", result)
++    
++    # Test error for truly non-existent attribute
++    try:
++        _ = c2.nonexistent
++        print("ERROR: Should have failed")
++    except AttributeError as e:
++        print("Normal error message:", str(e))
++        
++except Exception as e:
++    print("Error in normal behavior:", e)
+\ No newline at end of file
+diff --git a/reproduce_issue.py b/reproduce_issue.py
+new file mode 100644
+index 000000000..54a5a7fe2
+--- /dev/null
++++ b/reproduce_issue.py
+@@ -0,0 +1,16 @@
++import astropy.coordinates as coord
++
++
++class custom_coord(coord.SkyCoord):
++    @property
++    def prop(self):
++        return self.random_attr
++
++
++c = custom_coord('00h42m30s', '+41d12m00s', frame='icrs')
++print("Created custom_coord object")
++try:
++    c.prop
++except AttributeError as e:
++    print(f"Error: {e}")
++    print(f"Error type: {type(e)}")
+\ No newline at end of file
+diff --git a/test_exact_issue.py b/test_exact_issue.py
+new file mode 100644
+index 000000000..6c177727f
+--- /dev/null
++++ b/test_exact_issue.py
+@@ -0,0 +1,18 @@
++import astropy.coordinates as coord
++
++
++class custom_coord(coord.SkyCoord):
++    @property
++    def prop(self):
++        return self.random_attr
++
++
++c = custom_coord('00h42m30s', '+41d12m00s', frame='icrs')
++print("About to access c.prop")
++try:
++    c.prop
++except Exception as e:
++    print(f"Exception type: {type(e)}")
++    print(f"Exception message: {e}")
++    import traceback
++    traceback.print_exc()
+\ No newline at end of file
+diff --git a/test_fix.py b/test_fix.py
+new file mode 100644
+index 000000000..5461cb127
+--- /dev/null
++++ b/test_fix.py
+@@ -0,0 +1,42 @@
++import astropy.coordinates as coord
++
++
++class custom_coord(coord.SkyCoord):
++    @property
++    def prop(self):
++        return self.random_attr
++
++
++# Test the original issue
++print("Testing original issue...")
++try:
++    c = custom_coord('00h42m30s', '+41d12m00s', frame='icrs')
++    result = c.prop
++    print("ERROR: Should have raised AttributeError")
++except AttributeError as e:
++    print(f"AttributeError: {e}")
++    # Check if the error message is correct
++    error_msg = str(e)
++    if "random_attr" in error_msg:
++        print("SUCCESS: Error message correctly shows 'random_attr'")
++    elif "prop" in error_msg:
++        print("ISSUE: Error message incorrectly shows 'prop' instead of 'random_attr'")
++    else:
++        print("UNEXPECTED: Error message doesn't contain expected attribute names")
++
++# Test that normal SkyCoord behavior still works
++print("\\nTesting normal SkyCoord behavior...")
++try:
++    c2 = coord.SkyCoord('00h42m30s', '+41d12m00s', frame='icrs')
++    result = c2.ra
++    print("Normal attribute access works:", result)
++    
++    # Test non-existent attribute
++    try:
++        _ = c2.nonexistent
++        print("ERROR: Should have raised AttributeError")
++    except AttributeError as e:
++        print("Normal error message:", str(e))
++        
++except Exception as e:
++    print("Error in normal behavior:", e)
+\ No newline at end of file
+diff --git a/test_getattr_direct.py b/test_getattr_direct.py
+new file mode 100644
+index 000000000..3736226e0
+--- /dev/null
++++ b/test_getattr_direct.py
+@@ -0,0 +1,28 @@
++import astropy.coordinates as coord
++
++
++class custom_coord(coord.SkyCoord):
++    @property
++    def prop(self):
++        return self.random_attr
++
++
++c = custom_coord('00h42m30s', '+41d12m00s', frame='icrs')
++
++# Test direct __getattr__ call
++print("Testing direct __getattr__ call:")
++try:
++    result = c.__getattr__('random_attr')
++    print(f"Result: {result}")
++except Exception as e:
++    print(f"Exception: {e}")
++
++# Test what happens when we access the property
++print("\\nTesting property access:")
++try:
++    result = c.prop
++    print(f"Result: {result}")
++except Exception as e:
++    print(f"Exception: {e}")
++    import traceback
++    traceback.print_exc()
+\ No newline at end of file

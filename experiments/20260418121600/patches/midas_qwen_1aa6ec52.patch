@@ -1,0 +1,292 @@
+diff --git a/astropy/modeling/separable.py b/astropy/modeling/separable.py
+index a308e2729..30a4734a1 100644
+--- a/astropy/modeling/separable.py
++++ b/astropy/modeling/separable.py
+@@ -47,7 +47,7 @@ def is_separable(transform):
+         array([ True,  True]...)
+     >>> is_separable(Shift(1) & Shift(2) | Rotation2D(2))
+         array([False, False]...)
+-    >>> is_separable(Shift(1) & Shift(2) | Mapping([0, 1, 0, 1]) | \
++    >>> is_separable(Shift(1) & Shift(2) | Mapping([0, 1, 0, 1]) | \\\\\\\\\\\\\\\\
+         Polynomial2D(1) & Polynomial2D(2))
+         array([False, False]...)
+     >>> is_separable(Shift(1) & Shift(2) | Mapping([0, 1, 0, 1]))
+@@ -87,7 +87,7 @@ def separability_matrix(transform):
+         array([[ True, False], [False,  True]]...)
+     >>> separability_matrix(Shift(1) & Shift(2) | Rotation2D(2))
+         array([[ True,  True], [ True,  True]]...)
+-    >>> separability_matrix(Shift(1) & Shift(2) | Mapping([0, 1, 0, 1]) | \
++    >>> separability_matrix(Shift(1) & Shift(2) | Mapping([0, 1, 0, 1]) | \\\\\\\\\\\\\\\\
+         Polynomial2D(1) & Polynomial2D(2))
+         array([[ True,  True], [ True,  True]]...)
+     >>> separability_matrix(Shift(1) & Shift(2) | Mapping([0, 1, 0, 1]))
+@@ -199,7 +199,23 @@ def _coord_matrix(model, pos, noutp):
+         else:
+             mat[-model.n_outputs:, -model.n_inputs:] = m
+         return mat
+-    if not model.separable:
++    # Handle CompoundModel specially to avoid NotImplementedError on separable property
++    if isinstance(model, CompoundModel):
++        # For CompoundModel, we can't determine separability, so treat as non-separable
++        # This is a fallback that should work for CompoundModel
++        mat = np.zeros((noutp, model.n_inputs))
++        if pos == 'left':
++            mat[:model.n_outputs, : model.n_inputs] = 1
++        else:
++            mat[-model.n_outputs:, -model.n_inputs:] = 1
++        return mat
++    try:
++        separable = model.separable
++    except NotImplementedError:
++        # For models that don't define separable property (like CompoundModel)
++        # treat as non-separable
++        separable = False
++    if not separable:
+         # this does not work for more than 2 coordinates
+         mat = np.zeros((noutp, model.n_inputs))
+         if pos == 'left':
+@@ -242,7 +258,7 @@ def _cstack(left, right):
+         cright = _coord_matrix(right, 'right', noutp)
+     else:
+         cright = np.zeros((noutp, right.shape[1]))
+-        cright[-right.shape[0]:, -right.shape[1]:] = 1
++        cright[-right.shape[0]:, -right.shape[1]:] = right
+ 
+     return np.hstack([cleft, cright])
+ 
+diff --git a/debug_separability.py b/debug_separability.py
+new file mode 100644
+index 000000000..1d30649a0
+--- /dev/null
++++ b/debug_separability.py
+@@ -0,0 +1,75 @@
++#!/usr/bin/env python
++"""
++Debug script for separability_matrix issue
++"""
++
++import numpy as np
++from astropy.modeling import models as m
++from astropy.modeling.separable import _separable, _cstack, _coord_matrix, separability_matrix
++
++print("=== Detailed Debug of Separability Issue ===")
++
++# Create the models
++cm = m.Linear1D(10) & m.Linear1D(5)
++complex_model = m.Pix2Sky_TAN() & m.Linear1D(10) & m.Linear1D(5)
++nested_model = m.Pix2Sky_TAN() & cm
++
++print("cm = Linear1D(10) & Linear1D(5)")
++print("complex_model = Pix2Sky_TAN() & Linear1D(10) & Linear1D(5)")
++print("nested_model = Pix2Sky_TAN() & cm")
++
++print("\\n=== Testing separability_matrix directly ===")
++print("separability_matrix(complex_model):")
++result_complex = separability_matrix(complex_model)
++print(result_complex)
++
++print("\\nseparability_matrix(nested_model):")
++result_nested = separability_matrix(nested_model)
++print(result_nested)
++
++print("\\n=== Expected result ===")
++print("Should be same as complex_model:")
++print(result_complex)
++
++print("\\n=== Manual tracing of _separable ===")
++print("nested_model.left:", type(nested_model.left))
++print("nested_model.right:", type(nested_model.right))
++
++# Get separability of components
++sepleft = _separable(nested_model.left)
++sepright = _separable(nested_model.right)
++
++print("\\nsepleft (left component):")
++print(sepleft)
++print("sepright (right component):")
++print(sepright)
++
++print("\\n=== Testing _cstack directly ===")
++try:
++    cstack_result = _cstack(sepleft, sepright)
++    print("_cstack(sepleft, sepright):")
++    print(cstack_result)
++except Exception as e:
++    print("Error in _cstack:", e)
++    import traceback
++    traceback.print_exc()
++
++print("\\n=== Testing _coord_matrix on right component ===")
++try:
++    right_coord = _coord_matrix(nested_model.right, 'right', nested_model.n_outputs)
++    print("_coord_matrix(nested_model.right, 'right', nested_model.n_outputs):")
++    print(right_coord)
++except Exception as e:
++    print("Error in _coord_matrix:", e)
++    import traceback
++    traceback.print_exc()
++
++print("\\n=== Testing _coord_matrix on left component ===")
++try:
++    left_coord = _coord_matrix(nested_model.left, 'left', nested_model.n_outputs)
++    print("_coord_matrix(nested_model.left, 'left', nested_model.n_outputs):")
++    print(left_coord)
++except Exception as e:
++    print("Error in _coord_matrix:", e)
++    import traceback
++    traceback.print_exc()
+\ No newline at end of file
+diff --git a/reproduce_issue.py b/reproduce_issue.py
+new file mode 100644
+index 000000000..a78b3ea6d
+--- /dev/null
++++ b/reproduce_issue.py
+@@ -0,0 +1,56 @@
++#!/usr/bin/env python
++"""
++Reproduction script for separability_matrix issue with nested CompoundModels
++"""
++
++from astropy.modeling import models as m
++from astropy.modeling.separable import separability_matrix
++
++print("Testing separability_matrix with nested CompoundModels")
++print("=" * 60)
++
++# Create the basic models
++cm = m.Linear1D(10) & m.Linear1D(5)
++print("cm = m.Linear1D(10) & m.Linear1D(5)")
++print("separability_matrix(cm):")
++result1 = separability_matrix(cm)
++print(result1)
++print()
++
++# More complex model
++print("m.Pix2Sky_TAN() & m.Linear1D(10) & m.Linear1D(5)")
++complex_model = m.Pix2Sky_TAN() & m.Linear1D(10) & m.Linear1D(5)
++print("separability_matrix(complex_model):")
++result2 = separability_matrix(complex_model)
++print(result2)
++print()
++
++# Nested model - this is where the issue occurs
++print("m.Pix2Sky_TAN() & cm")
++nested_model = m.Pix2Sky_TAN() & cm
++print("separability_matrix(nested_model):")
++result3 = separability_matrix(nested_model)
++print(result3)
++print()
++
++# Let's also check the shapes
++print("Shapes:")
++print(f"cm.n_inputs: {cm.n_inputs}, cm.n_outputs: {cm.n_outputs}")
++print(f"complex_model.n_inputs: {complex_model.n_inputs}, complex_model.n_outputs: {complex_model.n_outputs}")
++print(f"nested_model.n_inputs: {nested_model.n_inputs}, nested_model.n_outputs: {nested_model.n_outputs}")
++print()
++
++# Let's also test what the expected result should be
++print("Expected behavior analysis:")
++print("The nested model should behave the same as the complex_model")
++print("Both should have separable inputs/outputs in the same pattern")
++print("Expected result should be similar to complex_model result:")
++print(result2)
++print()
++
++# Let's also check the individual components
++print("Individual components:")
++print("m.Pix2Sky_TAN().n_inputs:", m.Pix2Sky_TAN().n_inputs)
++print("m.Pix2Sky_TAN().n_outputs:", m.Pix2Sky_TAN().n_outputs)
++print("cm.n_inputs:", cm.n_inputs)
++print("cm.n_outputs:", cm.n_outputs)
+\ No newline at end of file
+diff --git a/test_fix_verification.py b/test_fix_verification.py
+new file mode 100644
+index 000000000..985f5dbeb
+--- /dev/null
++++ b/test_fix_verification.py
+@@ -0,0 +1,84 @@
++#!/usr/bin/env python
++"""
++Comprehensive test to verify the fix for separability_matrix issue with nested CompoundModels
++"""
++
++from astropy.modeling import models as m
++from astropy.modeling.separable import separability_matrix
++
++def test_nested_compound_models():
++    """Test the specific issue reported in the bug"""
++    
++    # Create the basic models
++    cm = m.Linear1D(10) & m.Linear1D(5)
++    
++    # This should work correctly (and did before)
++    result1 = separability_matrix(cm)
++    print("cm = m.Linear1D(10) & m.Linear1D(5)")
++    print("separability_matrix(cm):")
++    print(result1)
++    print()
++    
++    # More complex model (this should work correctly)
++    complex_model = m.Pix2Sky_TAN() & m.Linear1D(10) & m.Linear1D(5)
++    result2 = separability_matrix(complex_model)
++    print("m.Pix2Sky_TAN() & m.Linear1D(10) & m.Linear1D(5)")
++    print("separability_matrix(complex_model):")
++    print(result2)
++    print()
++    
++    # The problematic nested model - this is what we're fixing
++    nested_model = m.Pix2Sky_TAN() & cm
++    result3 = separability_matrix(nested_model)
++    print("m.Pix2Sky_TAN() & cm")
++    print("separability_matrix(nested_model):")
++    print(result3)
++    print()
++    
++    # Verify they are the same
++    print("Are complex_model and nested_model results identical?")
++    are_equal = (result2 == result3).all()
++    print(are_equal)
++    
++    if are_equal:
++        print("✓ SUCCESS: Nested CompoundModel now works correctly!")
++    else:
++        print("✗ FAILURE: Results still differ")
++        print("Expected (complex_model):")
++        print(result2)
++        print("Actual (nested_model):")
++        print(result3)
++        
++    return are_equal
++
++def test_additional_cases():
++    """Test additional edge cases"""
++    
++    print("\\n=== Additional Test Cases ===")
++    
++    # Test with different compound models
++    model1 = m.Linear1D(2) & m.Shift(1) & m.Scale(3)
++    result1 = separability_matrix(model1)
++    print("Linear1D(2) & Shift(1) & Scale(3):")
++    print(result1)
++    
++    # Test nested version
++    nested1 = m.Linear1D(2) & (m.Shift(1) & m.Scale(3))
++    result2 = separability_matrix(nested1)
++    print("Linear1D(2) & (Shift(1) & Scale(3)):")
++    print(result2)
++    
++    print("Are these results identical?")
++    print((result1 == result2).all())
++    
++    return True
++
++if __name__ == "__main__":
++    success = test_nested_compound_models()
++    test_additional_cases()
++    
++    if success:
++        print("\\n🎉 All tests passed! The fix is working correctly.")
++    else:
++        print("\\n❌ Some tests failed.")
++        exit(1)
+\ No newline at end of file

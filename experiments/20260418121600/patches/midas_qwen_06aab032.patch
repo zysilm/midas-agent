@@ -1,0 +1,209 @@
+diff --git a/astropy/modeling/separable.py b/astropy/modeling/separable.py
+index a308e2729..40876a2d6 100644
+--- a/astropy/modeling/separable.py
++++ b/astropy/modeling/separable.py
+@@ -47,7 +47,7 @@ def is_separable(transform):
+         array([ True,  True]...)
+     >>> is_separable(Shift(1) & Shift(2) | Rotation2D(2))
+         array([False, False]...)
+-    >>> is_separable(Shift(1) & Shift(2) | Mapping([0, 1, 0, 1]) | \
++    >>> is_separable(Shift(1) & Shift(2) | Mapping([0, 1, 0, 1]) | \\
+         Polynomial2D(1) & Polynomial2D(2))
+         array([False, False]...)
+     >>> is_separable(Shift(1) & Shift(2) | Mapping([0, 1, 0, 1]))
+@@ -87,7 +87,7 @@ def separability_matrix(transform):
+         array([[ True, False], [False,  True]]...)
+     >>> separability_matrix(Shift(1) & Shift(2) | Rotation2D(2))
+         array([[ True,  True], [ True,  True]]...)
+-    >>> separability_matrix(Shift(1) & Shift(2) | Mapping([0, 1, 0, 1]) | \
++    >>> separability_matrix(Shift(1) & Shift(2) | Mapping([0, 1, 0, 1]) | \\
+         Polynomial2D(1) & Polynomial2D(2))
+         array([[ True,  True], [ True,  True]]...)
+     >>> separability_matrix(Shift(1) & Shift(2) | Mapping([0, 1, 0, 1]))
+@@ -242,7 +242,7 @@ def _cstack(left, right):
+         cright = _coord_matrix(right, 'right', noutp)
+     else:
+         cright = np.zeros((noutp, right.shape[1]))
+-        cright[-right.shape[0]:, -right.shape[1]:] = 1
++        cright[-right.shape[0]:, -right.shape[1]:] = right
+ 
+     return np.hstack([cleft, cright])
+ 
+diff --git a/debug_detailed.py b/debug_detailed.py
+new file mode 100644
+index 000000000..979697571
+--- /dev/null
++++ b/debug_detailed.py
+@@ -0,0 +1,67 @@
++import numpy as np
++from astropy.modeling import models as m
++from astropy.modeling.separable import separability_matrix, _separable, _cstack, _coord_matrix
++
++# Let's trace what happens step by step
++print("=== Detailed tracing ===")
++
++# Create the models
++linear1 = m.Linear1D(10)
++linear2 = m.Linear1D(5)
++cm = linear1 & linear2
++pix2sky = m.Pix2Sky_TAN()
++
++print(f"linear1: {linear1}")
++print(f"linear2: {linear2}")
++print(f"cm: {cm}")
++print(f"pix2sky: {pix2sky}")
++
++print("\\n=== Testing separability of simple models ===")
++print("separability of linear1:")
++print(_separable(linear1))
++print("separability of linear2:")
++print(_separable(linear2))
++
++print("\\n=== Testing separability of compound model cm ===")
++print("separability of cm:")
++print(_separable(cm))
++
++print("\\n=== Testing _cstack with arrays ===")
++# This is what should happen in the actual computation
++sepleft = _separable(linear1)  # Should be array([True])
++sepright = _separable(linear2)  # Should be array([True])
++print(f"sepleft: {sepleft}")
++print(f"sepright: {sepright}")
++result = _cstack(sepleft, sepright)
++print(f"result of _cstack(sepleft, sepright):")
++print(result)
++
++print("\\n=== Testing _cstack with model and array ===")
++# This is what's actually happening in the problematic case
++sepleft_model = _separable(pix2sky)  # Should be array([True, True])
++sepright_compound = _separable(cm)  # Should be array([[True, False], [False, True]])
++print(f"sepleft_model: {sepleft_model}")
++print(f"sepright_compound: {sepright_compound}")
++print("Trying _cstack(sepleft_model, sepright_compound):")
++try:
++    result = _cstack(sepleft_model, sepright_compound)
++    print("Success:")
++    print(result)
++except Exception as e:
++    print(f"Error: {e}")
++
++print("\\n=== What should happen ===")
++# The correct approach would be to make sure we're passing the right types
++# Let's see what the correct separability matrix should be
++print("Expected result for pix2sky & cm:")
++print("pix2sky has 2 outputs, cm has 2 outputs")
++print("So result should be 4x2 matrix")
++print("First 2 rows should be like pix2sky's separability")
++print("Last 2 rows should be like cm's separability")
++expected = np.array([
++    [True, True],   # pix2sky output 1
++    [True, True],   # pix2sky output 2
++    [True, False],  # cm output 1 (linear1)
++    [False, True]   # cm output 2 (linear2)
++])
++print(expected)
+\ No newline at end of file
+diff --git a/debug_issue.py b/debug_issue.py
+new file mode 100644
+index 000000000..f2c98a539
+--- /dev/null
++++ b/debug_issue.py
+@@ -0,0 +1,52 @@
++import numpy as np
++from astropy.modeling import models as m
++from astropy.modeling.separable import separability_matrix, _separable, _cstack, _coord_matrix
++
++# Let's debug step by step
++print("=== Debugging the separability computation ===")
++
++# Create the models
++linear1 = m.Linear1D(10)
++linear2 = m.Linear1D(5)
++cm = linear1 & linear2
++pix2sky = m.Pix2Sky_TAN()
++
++print(f"linear1 n_inputs: {linear1.n_inputs}, n_outputs: {linear1.n_outputs}")
++print(f"linear2 n_inputs: {linear2.n_inputs}, n_outputs: {linear2.n_outputs}")
++print(f"cm n_inputs: {cm.n_inputs}, n_outputs: {cm.n_outputs}")
++print(f"pix2sky n_inputs: {pix2sky.n_inputs}, n_outputs: {pix2sky.n_outputs}")
++
++print("\\n=== Testing _coord_matrix directly ===")
++print("Coord matrix for linear1 (left):")
++c1_left = _coord_matrix(linear1, 'left', 2)
++print(c1_left)
++
++print("Coord matrix for linear1 (right):")
++c1_right = _coord_matrix(linear1, 'right', 2)
++print(c1_right)
++
++print("Coord matrix for linear2 (left):")
++c2_left = _coord_matrix(linear2, 'left', 2)
++print(c2_left)
++
++print("Coord matrix for linear2 (right):")
++c2_right = _coord_matrix(linear2, 'right', 2)
++print(c2_right)
++
++print("\\n=== Testing _cstack with simple models ===")
++result1 = _cstack(linear1, linear2)
++print("cstack(linear1, linear2):")
++print(result1)
++
++print("\\n=== Testing _cstack with compound model ===")
++result2 = _cstack(pix2sky, cm)
++print("cstack(pix2sky, cm):")
++print(result2)
++
++print("\\n=== Testing separability of cm directly ===")
++print("Separability of cm:")
++print(separability_matrix(cm))
++
++print("\\n=== Testing _separable function directly ===")
++print("Direct _separable(cm):")
++print(_separable(cm))
+\ No newline at end of file
+diff --git a/reproduce_issue.py b/reproduce_issue.py
+new file mode 100644
+index 000000000..a5ab6dc8a
+--- /dev/null
++++ b/reproduce_issue.py
+@@ -0,0 +1,38 @@
++import numpy as np
++from astropy.modeling import models as m
++from astropy.modeling.separable import separability_matrix
++
++# Test case 1: Simple compound model
++print("Test case 1: Simple compound model")
++cm = m.Linear1D(10) & m.Linear1D(5)
++print("Model structure: Linear1D(10) & Linear1D(5)")
++print("Separability matrix:")
++print(separability_matrix(cm))
++print()
++
++# Test case 2: More complex model
++print("Test case 2: More complex model")
++cm2 = m.Pix2Sky_TAN() & m.Linear1D(10) & m.Linear1D(5)
++print("Model structure: Pix2Sky_TAN() & Linear1D(10) & Linear1D(5)")
++print("Separability matrix:")
++print(separability_matrix(cm2))
++print()
++
++# Test case 3: Nested compound model (the problematic case)
++print("Test case 3: Nested compound model")
++cm3 = m.Pix2Sky_TAN() & cm  # cm is the compound model from test case 1
++print("Model structure: Pix2Sky_TAN() & (Linear1D(10) & Linear1D(5))")
++print("Separability matrix:")
++print(separability_matrix(cm3))
++print()
++
++# Let's also check the structure of the compound models
++cm3_left = cm3.left
++print(f"Left model of cm3: {type(cm3_left).__name__}")
++print(f"Left model n_inputs: {cm3_left.n_inputs}, n_outputs: {cm3_left.n_outputs}")
++print(f"Right model of cm3: {type(cm3.right).__name__}")
++print(f"Right model n_inputs: {cm3.right.n_inputs}, n_outputs: {cm3.right.n_outputs}")
++
++# Check the separability matrix of the nested compound model directly
++print("\\nSeparability matrix of nested compound model (cm):")
++print(separability_matrix(cm))
+\ No newline at end of file

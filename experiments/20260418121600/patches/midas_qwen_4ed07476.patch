@@ -1,0 +1,410 @@
+diff --git a/astropy/timeseries/core.py b/astropy/timeseries/core.py
+index c279f35f8..47975e7cd 100644
+--- a/astropy/timeseries/core.py
++++ b/astropy/timeseries/core.py
+@@ -70,15 +70,18 @@ class BaseTimeSeries(QTable):
+ 
+             if not self._required_columns_relax and len(self.colnames) == 0:
+ 
+-                raise ValueError("{} object is invalid - expected '{}' "
+-                                 "as the first column{} but time series has no columns"
+-                                 .format(self.__class__.__name__, required_columns[0], plural))
++                raise ValueError("{} object is invalid - expected {} column(s) ['{}'] but found 0 column(s): []"
++                                 .format(self.__class__.__name__, len(required_columns), "', '".join(required_columns)))
++
++            elif len(self.colnames) < len(required_columns):
++
++                raise ValueError("{} object is invalid - expected {} column(s) ['{}'] but found {} column(s): ['{}']"
++                                 .format(self.__class__.__name__, len(required_columns), "', '".join(required_columns), len(self.colnames), "', '".join(self.colnames)))
+ 
+             elif self.colnames[:len(required_columns)] != required_columns:
+ 
+-                raise ValueError("{} object is invalid - expected '{}' "
+-                                 "as the first column{} but found '{}'"
+-                                 .format(self.__class__.__name__, required_columns[0], plural, self.colnames[0]))
++                raise ValueError("{} object is invalid - expected first {} column(s) ['{}'] but found ['{}']"
++                                 .format(self.__class__.__name__, len(required_columns), "', '".join(required_columns), "', '".join(self.colnames[:len(required_columns)])))
+ 
+             if (self._required_columns_relax
+                     and self._required_columns == self.colnames[:len(self._required_columns)]):
+diff --git a/final_verification.py b/final_verification.py
+new file mode 100644
+index 000000000..f136df4ac
+--- /dev/null
++++ b/final_verification.py
+@@ -0,0 +1,37 @@
++#!/usr/bin/env python
++"""
++Final verification that the exact issue from the bug report is fixed.
++"""
++import numpy as np
++from astropy.time import Time
++from astropy.timeseries import TimeSeries
++
++print("=== EXACT REPRODUCTION OF BUG REPORT ===")
++# This is the exact code from the issue
++time = Time(np.arange(100000, 100003), format='jd')
++ts = TimeSeries(time=time, data={"flux": [99.9, 99.8, 99.7]})
++ts._required_columns = ["time", "flux"]                                   
++
++print("Before remove_column call:")
++print(f"Columns: {ts.colnames}")
++print(f"Required columns: {ts._required_columns}")
++
++try:
++    ts.remove_column("flux")
++    print("ERROR: Should have raised an exception!")
++except ValueError as e:
++    error_msg = str(e)
++    print(f"Exception raised: {error_msg}")
++    
++    # Verify it's no longer the confusing message
++    if "expected 'time' as the first columns but found 'time'" in error_msg:
++        print("❌ FAILED: Still getting the old confusing message!")
++        exit(1)
++    elif "expected 2 column(s)" in error_msg and "but found 1 column(s)" in error_msg:
++        print("✅ SUCCESS: Got clear, non-confusing error message!")
++        print("✅ The misleading exception issue has been fixed!")
++    else:
++        print(f"❓ UNEXPECTED: Got different error message: {error_msg}")
++        exit(1)
++
++print("\\n=== VERIFICATION COMPLETE ===")
+\ No newline at end of file
+diff --git a/reproduce_issue.py b/reproduce_issue.py
+new file mode 100644
+index 000000000..ea641672f
+--- /dev/null
++++ b/reproduce_issue.py
+@@ -0,0 +1,22 @@
++#!/usr/bin/env python
++"""
++Script to reproduce the TimeSeries misleading exception issue.
++"""
++import numpy as np
++from astropy.time import Time
++from astropy.timeseries import TimeSeries
++
++# Reproduce the exact example from the issue
++time = Time(np.arange(100000, 100003), format='jd')
++ts = TimeSeries(time=time, data={"flux": [99.9, 99.8, 99.7]})
++ts._required_columns = ["time", "flux"]                                   
++print("Before removing flux column:")
++print("Columns:", ts.colnames)
++print("Required columns:", ts._required_columns)
++
++try:
++    ts.remove_column("flux")
++    print("Successfully removed flux column")
++except Exception as e:
++    print(f"Error: {e}")
++    print(f"Error type: {type(e)}")
+\ No newline at end of file
+diff --git a/test_comprehensive.py b/test_comprehensive.py
+new file mode 100644
+index 000000000..79faf2c1a
+--- /dev/null
++++ b/test_comprehensive.py
+@@ -0,0 +1,78 @@
++#!/usr/bin/env python
++"""
++Comprehensive test for the TimeSeries fix.
++"""
++import numpy as np
++from astropy.time import Time
++from astropy.timeseries import TimeSeries
++
++print("=== Test 1: Original issue - removing required column ===")
++time = Time(np.arange(100000, 100003), format='jd')
++ts = TimeSeries(time=time, data={"flux": [99.9, 99.8, 99.7]})
++ts._required_columns = ["time", "flux"]                                   
++print("Before removing flux column:")
++print("Columns:", ts.colnames)
++print("Required columns:", ts._required_columns)
++
++try:
++    ts.remove_column("flux")
++    print("Successfully removed flux column")
++except Exception as e:
++    print(f"Error: {e}")
++
++print("\\n=== Test 2: Removing time column (should fail) ===")
++time = Time(np.arange(100000, 100003), format='jd')
++ts = TimeSeries(time=time, data={"flux": [99.9, 99.8, 99.7]})
++ts._required_columns = ["time", "flux"]                                   
++print("Before removing time column:")
++print("Columns:", ts.colnames)
++
++try:
++    ts.remove_column("time")
++    print("Successfully removed time column")
++except Exception as e:
++    print(f"Error: {e}")
++
++print("\\n=== Test 3: Wrong column order ===")
++time = Time(np.arange(100000, 100003), format='jd')
++ts = TimeSeries(time=time, data={"flux": [99.9, 99.8, 99.7]})
++ts._required_columns = ["time", "flux"]                                   
++# Manually change column order to be wrong
++ts['energy'] = [1.0, 2.0, 3.0]  # Add another column
++# Now reorder columns to be wrong
++ts = ts[['energy', 'time', 'flux']]  # Wrong order
++print("Columns in wrong order:", ts.colnames)
++
++try:
++    ts.remove_column("energy")  # This should work, but then check the state
++    print("Successfully removed energy column")
++    print("Remaining columns:", ts.colnames)
++except Exception as e:
++    print(f"Error: {e}")
++
++print("\\n=== Test 4: Empty table ===")
++time = Time(np.arange(100000, 100003), format='jd')
++ts = TimeSeries(time=time, data={"flux": [99.9, 99.8, 99.7]})
++ts._required_columns = ["time", "flux"]                                   
++# Remove all columns
++ts.remove_columns(["time", "flux"])
++print("Columns after removing all:", ts.colnames)
++
++try:
++    # This should trigger the empty columns error
++    ts._check_required_columns()
++    print("Check passed")
++except Exception as e:
++    print(f"Error: {e}")
++
++print("\\n=== Test 5: Single required column ===")
++time = Time(np.arange(100000, 100003), format='jd')
++ts = TimeSeries(time=time)
++ts._required_columns = ["time"]
++print("Columns:", ts.colnames)
++
++try:
++    ts.remove_column("time")
++    print("Successfully removed time column")
++except Exception as e:
++    print(f"Error: {e}")
+\ No newline at end of file
+diff --git a/test_final.py b/test_final.py
+new file mode 100644
+index 000000000..982ac2ec2
+--- /dev/null
++++ b/test_final.py
+@@ -0,0 +1,81 @@
++#!/usr/bin/env python
++"""
++Final test to verify the exact issue from the bug report is fixed.
++"""
++import numpy as np
++from astropy.time import Time
++from astropy.timeseries import TimeSeries
++
++print("=== Testing the exact issue from bug report ===")
++# Exact reproduction from the issue
++time = Time(np.arange(100000, 100003), format='jd')
++ts = TimeSeries(time=time, data={"flux": [99.9, 99.8, 99.7]})
++ts._required_columns = ["time", "flux"]                                   
++
++print("Before removing flux column:")
++print("Columns:", ts.colnames)
++print("Required columns:", ts._required_columns)
++
++try:
++    ts.remove_column("flux")
++    print("ERROR: Should have failed but didn't!")
++except ValueError as e:
++    error_msg = str(e)
++    print(f"Got error: {error_msg}")
++    
++    # Check that the error message is no longer confusing
++    if "expected 'time' as the first columns but found 'time'" in error_msg:
++        print("ERROR: Still getting the old confusing message!")
++    elif "expected 2 column(s)" in error_msg and "but found 1 column(s)" in error_msg:
++        print("SUCCESS: Got clear, non-confusing error message!")
++    else:
++        print("UNEXPECTED: Different error message format")
++
++print("\\n=== Test 2: Empty table case ===")
++time = Time(np.arange(100000, 100003), format='jd')
++ts = TimeSeries(time=time, data={"flux": [99.9, 99.8, 99.7]})
++ts._required_columns = ["time", "flux"]                                   
++
++# Test the check directly after removing all columns
++ts.remove_column("flux")  # Remove one column
++ts.remove_column("time")  # Remove the other column
++
++print("After removing all columns:")
++print("Columns:", ts.colnames)
++
++try:
++    ts._check_required_columns()
++    print("ERROR: Should have failed but didn't!")
++except ValueError as e:
++    error_msg = str(e)
++    print(f"Got error: {error_msg}")
++    
++    # Check that the error message is clear
++    if "expected 2 column(s)" in error_msg and "but found 0 column(s)" in error_msg:
++        print("SUCCESS: Got clear error message for empty table!")
++    else:
++        print("UNEXPECTED: Error message not as expected")
++
++print("\\n=== Test 3: Wrong column order ===")
++time = Time(np.arange(100000, 100003), format='jd')
++ts = TimeSeries(time=time, data={"flux": [99.9, 99.8, 99.7]})
++ts._required_columns = ["time", "flux"]                                   
++
++# Add another column and reorder
++ts['energy'] = [1.0, 2.0, 3.0]
++ts = ts[['energy', 'time', 'flux']]  # Wrong order
++
++print("Columns in wrong order:", ts.colnames)
++
++try:
++    # This should work (removing non-required column)
++    ts.remove_column("energy")
++    print("Successfully removed energy column")
++    print("Remaining columns:", ts.colnames)
++    
++    # Now check that the remaining columns are correct
++    ts._check_required_columns()
++    print("Check passed - columns are in correct order")
++    
++except Exception as e:
++    print(f"Error: {e}")
+\ No newline at end of file
+diff --git a/test_order_case.py b/test_order_case.py
+new file mode 100644
+index 000000000..5234e35b1
+--- /dev/null
++++ b/test_order_case.py
+@@ -0,0 +1,42 @@
++#!/usr/bin/env python
++"""
++Test the case where column order is wrong (should still give clear error).
++"""
++import numpy as np
++from astropy.time import Time
++from astropy.timeseries import TimeSeries
++
++print("=== TESTING WRONG COLUMN ORDER CASE ===")
++time = Time(np.arange(100000, 100003), format='jd')
++ts = TimeSeries(time=time, data={"flux": [99.9, 99.8, 99.7]})
++ts._required_columns = ["time", "flux"]                                   
++
++# Manually reorder columns to be wrong
++ts['energy'] = [1.0, 2.0, 3.0]  # Add another column
++# Now reorder columns to be wrong: energy, time, flux instead of time, flux, energy
++ts = ts[['energy', 'time', 'flux']]  # Wrong order
++
++print("Columns in wrong order:", ts.colnames)
++print("Required columns:", ts._required_columns)
++
++try:
++    # This should work (removing non-required column)
++    ts.remove_column("energy")
++    print("Successfully removed energy column")
++    print("Remaining columns:", ts.colnames)
++    
++    # Now check that the remaining columns are correct
++    ts._check_required_columns()
++    print("✅ Check passed - columns are in correct order")
++    
++except Exception as e:
++    error_msg = str(e)
++    print(f"Exception: {error_msg}")
++    
++    # This should be a different error - about column order
++    if "expected first 2 column(s)" in error_msg and "but found" in error_msg:
++        print("✅ Got clear error about column order mismatch")
++    else:
++        print("❓ Different error message")
++
++print("\\n=== TEST COMPLETE ===")
+\ No newline at end of file
+diff --git a/test_order_mismatch.py b/test_order_mismatch.py
+new file mode 100644
+index 000000000..9d3d9b7f8
+--- /dev/null
++++ b/test_order_mismatch.py
+@@ -0,0 +1,46 @@
++#!/usr/bin/env python
++"""
++Test the case where column order mismatch occurs.
++"""
++import numpy as np
++from astropy.time import Time
++from astropy.timeseries import TimeSeries
++
++print("=== TESTING COLUMN ORDER MISMATCH ===")
++time = Time(np.arange(100000, 100003), format='jd')
++ts = TimeSeries(time=time, data={"flux": [99.9, 99.8, 99.7]})
++ts._required_columns = ["time", "flux"]                                   
++
++# Manually create a case where we have wrong column order
++# Let's create a table with wrong column order by manipulating it directly
++# We'll create a table with columns in wrong order and then try to check it
++
++# Create a table with wrong order manually
++ts['energy'] = [1.0, 2.0, 3.0]  # Add energy column
++# Now reorder to have energy first, then time, then flux
++# This is tricky with astropy tables, so let's just test the logic directly
++
++# Let's test by directly manipulating the column names to simulate wrong order
++print("Testing the _check_required_columns logic directly...")
++
++# Create a table with just energy column (should fail)
++ts2 = TimeSeries(time=time)
++ts2['energy'] = [1.0, 2.0, 3.0]
++ts2._required_columns = ["time", "flux"]  # Still requires time and flux
++
++print("Table with only energy column:", ts2.colnames)
++print("Required columns:", ts2._required_columns)
++
++try:
++    ts2._check_required_columns()
++    print("ERROR: Should have failed!")
++except ValueError as e:
++    error_msg = str(e)
++    print(f"Exception: {error_msg}")
++    
++    if "expected 2 column(s)" in error_msg and "but found 1 column(s)" in error_msg:
++        print("✅ Got clear error about missing required columns")
++    else:
++        print("❓ Different error")
++
++print("\\n=== TEST COMPLETE ===")
+\ No newline at end of file
+diff --git a/test_simple.py b/test_simple.py
+new file mode 100644
+index 000000000..23fdc9a38
+--- /dev/null
++++ b/test_simple.py
+@@ -0,0 +1,26 @@
++#!/usr/bin/env python
++"""
++Simple test for the empty case.
++"""
++import numpy as np
++from astropy.time import Time
++from astropy.timeseries import TimeSeries
++
++print("=== Test: Empty table case ===")
++time = Time(np.arange(100000, 100003), format='jd')
++ts = TimeSeries(time=time, data={"flux": [99.9, 99.8, 99.7]})
++ts._required_columns = ["time", "flux"]                                   
++print("Before removing all columns:")
++print("Columns:", ts.colnames)
++
++# Remove all columns
++ts.remove_columns(["time", "flux"])
++print("After removing all columns:")
++print("Columns:", ts.colnames)
++
++# Try to check required columns - this should trigger the empty case
++try:
++    ts._check_required_columns()
++    print("Check passed")
++except Exception as e:
++    print(f"Error: {e}")
+\ No newline at end of file

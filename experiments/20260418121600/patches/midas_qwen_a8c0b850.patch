@@ -1,0 +1,156 @@
+diff --git a/astropy/io/ascii/html.py b/astropy/io/ascii/html.py
+index 266cf229c..e0d1eb6e0 100644
+--- a/astropy/io/ascii/html.py
++++ b/astropy/io/ascii/html.py
+@@ -87,9 +87,9 @@ class HTMLInputter(core.BaseInputter):
+             with warnings.catch_warnings():
+                 # Ignore bs4 parser warning #4550.
+                 warnings.filterwarnings('ignore', '.*no parser was explicitly specified.*')
+-                soup = BeautifulSoup('\n'.join(lines))
++                soup = BeautifulSoup('\\\\n'.join(lines))
+         else:  # use a custom backend parser
+-            soup = BeautifulSoup('\n'.join(lines), self.html['parser'])
++            soup = BeautifulSoup('\\\\n'.join(lines), self.html['parser'])
+         tables = soup.find_all('table')
+         for i, possible_table in enumerate(tables):
+             if identify_table(possible_table, self.html, i + 1):
+@@ -349,11 +349,13 @@ class HTML(core.BaseReader):
+         cols = list(table.columns.values())
+ 
+         self.data.header.cols = cols
++        self.data.cols = cols  # Set cols for _set_col_formats() to work
+ 
+         if isinstance(self.data.fill_values, tuple):
+             self.data.fill_values = [self.data.fill_values]
+ 
+         self.data._set_fill_values(cols)
++        self.data._set_col_formats()
+ 
+         lines = []
+ 
+diff --git a/comprehensive_test.py b/comprehensive_test.py
+new file mode 100644
+index 000000000..977bc4dc9
+--- /dev/null
++++ b/comprehensive_test.py
+@@ -0,0 +1,59 @@
++from astropy.table import Table
++from io import StringIO
++
++# Test 1: Basic functionality from the original issue
++print("=== Test 1: Basic functionality ===")
++t = Table([(1.23875234858e-24, 3.2348748432e-15), (2, 4)], names=('a', 'b'))
++tc = t.copy()
++
++with StringIO() as sp:
++    tc.write(sp, format="html", formats={"a": lambda x: f"{x:.2e}"})
++    result = sp.getvalue()
++    print("HTML output with format:")
++    print(result)
++    
++    # Check that the format was applied
++    assert "1.24e-24" in result
++    assert "3.23e-15" in result
++    print("✓ Format applied correctly")
++
++# Test 2: Multiple formats
++print("\\n=== Test 2: Multiple formats ===")
++t2 = Table([(1.23456789, 2.34567890), (10, 20)], names=('x', 'y'))
++
++with StringIO() as sp:
++    t2.write(sp, format="html", formats={"x": lambda x: f"{x:.3f}", "y": lambda x: f"{x:03d}"})
++    result = sp.getvalue()
++    print("HTML output with multiple formats:")
++    print(result)
++    
++    # Check that both formats were applied
++    assert "1.235" in result  # 3 decimal places
++    assert "010" in result   # 3-digit zero-padded
++    print("✓ Multiple formats applied correctly")
++
++# Test 3: No formats (should work as before)
++print("\\n=== Test 3: No formats ===")
++with StringIO() as sp:
++    tc.write(sp, format="html")
++    result = sp.getvalue()
++    print("HTML output without formats:")
++    print(result)
++    print("✓ Works without formats")
++
++# Test 4: Different format types
++print("\\n=== Test 4: Different format types ===")
++t3 = Table([(1.23456789, 2.34567890), (10, 20)], names=('float_col', 'int_col'))
++
++with StringIO() as sp:
++    t3.write(sp, format="html", formats={"float_col": "{:.2f}", "int_col": "{:04d}"})
++    result = sp.getvalue()
++    print("HTML output with different format types:")
++    print(result)
++    
++    # Check that formats were applied
++    assert "1.23" in result  # 2 decimal places
++    assert "0010" in result  # 4-digit zero-padded
++    print("✓ Different format types applied correctly")
++
++print("\\n=== All tests passed! ===")
+\ No newline at end of file
+diff --git a/final_test.py b/final_test.py
+new file mode 100644
+index 000000000..1c4aaba8d
+--- /dev/null
++++ b/final_test.py
+@@ -0,0 +1,24 @@
++from astropy.table import Table
++from io import StringIO
++
++# generate table
++t = Table([(1.23875234858e-24, 3.2348748432e-15), (2, 4)], names=('a', 'b'))
++tc = t.copy()  # copy table
++
++# print HTML table with "a" column formatted to show 2 decimal places
++with StringIO() as sp:
++    tc.write(sp, format="html", formats={"a": lambda x: f"{x:.2e}"})
++    result = sp.getvalue()
++    print(result)
++
++# This should now show:
++# <td>1.24e-24</td>
++# <td>3.23e-15</td>
++# instead of:
++# <td>1.23875234858e-24</td>
++# <td>3.2348748432e-15</td>
++
++# Verify the fix
++assert "1.24e-24" in result
++assert "3.23e-15" in result
++print("SUCCESS: HTML now respects the formats parameter!")
+\ No newline at end of file
+diff --git a/reproduce_issue.py b/reproduce_issue.py
+new file mode 100644
+index 000000000..b2cbb7d89
+--- /dev/null
++++ b/reproduce_issue.py
+@@ -0,0 +1,22 @@
++from astropy.table import Table
++from io import StringIO
++
++# generate table
++t = Table([(1.23875234858e-24, 3.2348748432e-15), (2, 4)], names=('a', 'b'))
++tc = t.copy()  # copy table
++
++print("=== HTML output (should format 'a' column to 2 decimal places) ===")
++# print HTML table with "a" column formatted to show 2 decimal places
++with StringIO() as sp:
++    tc.write(sp, format="html", formats={"a": lambda x: f"{x:.2e}"})
++    print(sp.getvalue())
++
++print("\\n=== CSV output (should format 'a' column to 2 decimal places) ===")
++with StringIO() as sp:
++    tc.write(sp, format="csv", formats={"a": lambda x: f"{x:.2e}"})
++    print(sp.getvalue())
++
++print("\\n=== RST output (should format 'a' column to 2 decimal places) ===")
++with StringIO() as sp:
++    tc.write(sp, format="ascii.rst", formats={"a": lambda x: f"{x:.2e}"})
++    print(sp.getvalue())
+\ No newline at end of file

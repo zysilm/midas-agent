@@ -116,16 +116,11 @@ def _make_issue() -> Issue:
 
 @pytest.mark.integration
 class TestIT61PlanExecuteBasicFlow:
-    """PlanExecuteAgent completes with market_info injected into the
+    """PlanExecuteAgent completes with env_context_xml injected into the
     initial user message. Tools are available from the first LLM call."""
 
     def test_plan_execute_agent_completes(self):
-        market_info_called = False
-
-        def market_info_provider() -> str:
-            nonlocal market_info_called
-            market_info_called = True
-            return "budget=5000, free_agents=3"
+        env_context_xml = "<environment_context>\n  <balance>5000</balance>\n</environment_context>"
 
         # LLM issues a task_done tool call on first response
         responses = [
@@ -154,7 +149,7 @@ class TestIT61PlanExecuteBasicFlow:
             actions=[TaskDoneAction()],
             call_llm=scripted_call_llm,
             max_iterations=10,
-            market_info_provider=market_info_provider,
+            env_context_xml=env_context_xml,
         )
 
         result = agent.run(context="Fix the parsing bug in parser.py")
@@ -163,9 +158,6 @@ class TestIT61PlanExecuteBasicFlow:
         assert isinstance(result, AgentResult)
         assert result.termination_reason == "done"
         assert result.output is not None
-
-        # market_info_provider was invoked to build the initial message
-        assert market_info_called is True
 
         # At least 1 LLM call
         assert call_index >= 1

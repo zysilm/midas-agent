@@ -69,6 +69,7 @@ def build_action_set(cwd: str, env: str = "local") -> list[Action]:
             DockerWriteFileAction,
         )
         from midas_agent.stdlib.actions.task_done import TaskDoneAction
+        from midas_agent.stdlib.actions.update_plan import UpdatePlanAction
 
         # Docker actions require a container_id; use a placeholder for now.
         # The real container_id is set at runtime before any action executes.
@@ -80,6 +81,7 @@ def build_action_set(cwd: str, env: str = "local") -> list[Action]:
             DockerWriteFileAction(container_id=container_id, cwd=cwd),
             DockerSearchCodeAction(container_id=container_id, cwd=cwd),
             DockerFindFilesAction(container_id=container_id, cwd=cwd),
+            UpdatePlanAction(),
             TaskDoneAction(),
         ]
 
@@ -92,7 +94,7 @@ def build_action_set(cwd: str, env: str = "local") -> list[Action]:
     )
     from midas_agent.stdlib.actions.search import FindFilesAction, SearchCodeAction
     from midas_agent.stdlib.actions.task_done import TaskDoneAction
-    from midas_agent.stdlib.actions.think import ThinkAction
+    from midas_agent.stdlib.actions.update_plan import UpdatePlanAction
 
     return [
         BashAction(cwd=cwd),
@@ -101,7 +103,7 @@ def build_action_set(cwd: str, env: str = "local") -> list[Action]:
         WriteFileAction(cwd=cwd),
         SearchCodeAction(cwd=cwd),
         FindFilesAction(cwd=cwd),
-        ThinkAction(),
+        UpdatePlanAction(),
         TaskDoneAction(),
     ]
 

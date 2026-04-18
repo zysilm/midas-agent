@@ -1,0 +1,335 @@
+diff --git a/astropy/coordinates/sky_coordinate.py b/astropy/coordinates/sky_coordinate.py
+index ab475f7d0..9ab20b51c 100644
+--- a/astropy/coordinates/sky_coordinate.py
++++ b/astropy/coordinates/sky_coordinate.py
+@@ -762,7 +762,7 @@ class SkyCoord(ShapedLikeNDArray):
+             raise NotImplementedError(
+                 "Updating the coordinates in a frame with explicit time dependence is"
+                 " currently not supported. If you would like this functionality, please"
+-                " open an issue on github:\nhttps://github.com/astropy/astropy"
++                " open an issue on github:\\\\nhttps://github.com/astropy/astropy"
+             )
+ 
+         if new_obstime is not None and self.obstime is None:
+@@ -894,6 +894,16 @@ class SkyCoord(ShapedLikeNDArray):
+             if frame_cls is not None and self.frame.is_transformable_to(frame_cls):
+                 return self.transform_to(attr)
+ 
++        # If we get here, the attribute was not found through SkyCoord-specific logic.
++        # Let's check if it might be a normal attribute that should be found through
++        # normal Python attribute resolution. If not, then raise the error.
++        # This prevents interference with normal property access in subclasses.
++        if hasattr(self.__class__, attr) and isinstance(getattr(self.__class__, attr), property):
++            # This is a property defined in the class, so let Python handle it normally
++            raise AttributeError(
++                f"'{self.__class__.__name__}' object has no attribute '{attr}'"
++            )
++        
+         # Fail
+         raise AttributeError(
+             f"'{self.__class__.__name__}' object has no attribute '{attr}'"
+@@ -2097,7 +2107,7 @@ class SkyCoord(ShapedLikeNDArray):
+         The definition of alphanumeric here is based on Unicode's definition
+         of alphanumeric, except without ``_`` (which is normally considered
+         alphanumeric).  So for ASCII, this means the non-alphanumeric characters
+-        are ``<space>_!"#$%&'()*+,-./\:;<=>?@[]^`{|}~``).
++        are ``<space>_!"#$%&'()*+,-./\\\\:;<=>?@[]^`{|}~``).
+ 
+         Parameters
+         ----------
+@@ -2133,10 +2143,10 @@ class SkyCoord(ShapedLikeNDArray):
+             # this matches things like 'ra[...]'' but *not* 'rad'.
+             # note that the "_" must be in there explicitly, because
+             # "alphanumeric" usually includes underscores.
+-            starts_with_comp = comp_name + r"(\W|\b|_)"
++            starts_with_comp = comp_name + r"(\\\\W|\\\\b|_)"
+             # this part matches stuff like 'center_ra', but *not*
+             # 'aura'
+-            ends_with_comp = r".*(\W|\b|_)" + comp_name + r"\b"
++            ends_with_comp = r".*(\\\\W|\\\\b|_)" + comp_name + r"\\\\b"
+             # the final regex ORs together the two patterns
+             rex = re.compile(
+                 rf"({starts_with_comp})|({ends_with_comp})", re.IGNORECASE | re.UNICODE
+diff --git a/exact_issue_test.py b/exact_issue_test.py
+new file mode 100644
+index 000000000..6165ab05e
+--- /dev/null
++++ b/exact_issue_test.py
+@@ -0,0 +1,11 @@
++import astropy.coordinates as coord
++
++
++class custom_coord(coord.SkyCoord):
++    @property
++    def prop(self):
++        return self.random_attr
++
++
++c = custom_coord('00h42m30s', '+41d12m00s', frame='icrs')
++c.prop
+\ No newline at end of file
+diff --git a/test_attribute_resolution.py b/test_attribute_resolution.py
+new file mode 100644
+index 000000000..f140999e1
+--- /dev/null
++++ b/test_attribute_resolution.py
+@@ -0,0 +1,23 @@
++# Test to understand attribute resolution
++class Base:
++    def __getattr__(self, attr):
++        print(f"Base.__getattr__ called with: {attr}")
++        raise AttributeError(f"Base: {attr} not found")
++
++class Sub(Base):
++    @property
++    def prop(self):
++        print("Sub.prop getter called")
++        return self.random_attr
++
++# Test normal behavior
++print("=== Testing normal behavior ===")
++obj = Sub()
++print("hasattr(obj, 'prop'):", hasattr(obj, 'prop'))
++
++print("\\n=== Now testing what happens ===")
++try:
++    result = obj.prop
++    print("Success:", result)
++except Exception as e:
++    print("Exception:", e)
+\ No newline at end of file
+diff --git a/test_debug_full.py b/test_debug_full.py
+new file mode 100644
+index 000000000..6590f03f2
+--- /dev/null
++++ b/test_debug_full.py
+@@ -0,0 +1,35 @@
++import traceback
++import astropy.coordinates as coord
++
++
++class custom_coord(coord.SkyCoord):
++    @property
++    def prop(self):
++        print("Inside prop getter")
++        print("About to access random_attr")
++        return self.random_attr
++
++
++c = custom_coord('00h42m30s', '+41d12m00s', frame='icrs')
++print("Created custom_coord successfully")
++print("Attempting to access prop...")
++
++# Let's manually trace what happens
++print("Checking if _sky_coord_frame is in __dict__:", "_sky_coord_frame" in c.__dict__)
++
++# Let's see what happens when we access random_attr directly
++print("Accessing random_attr directly:")
++try:
++    result = c.random_attr
++    print(f"Direct access result: {result}")
++except Exception as e:
++    print(f"Direct access error: {e}")
++    traceback.print_exc()
++
++print("\\nNow accessing prop:")
++try:
++    result = c.prop
++    print(f"Prop access result: {result}")
++except Exception as e:
++    print(f"Prop access error: {e}")
++    traceback.print_exc()
+\ No newline at end of file
+diff --git a/test_debug_mro.py b/test_debug_mro.py
+new file mode 100644
+index 000000000..37ff7ad86
+--- /dev/null
++++ b/test_debug_mro.py
+@@ -0,0 +1,31 @@
++import astropy.coordinates as coord
++
++
++class custom_coord(coord.SkyCoord):
++    @property
++    def prop(self):
++        print("Inside prop getter")
++        return self.random_attr
++
++
++c = custom_coord('00h42m30s', '+41d12m00s', frame='icrs')
++print("Class MRO:", custom_coord.__mro__)
++print("Has prop in class:", hasattr(custom_coord, 'prop'))
++print("Has prop in instance:", hasattr(c, 'prop'))
++
++# Check if prop is in the class dict
++print("prop in custom_coord.__dict__:", 'prop' in custom_coord.__dict__)
++
++# Try to get the property directly
++try:
++    prop_desc = custom_coord.__dict__['prop']
++    print("prop is a property:", isinstance(prop_desc, property))
++except KeyError:
++    print("prop not found in class dict")
++
++# Try to access prop normally
++try:
++    result = c.prop
++    print(f"Direct access result: {result}")
++except AttributeError as e:
++    print(f"Direct access AttributeError: {e}")
+\ No newline at end of file
+diff --git a/test_detailed_reproduce.py b/test_detailed_reproduce.py
+new file mode 100644
+index 000000000..eb5287db3
+--- /dev/null
++++ b/test_detailed_reproduce.py
+@@ -0,0 +1,27 @@
++import astropy.coordinates as coord
++
++
++class custom_coord(coord.SkyCoord):
++    @property
++    def prop(self):
++        print("Inside prop getter")
++        return self.random_attr
++
++
++c = custom_coord('00h42m30s', '+41d12m00s', frame='icrs')
++print("Created custom_coord successfully")
++print("Attempting to access prop...")
++
++try:
++    result = c.prop
++    print(f"Result: {result}")
++except AttributeError as e:
++    print(f"AttributeError: {e}")
++    print("This should say 'random_attr' doesn't exist, not 'prop' doesn't exist")
++    
++print("\\nNow let's try accessing random_attr directly:")
++try:
++    result = c.random_attr
++    print(f"Result: {result}")
++except AttributeError as e:
++    print(f"AttributeError: {e}")
+\ No newline at end of file
+diff --git a/test_hasattr.py b/test_hasattr.py
+new file mode 100644
+index 000000000..589f9e4b9
+--- /dev/null
++++ b/test_hasattr.py
+@@ -0,0 +1,33 @@
++import astropy.coordinates as coord
++
++
++class custom_coord(coord.SkyCoord):
++    @property
++    def prop(self):
++        return self.random_attr
++
++
++c = custom_coord('00h42m30s', '+41d12m00s', frame='icrs')
++
++print("Checking hasattr behavior:")
++print("hasattr(c, 'prop'):", hasattr(c, 'prop'))
++print("hasattr(c, 'random_attr'):", hasattr(c, 'random_attr'))
++
++# Check what's in the instance dict
++print("c.__dict__ keys:", list(c.__dict__.keys()))
++
++# Check what's in the class dict
++print("custom_coord.__dict__ keys:", list(custom_coord.__dict__.keys()))
++print("'prop' in custom_coord.__dict__:", 'prop' in custom_coord.__dict__)
++
++# Check if prop is a property
++prop_desc = custom_coord.__dict__['prop']
++print("prop is property:", isinstance(prop_desc, property))
++
++# Try to get the property from the class
++try:
++    prop = getattr(custom_coord, 'prop')
++    print("Got prop from class:", prop)
++    print("prop type:", type(prop))
++except Exception as e:
++    print("Error getting prop from class:", e)
+\ No newline at end of file
+diff --git a/test_reproduce_issue.py b/test_reproduce_issue.py
+new file mode 100644
+index 000000000..234ae6e30
+--- /dev/null
++++ b/test_reproduce_issue.py
+@@ -0,0 +1,17 @@
++import astropy.coordinates as coord
++
++
++class custom_coord(coord.SkyCoord):
++    @property
++    def prop(self):
++        return self.random_attr
++
++
++c = custom_coord('00h42m30s', '+41d12m00s', frame='icrs')
++print("Created custom_coord successfully")
++print("Attempting to access prop...")
++try:
++    c.prop
++except AttributeError as e:
++    print(f"Error: {e}")
++    print("This should say 'random_attr' doesn't exist, not 'prop' doesn't exist")
+\ No newline at end of file
+diff --git a/test_simple_case.py b/test_simple_case.py
+new file mode 100644
+index 000000000..146fe1007
+--- /dev/null
++++ b/test_simple_case.py
+@@ -0,0 +1,20 @@
++# Test to understand the exact issue
++class BaseClass:
++    def __getattr__(self, attr):
++        print(f"BaseClass.__getattr__ called with attr={attr}")
++        raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{attr}'")
++
++class SubClass(BaseClass):
++    @property
++    def prop(self):
++        print("Inside prop getter")
++        return self.random_attr  # This should fail
++
++# Test the behavior
++obj = SubClass()
++print("About to access prop...")
++try:
++    result = obj.prop
++    print(f"Result: {result}")
++except AttributeError as e:
++    print(f"AttributeError: {e}")
+\ No newline at end of file
+diff --git a/test_trace_error.py b/test_trace_error.py
+new file mode 100644
+index 000000000..981d5ab0a
+--- /dev/null
++++ b/test_trace_error.py
+@@ -0,0 +1,23 @@
++import traceback
++import astropy.coordinates as coord
++
++
++class custom_coord(coord.SkyCoord):
++    @property
++    def prop(self):
++        print("Inside prop getter")
++        return self.random_attr
++
++
++c = custom_coord('00h42m30s', '+41d12m00s', frame='icrs')
++print("Created custom_coord successfully")
++print("Attempting to access prop...")
++
++try:
++    result = c.prop
++    print(f"Result: {result}")
++except Exception as e:
++    print(f"Exception type: {type(e)}")
++    print(f"Exception message: {e}")
++    print("Full traceback:")
++    traceback.print_exc()
+\ No newline at end of file

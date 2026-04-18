@@ -1,0 +1,413 @@
+diff --git a/astropy/wcs/wcsapi/wrappers/sliced_wcs.py b/astropy/wcs/wcsapi/wrappers/sliced_wcs.py
+index d7605b078..825847986 100644
+--- a/astropy/wcs/wcsapi/wrappers/sliced_wcs.py
++++ b/astropy/wcs/wcsapi/wrappers/sliced_wcs.py
+@@ -251,7 +251,27 @@ class SlicedLowLevelWCS(BaseWCSWrapper):
+                 iworld_curr += 1
+                 world_arrays_new.append(world_arrays[iworld_curr])
+             else:
+-                world_arrays_new.append(1.)
++                # For a world dimension that is not kept (sliced out), we need to determine
++                # what the world coordinate value should be. If the slice was an integer,
++                # we use the world coordinate at that pixel position.
++                slice_obj = self._slices_array[iworld]
++                if isinstance(slice_obj, numbers.Integral):
++                    # The slice is an integer, so we need to compute the world coordinate
++                    # at that pixel position. We need to construct the pixel array
++                    # with the correct pixel values for all dimensions.
++                    pixel_arrays = [0] * self._wcs.pixel_n_dim
++                    for ipixel in range(self._wcs.pixel_n_dim):
++                        if isinstance(self._slices_pixel[ipixel], numbers.Integral):
++                            pixel_arrays[ipixel] = self._slices_pixel[ipixel]
++                        else:
++                            # For non-sliced dimensions, we use 0 as a placeholder
++                            pixel_arrays[ipixel] = 0
++                    # Compute the world coordinate for the specific pixel position
++                    world_values = self._wcs.pixel_to_world_values(*pixel_arrays)
++                    world_arrays_new.append(world_values[iworld])
++                else:
++                    # For slice(None) or other slice types, we use 1.0 as default
++                    world_arrays_new.append(1.)
+ 
+         world_arrays_new = np.broadcast_arrays(*world_arrays_new)
+         pixel_arrays = list(self._wcs.world_to_pixel_values(*world_arrays_new))
+diff --git a/debug_fix.py b/debug_fix.py
+new file mode 100644
+index 000000000..a57ce61e0
+--- /dev/null
++++ b/debug_fix.py
+@@ -0,0 +1,72 @@
++import numpy as np
++import astropy.wcs
++from astropy.coordinates import SkyCoord
++import astropy.units as u
++
++nx = 100
++ny = 25
++nz = 2
++wcs_header = {
++    'WCSAXES': 3,
++    'CRPIX1': (nx + 1)/2,
++    'CRPIX2': (ny + 1)/2,
++    'CRPIX3': 1.0,
++    'PC1_1': 0.0,
++    'PC1_2': -1.0,
++    'PC1_3': 0.0,
++    'PC2_1': 1.0,
++    'PC2_2': 0.0,
++    'PC2_3': -1.0,
++    'CDELT1': 5,
++    'CDELT2': 5,
++    'CDELT3': 0.055,
++    'CUNIT1': 'arcsec',
++    'CUNIT2': 'arcsec',
++    'CUNIT3': 'Angstrom',
++    'CTYPE1': 'HPLN-TAN',
++    'CTYPE2': 'HPLT-TAN',
++    'CTYPE3': 'WAVE',
++    'CRVAL1': 0.0,
++    'CRVAL2': 0.0,
++    'CRVAL3': 1.05,
++}
++
++fits_wcs = astropy.wcs.WCS(header=wcs_header)
++
++# Create the sliced WCS
++ll_sliced_wcs = astropy.wcs.wcsapi.SlicedLowLevelWCS(fits_wcs, 0)
++
++print("Sliced WCS properties:")
++print("  _wcs.pixel_n_dim:", ll_sliced_wcs._wcs.pixel_n_dim)
++print("  _wcs.world_n_dim:", ll_sliced_wcs._wcs.world_n_dim)
++print("  _slices_array:", ll_sliced_wcs._slices_array)
++print("  _slices_pixel:", ll_sliced_wcs._slices_pixel)
++print("  _pixel_keep:", ll_sliced_wcs._pixel_keep)
++print("  _world_keep:", ll_sliced_wcs._world_keep)
++
++# Let's manually trace what happens in world_to_pixel_values
++print("\\nTracing world_to_pixel_values:")
++print("Input world_arrays: (spatial_x, spatial_y) - 2 elements")
++print("Original WCS has world_n_dim:", ll_sliced_wcs._wcs.world_n_dim)
++
++# Loop through each world dimension
++for iworld in range(ll_sliced_wcs._wcs.world_n_dim):
++    print(f"iworld={iworld}")
++    print(f"  iworld in _world_keep: {iworld in ll_sliced_wcs._world_keep}")
++    if iworld in ll_sliced_wcs._world_keep:
++        print(f"  -> Keep this dimension")
++    else:
++        print(f"  -> Slice out this dimension")
++        print(f"  -> slice_obj = {ll_sliced_wcs._slices_array[iworld]}")
++        print(f"  -> isinstance(slice_obj, numbers.Integral): {isinstance(ll_sliced_wcs._slices_array[iworld], int)}")
++        
++print("\\nWhat we should compute:")
++print("For iworld=2 (wavelength dimension):")
++print("  slice_obj = 0 (integer)")
++print("  So we should compute world coordinate at pixel [0, 0, 0]")
++
++# Let's compute what the world coordinate at pixel [0, 0, 0] should be
++pixel_arrays = [0, 0, 0]
++world_values = fits_wcs.pixel_to_world_values(*pixel_arrays)
++print(f"World values at pixel [0, 0, 0]: {world_values}")
++print(f"World value for wavelength dimension (index 2): {world_values[2]}")
+\ No newline at end of file
+diff --git a/debug_slicing.py b/debug_slicing.py
+new file mode 100644
+index 000000000..26fb29b2e
+--- /dev/null
++++ b/debug_slicing.py
+@@ -0,0 +1,58 @@
++import numpy as np
++import astropy.wcs
++from astropy.coordinates import SkyCoord
++import astropy.units as u
++
++nx = 100
++ny = 25
++nz = 2
++wcs_header = {
++    'WCSAXES': 3,
++    'CRPIX1': (nx + 1)/2,
++    'CRPIX2': (ny + 1)/2,
++    'CRPIX3': 1.0,
++    'PC1_1': 0.0,
++    'PC1_2': -1.0,
++    'PC1_3': 0.0,
++    'PC2_1': 1.0,
++    'PC2_2': 0.0,
++    'PC2_3': -1.0,
++    'CDELT1': 5,
++    'CDELT2': 5,
++    'CDELT3': 0.055,
++    'CUNIT1': 'arcsec',
++    'CUNIT2': 'arcsec',
++    'CUNIT3': 'Angstrom',
++    'CTYPE1': 'HPLN-TAN',
++    'CTYPE2': 'HPLT-TAN',
++    'CTYPE3': 'WAVE',
++    'CRVAL1': 0.0,
++    'CRVAL2': 0.0,
++    'CRVAL3': 1.05,
++}
++
++fits_wcs = astropy.wcs.WCS(header=wcs_header)
++
++# Test what happens with different wavelength values
++print("Testing different wavelength values with full WCS:")
++px1, py1, pz1 = fits_wcs.world_to_pixel(0*u.arcsec, 0*u.arcsec, 1.05*u.angstrom)
++print(f"1.05 Angstrom: ({px1}, {py1}, {pz1})")
++
++px2, py2, pz2 = fits_wcs.world_to_pixel(0*u.arcsec, 0*u.arcsec, 1.0*u.angstrom)
++print(f"1.0 Angstrom: ({px2}, {py2}, {pz2})")
++
++px3, py3, pz3 = fits_wcs.world_to_pixel(0*u.arcsec, 0*u.arcsec, 0.0*u.angstrom)
++print(f"0.0 Angstrom: ({px3}, {py3}, {pz3})")
++
++# Now let's see what the sliced WCS should be doing
++print("\\nWhat should the sliced WCS do?")
++print("The sliced WCS represents the first slice (index 0) of the wavelength dimension")
++print("So it should be equivalent to using wavelength = 1.05 Angstrom (the value at index 0)")
++print("But the current implementation uses 1.0 instead of 1.05")
++
++# Let's compute what the wavelength value at pixel 0 should be
++print("\\nComputing wavelength at pixel 0:")
++print("CRVAL3:", fits_wcs.wcs.crval[2])
++print("CRPIX3:", fits_wcs.wcs.crpix[2])
++print("CDELT3:", fits_wcs.wcs.cdelt[2])
++print("Wavelength at pixel 0:", fits_wcs.wcs.crval[2] + (0 - fits_wcs.wcs.crpix[2]) * fits_wcs.wcs.cdelt[2])
+\ No newline at end of file
+diff --git a/reproduce_issue.py b/reproduce_issue.py
+new file mode 100644
+index 000000000..cf28c0c85
+--- /dev/null
++++ b/reproduce_issue.py
+@@ -0,0 +1,68 @@
++import numpy as np
++import astropy.wcs
++from astropy.coordinates import SkyCoord
++import astropy.units as u
++
++nx = 100
++ny = 25
++nz = 2
++wcs_header = {
++    'WCSAXES': 3,
++    'CRPIX1': (nx + 1)/2,
++    'CRPIX2': (ny + 1)/2,
++    'CRPIX3': 1.0,
++    'PC1_1': 0.0,
++    'PC1_2': -1.0,
++    'PC1_3': 0.0,
++    'PC2_1': 1.0,
++    'PC2_2': 0.0,
++    'PC2_3': -1.0,
++    'CDELT1': 5,
++    'CDELT2': 5,
++    'CDELT3': 0.055,
++    'CUNIT1': 'arcsec',
++    'CUNIT2': 'arcsec',
++    'CUNIT3': 'Angstrom',
++    'CTYPE1': 'HPLN-TAN',
++    'CTYPE2': 'HPLT-TAN',
++    'CTYPE3': 'WAVE',
++    'CRVAL1': 0.0,
++    'CRVAL2': 0.0,
++    'CRVAL3': 1.05,
++}
++
++fits_wcs = astropy.wcs.WCS(header=wcs_header)
++
++# Test full WCS
++print("Full WCS world_to_pixel:")
++px_full, py_full, pz_full = fits_wcs.world_to_pixel(0*u.arcsec, 0*u.arcsec, 1.05*u.angstrom)
++print(f"Result: ({px_full}, {py_full}, {pz_full})")
++
++# Test sliced WCS
++ll_sliced_wcs = astropy.wcs.wcsapi.SlicedLowLevelWCS(fits_wcs, 0)
++hl_sliced_wcs = astropy.wcs.wcsapi.HighLevelWCSWrapper(ll_sliced_wcs)
++
++print("\\nSliced WCS world_to_pixel:")
++px_sliced, py_sliced = hl_sliced_wcs.world_to_pixel(0*u.arcsec, 0*u.arcsec)
++print(f"Result: ({px_sliced}, {py_sliced})")
++
++# Verify that pixel_to_world works correctly
++print("\\nVerifying pixel_to_world (should work correctly):")
++px, py, pz = fits_wcs.world_to_pixel(0*u.arcsec, 0*u.arcsec, 1.05*u.angstrom)
++print("Full WCS pixel_to_world:")
++result_full = fits_wcs.pixel_to_world(px, py, pz)
++print(result_full)
++
++print("Sliced WCS pixel_to_world:")
++result_sliced = hl_sliced_wcs.pixel_to_world(px, py)
++print(result_sliced)
++
++# Check what value is being used for the sliced dimension
++print("\\nChecking sliced dimension value:")
++print(f"Sliced WCS is using 1.0 for wavelength dimension, but should be 1.05")
++
++# Let's also check what the original WCS world_to_pixel would give with 1.0 instead of 1.05
++print("\\nTesting full WCS with 1.0 instead of 1.05 (what sliced WCS is effectively doing):")
++px_bad, py_bad, pz_bad = fits_wcs.world_to_pixel(0*u.arcsec, 0*u.arcsec, 1.0*u.angstrom)
++print(f"Result with 1.0: ({px_bad}, {py_bad}, {pz_bad})")
++print(f"This should match the sliced WCS result: ({px_sliced}, {py_sliced})")
+\ No newline at end of file
+diff --git a/test_correct_slice.py b/test_correct_slice.py
+new file mode 100644
+index 000000000..2b68382b6
+--- /dev/null
++++ b/test_correct_slice.py
+@@ -0,0 +1,75 @@
++import numpy as np
++import astropy.wcs
++from astropy.coordinates import SkyCoord
++import astropy.units as u
++
++nx = 100
++ny = 25
++nz = 2
++wcs_header = {
++    'WCSAXES': 3,
++    'CRPIX1': (nx + 1)/2,
++    'CRPIX2': (ny + 1)/2,
++    'CRPIX3': 1.0,
++    'PC1_1': 0.0,
++    'PC1_2': -1.0,
++    'PC1_3': 0.0,
++    'PC2_1': 1.0,
++    'PC2_2': 0.0,
++    'PC2_3': -1.0,
++    'CDELT1': 5,
++    'CDELT2': 5,
++    'CDELT3': 0.055,
++    'CUNIT1': 'arcsec',
++    'CUNIT2': 'arcsec',
++    'CUNIT3': 'Angstrom',
++    'CTYPE1': 'HPLN-TAN',
++    'CTYPE2': 'HPLT-TAN',
++    'CTYPE3': 'WAVE',
++    'CRVAL1': 0.0,
++    'CRVAL2': 0.0,
++    'CRVAL3': 1.05,
++}
++
++fits_wcs = astropy.wcs.WCS(header=wcs_header)
++
++# Test what happens if we slice the correct dimension (wavelength = 3rd dimension)
++print("Testing slicing the correct dimension (index 2):")
++try:
++    ll_sliced_wcs = astropy.wcs.wcsapi.SlicedLowLevelWCS(fits_wcs, (slice(None), slice(None), 0))
++    hl_sliced_wcs = astropy.wcs.wcsapi.HighLevelWCSWrapper(ll_sliced_wcs)
++    
++    # Create the sky coordinate
++    pt = SkyCoord(Tx=0*u.arcsec, Ty=0*u.arcsec, frame=astropy.wcs.utils.wcs_to_celestial_frame(fits_wcs))
++    
++    print("Sliced WCS properties:")
++    print("  _slices_array:", ll_sliced_wcs._slices_array)
++    print("  _slices_pixel:", ll_sliced_wcs._slices_pixel)
++    print("  _pixel_keep:", ll_sliced_wcs._pixel_keep)
++    print("  _world_keep:", ll_sliced_wcs._world_keep)
++    
++    # This should work correctly
++    px_sliced, py_sliced = hl_sliced_wcs.world_to_pixel(0*u.arcsec, 0*u.arcsec)
++    print(f"Sliced WCS result: ({px_sliced}, {py_sliced})")
++    
++except Exception as e:
++    print(f"Error with tuple slicing: {e}")
++
++# Test with a simple integer slice (which is what the user did)
++print("\\nTesting with integer slice (what user did):")
++try:
++    ll_sliced_wcs = astropy.wcs.wcsapi.SlicedLowLevelWCS(fits_wcs, 0)
++    hl_sliced_wcs = astropy.wcs.wcsapi.HighLevelWCSWrapper(ll_sliced_wcs)
++    
++    print("Sliced WCS properties:")
++    print("  _slices_array:", ll_sliced_wcs._slices_array)
++    print("  _slices_pixel:", ll_sliced_wcs._slices_pixel)
++    print("  _pixel_keep:", ll_sliced_wcs._pixel_keep)
++    print("  _world_keep:", ll_sliced_wcs._world_keep)
++    
++    # This is what the user did
++    px_sliced, py_sliced = hl_sliced_wcs.world_to_pixel(0*u.arcsec, 0*u.arcsec)
++    print(f"Sliced WCS result: ({px_sliced}, {py_sliced})")
++    
++except Exception as e:
++    print(f"Error with integer slicing: {e}")
+\ No newline at end of file
+diff --git a/test_simple.py b/test_simple.py
+new file mode 100644
+index 000000000..9ffa384b3
+--- /dev/null
++++ b/test_simple.py
+@@ -0,0 +1,72 @@
++import numpy as np
++import astropy.wcs
++from astropy.coordinates import SkyCoord
++import astropy.units as u
++
++# Test a simpler case to understand the problem
++nx = 100
++ny = 25
++nz = 2
++wcs_header = {
++    'WCSAXES': 3,
++    'CRPIX1': (nx + 1)/2,
++    'CRPIX2': (ny + 1)/2,
++    'CRPIX3': 1.0,
++    'PC1_1': 0.0,
++    'PC1_2': -1.0,
++    'PC1_3': 0.0,
++    'PC2_1': 1.0,
++    'PC2_2': 0.0,
++    'PC2_3': -1.0,
++    'CDELT1': 5,
++    'CDELT2': 5,
++    'CDELT3': 0.055,
++    'CUNIT1': 'arcsec',
++    'CUNIT2': 'arcsec',
++    'CUNIT3': 'Angstrom',
++    'CTYPE1': 'HPLN-TAN',
++    'CTYPE2': 'HPLT-TAN',
++    'CTYPE3': 'WAVE',
++    'CRVAL1': 0.0,
++    'CRVAL2': 0.0,
++    'CRVAL3': 1.05,
++}
++
++fits_wcs = astropy.wcs.WCS(header=wcs_header)
++
++print("=== Understanding the problem ===")
++print("Original WCS:")
++print("  pixel_n_dim:", fits_wcs.pixel_n_dim)
++print("  world_n_dim:", fits_wcs.world_n_dim)
++print("  CRVAL3:", fits_wcs.wcs.crval[2])
++
++# Test what happens with the full WCS
++print("\\nFull WCS world_to_pixel with 3D coordinates:")
++px_full, py_full, pz_full = fits_wcs.world_to_pixel(0*u.arcsec, 0*u.arcsec, 1.05*u.angstrom)
++print(f"  Result: ({px_full}, {py_full}, {pz_full})")
++
++# Test what happens with slicing
++print("\\nSlicing with integer 0 (first dimension):")
++ll_sliced_wcs = astropy.wcs.wcsapi.SlicedLowLevelWCS(fits_wcs, 0)
++print("  _slices_array:", ll_sliced_wcs._slices_array)
++print("  _slices_pixel:", ll_sliced_wcs._slices_pixel)
++print("  _world_keep:", ll_sliced_wcs._world_keep)
++print("  _pixel_keep:", ll_sliced_wcs._pixel_keep)
++
++# What should happen when we call world_to_pixel on the sliced WCS?
++# The sliced WCS has 2 world dimensions (indices 1,2) and 2 pixel dimensions (indices 0,1)
++# So we should be able to call world_to_pixel with 2 arguments
++
++print("\\nWhat should happen:")
++print("  Sliced WCS has 2 world dimensions (spatial x, spatial y)")
++print("  Sliced WCS has 2 pixel dimensions (pixel x, pixel y)")
++print("  So we should call world_to_pixel with 2 arguments (spatial x, spatial y)")
++print("  But the underlying implementation is trying to handle 3D world coordinates")
++
++# Let's see what happens if we manually call the world_to_pixel_values method
++print("\\nTesting world_to_pixel_values directly:")
++try:
++    result = ll_sliced_wcs.world_to_pixel_values(0*u.arcsec, 0*u.arcsec)
++    print(f"  Direct call result: {result}")
++except Exception as e:
++    print(f"  Direct call error: {e}")
+\ No newline at end of file

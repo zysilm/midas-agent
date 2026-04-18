@@ -235,9 +235,9 @@ class TestGraphEmergenceWorkspace:
         assert captured_provider is not None
         assert captured_provider() == 5000
 
-    def test_market_info_provider_returns_real_info(self):
-        """market_info_provider must return real budget and pool info,
-        not the hardcoded 'budget info' string."""
+    def test_env_context_xml_contains_real_info(self):
+        """env_context_xml must contain real budget and environment info,
+        not hardcoded placeholders."""
         ws = self._make_workspace()
         ws.receive_budget(7500)
 
@@ -247,22 +247,20 @@ class TestGraphEmergenceWorkspace:
             description="Fix bug",
         )
 
-        captured_provider = None
+        captured_xml = None
         original_init = PlanExecuteAgent.__init__
 
         def spy_init(self_agent, *args, **kwargs):
-            nonlocal captured_provider
-            captured_provider = kwargs.get("market_info_provider")
+            nonlocal captured_xml
+            captured_xml = kwargs.get("env_context_xml")
             original_init(self_agent, *args, **kwargs)
 
         with patch.object(PlanExecuteAgent, "__init__", spy_init):
             ws.execute(issue)
 
-        assert captured_provider is not None
-        info = captured_provider()
-        assert isinstance(info, str)
-        assert info != "budget info", \
-            "market_info_provider must return real info, not hardcoded 'budget info'"
+        assert captured_xml is not None
+        assert isinstance(captured_xml, str)
+        assert "environment_context" in captured_xml
 
     def test_execute_passes_calling_agent_id_to_delegate(self):
         """execute() must pass calling_agent_id (the responsible agent's id)
@@ -289,8 +287,8 @@ class TestGraphEmergenceWorkspace:
             "DelegateTaskAction must receive calling_agent_id"
         assert captured_kwargs["calling_agent_id"] == "lead-1"
 
-    def test_market_info_lists_agents_with_prices(self):
-        """market_info_provider must list available free agents with their
+    def test_env_context_lists_agents_with_prices(self):
+        """env_context_xml must list available free agents with their
         prices, so the LLM can plan delegation during the planning phase."""
         storage = InMemoryStorageBackend()
         training_log = TrainingLog(
@@ -327,46 +325,44 @@ class TestGraphEmergenceWorkspace:
 
         issue = Issue(issue_id="issue-1", repo="test/repo", description="Fix bug")
 
-        captured_provider = None
+        captured_xml = None
         original_init = PlanExecuteAgent.__init__
 
         def spy_init(self_agent, *args, **kwargs):
-            nonlocal captured_provider
-            captured_provider = kwargs.get("market_info_provider")
+            nonlocal captured_xml
+            captured_xml = kwargs.get("env_context_xml")
             original_init(self_agent, *args, **kwargs)
 
         with patch.object(PlanExecuteAgent, "__init__", spy_init):
             ws.execute(issue)
 
-        assert captured_provider is not None
-        info = captured_provider()
+        assert captured_xml is not None
         # Must list both agents by ID
-        assert "expert-a" in info, f"market_info must list agent IDs: {info}"
-        assert "expert-b" in info, f"market_info must list agent IDs: {info}"
+        assert "expert-a" in captured_xml, f"env_context must list agent IDs: {captured_xml}"
+        assert "expert-b" in captured_xml, f"env_context must list agent IDs: {captured_xml}"
         # Must include prices (integers from PricingEngine)
         price_a = pricing_engine.calculate_price(agent_a)
         price_b = pricing_engine.calculate_price(agent_b)
-        assert str(price_a) in info, f"market_info must include price {price_a}: {info}"
-        assert str(price_b) in info, f"market_info must include price {price_b}: {info}"
+        assert str(price_a) in captured_xml, f"env_context must include price {price_a}: {captured_xml}"
+        assert str(price_b) in captured_xml, f"env_context must include price {price_b}: {captured_xml}"
 
-    def test_market_info_includes_balance(self):
-        """market_info must include the workspace's current token balance."""
+    def test_env_context_includes_balance(self):
+        """env_context_xml must include the workspace's current token balance."""
         ws = self._make_workspace()
         ws.receive_budget(42000)
 
         issue = Issue(issue_id="issue-1", repo="test/repo", description="Fix bug")
 
-        captured_provider = None
+        captured_xml = None
         original_init = PlanExecuteAgent.__init__
 
         def spy_init(self_agent, *args, **kwargs):
-            nonlocal captured_provider
-            captured_provider = kwargs.get("market_info_provider")
+            nonlocal captured_xml
+            captured_xml = kwargs.get("env_context_xml")
             original_init(self_agent, *args, **kwargs)
 
         with patch.object(PlanExecuteAgent, "__init__", spy_init):
             ws.execute(issue)
 
-        assert captured_provider is not None
-        info = captured_provider()
-        assert "42000" in info, f"market_info must include balance: {info}"
+        assert captured_xml is not None
+        assert "42000" in captured_xml, f"env_context must include balance: {captured_xml}"

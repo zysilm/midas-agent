@@ -19,7 +19,7 @@ class PlanExecuteAgent(ReactAgent):
         actions: list[Action],
         call_llm: Callable[[LLMRequest], LLMResponse],
         max_iterations: int | None = None,
-        market_info_provider: Callable[[], str] | None = None,
+        env_context_xml: str | None = None,
         balance_provider: Callable[[], int] | None = None,
         max_tool_output_chars: int | None = None,
         max_context_tokens: int | None = None,
@@ -34,7 +34,7 @@ class PlanExecuteAgent(ReactAgent):
             system_llm=system_llm,
             action_log=action_log,
         )
-        self.market_info_provider = market_info_provider
+        self.env_context_xml = env_context_xml
 
     def run(self, context: str | None = None) -> AgentResult:
         from midas_agent.scheduler.resource_meter import BudgetExhaustedError
@@ -46,9 +46,8 @@ class PlanExecuteAgent(ReactAgent):
         # Build user message with budget info and task context
         user_parts: list[str] = []
 
-        if self.market_info_provider is not None:
-            market_info = self.market_info_provider()
-            user_parts.append(market_info)
+        if self.env_context_xml is not None:
+            user_parts.append(self.env_context_xml)
 
         if context is not None:
             user_parts.append(f"\nTask:\n{context}")
@@ -101,7 +100,15 @@ class PlanExecuteAgent(ReactAgent):
                 messages.append(assistant_msg)
 
                 for tool_call in response.tool_calls:
-                    action = self._actions_by_name[tool_call.name]
+                    action = self._actions_by_name.get(tool_call.name)
+                    if action is None:
+                        logger.warning("  [iter %d] Unknown tool: %s", iterations, tool_call.name[:80])
+                        messages.append({
+                            "role": "tool",
+                            "tool_call_id": tool_call.id,
+                            "content": f"Error: unknown tool '{tool_call.name}'. Available tools: {', '.join(self._actions_by_name.keys())}",
+                        })
+                        continue
                     logger.info(
                         "  [iter %d] %s(%s) (%d tokens)",
                         iterations,

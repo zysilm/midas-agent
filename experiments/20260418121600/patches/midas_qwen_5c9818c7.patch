@@ -1,0 +1,219 @@
+diff --git a/astropy/modeling/separable.py b/astropy/modeling/separable.py
+index a308e2729..0f86d8b72 100644
+--- a/astropy/modeling/separable.py
++++ b/astropy/modeling/separable.py
+@@ -47,7 +47,7 @@ def is_separable(transform):
+         array([ True,  True]...)
+     >>> is_separable(Shift(1) & Shift(2) | Rotation2D(2))
+         array([False, False]...)
+-    >>> is_separable(Shift(1) & Shift(2) | Mapping([0, 1, 0, 1]) | \
++    >>> is_separable(Shift(1) & Shift(2) | Mapping([0, 1, 0, 1]) | \\\\\\\\\\\\\\\\
+         Polynomial2D(1) & Polynomial2D(2))
+         array([False, False]...)
+     >>> is_separable(Shift(1) & Shift(2) | Mapping([0, 1, 0, 1]))
+@@ -87,7 +87,7 @@ def separability_matrix(transform):
+         array([[ True, False], [False,  True]]...)
+     >>> separability_matrix(Shift(1) & Shift(2) | Rotation2D(2))
+         array([[ True,  True], [ True,  True]]...)
+-    >>> separability_matrix(Shift(1) & Shift(2) | Mapping([0, 1, 0, 1]) | \
++    >>> separability_matrix(Shift(1) & Shift(2) | Mapping([0, 1, 0, 1]) | \\\\\\\\\\\\\\\\
+         Polynomial2D(1) & Polynomial2D(2))
+         array([[ True,  True], [ True,  True]]...)
+     >>> separability_matrix(Shift(1) & Shift(2) | Mapping([0, 1, 0, 1]))
+@@ -239,10 +239,18 @@ def _cstack(left, right):
+         cleft = np.zeros((noutp, left.shape[1]))
+         cleft[: left.shape[0], : left.shape[1]] = left
+     if isinstance(right, Model):
+-        cright = _coord_matrix(right, 'right', noutp)
++        # For compound models, we should not call _coord_matrix directly
++        # as it will fail. Instead, we treat it as a matrix if it's already 
++        # been processed by _separable
++        try:
++            cright = _coord_matrix(right, 'right', noutp)
++        except NotImplementedError:
++            # This happens for compound models, so we treat it as a matrix
++            # that was already computed by _separable
++            cright = right
+     else:
+         cright = np.zeros((noutp, right.shape[1]))
+-        cright[-right.shape[0]:, -right.shape[1]:] = 1
++        cright[-right.shape[0]:, -right.shape[1]:] = right
+ 
+     return np.hstack([cleft, cright])
+ 
+diff --git a/debug_deeper.py b/debug_deeper.py
+new file mode 100644
+index 000000000..788185a0e
+--- /dev/null
++++ b/debug_deeper.py
+@@ -0,0 +1,64 @@
++#!/usr/bin/env python
++
++from astropy.modeling import models as m
++from astropy.modeling.separable import separability_matrix, _separable, _cstack, _coord_matrix
++import numpy as np
++
++print("Detailed debugging of separability_matrix issue...")
++
++# Create models
++cm = m.Linear1D(10) & m.Linear1D(5)
++pix2sky = m.Pix2Sky_TAN()
++
++print("cm = m.Linear1D(10) & m.Linear1D(5)")
++print("cm.n_inputs:", cm.n_inputs)
++print("cm.n_outputs:", cm.n_outputs)
++print("_separable(cm):")
++print(_separable(cm))
++print()
++
++print("pix2sky = m.Pix2Sky_TAN()")
++print("pix2sky.n_inputs:", pix2sky.n_inputs)
++print("pix2sky.n_outputs:", pix2sky.n_outputs)
++print("_separable(pix2sky):")
++print(_separable(pix2sky))
++print()
++
++print("complex_cm = pix2sky & cm")
++complex_cm = pix2sky & cm
++print("complex_cm.n_inputs:", complex_cm.n_inputs)
++print("complex_cm.n_outputs:", complex_cm.n_outputs)
++print("separability_matrix(complex_cm):")
++print(separability_matrix(complex_cm))
++print()
++
++# Let's trace through the _separable execution
++print("Tracing _separable for complex_cm:")
++print("complex_cm.op:", complex_cm.op)
++print("complex_cm.left:", complex_cm.left)
++print("complex_cm.right:", complex_cm.right)
++
++sepleft = _separable(complex_cm.left)
++print("_separable(complex_cm.left):")
++print(sepleft)
++
++sepright = _separable(complex_cm.right)
++print("_separable(complex_cm.right):")
++print(sepright)
++
++print("_operators['&'](sepleft, sepright):")
++result = _cstack(sepleft, sepright)
++print(result)
++
++# Now let's see what happens when we do it as a single compound model
++print("\\nDirectly calling _cstack with the matrices:")
++coord_left = _coord_matrix(complex_cm.left, 'left', complex_cm.n_outputs)
++print("_coord_matrix(complex_cm.left, 'left', 4):")
++print(coord_left)
++
++coord_right = _coord_matrix(complex_cm.right, 'right', complex_cm.n_outputs)
++print("_coord_matrix(complex_cm.right, 'right', 4):")
++print(coord_right)
++
++print("np.hstack([coord_left, coord_right]):")
++print(np.hstack([coord_left, coord_right]))
+\ No newline at end of file
+diff --git a/reproduce_issue.py b/reproduce_issue.py
+new file mode 100644
+index 000000000..2d65b0ce2
+--- /dev/null
++++ b/reproduce_issue.py
+@@ -0,0 +1,32 @@
++#!/usr/bin/env python
++
++from astropy.modeling import models as m
++from astropy.modeling.separable import separability_matrix
++
++print("Testing separability matrix issue...")
++
++# Simple case - should be diagonal
++cm = m.Linear1D(10) & m.Linear1D(5)
++print("cm = m.Linear1D(10) & m.Linear1D(5)")
++print("separability_matrix(cm):")
++print(separability_matrix(cm))
++print()
++
++# More complex case
++print("m.Pix2Sky_TAN() & m.Linear1D(10) & m.Linear1D(5)")
++complex_cm = m.Pix2Sky_TAN() & m.Linear1D(10) & m.Linear1D(5)
++print("separability_matrix(complex_cm):")
++print(separability_matrix(complex_cm))
++print()
++
++# Nested case - this is where the bug occurs
++print("m.Pix2Sky_TAN() & cm")
++nested_cm = m.Pix2Sky_TAN() & cm
++print("separability_matrix(nested_cm):")
++print(separability_matrix(nested_cm))
++print()
++
++# Let's also check the individual components
++print("cm.n_inputs, cm.n_outputs:", cm.n_inputs, cm.n_outputs)
++print("complex_cm.n_inputs, complex_cm.n_outputs:", complex_cm.n_inputs, complex_cm.n_outputs)
++print("nested_cm.n_inputs, nested_cm.n_outputs:", nested_cm.n_inputs, nested_cm.n_outputs)
+\ No newline at end of file
+diff --git a/test_comprehensive.py b/test_comprehensive.py
+new file mode 100644
+index 000000000..4f5a49ca8
+--- /dev/null
++++ b/test_comprehensive.py
+@@ -0,0 +1,59 @@
++#!/usr/bin/env python
++
++from astropy.modeling import models as m
++from astropy.modeling.separable import separability_matrix
++
++print("Comprehensive testing of separability matrix fix...")
++
++# Test 1: Original issue case
++print("Test 1: Original issue case")
++cm = m.Linear1D(10) & m.Linear1D(5)
++complex_cm = m.Pix2Sky_TAN() & cm
++result = separability_matrix(complex_cm)
++print("Result:")
++print(result)
++print("Expected: Last two rows should be [False False  True False] and [False False False  True]")
++print("Correct:", 
++      result[2, 2] == True and result[2, 3] == False and 
++      result[3, 3] == True and result[3, 2] == False)
++print()
++
++# Test 2: Simple nested case
++print("Test 2: Simple nested case")
++nested1 = (m.Linear1D(1) & m.Linear1D(2)) & m.Linear1D(3)
++result2 = separability_matrix(nested1)
++print("Result:")
++print(result2)
++print("Should be diagonal for independent components")
++print("Correct:", 
++      result2[0, 0] == True and result2[1, 1] == True and 
++      result2[2, 2] == True and result2[0, 1] == False and 
++      result2[1, 0] == False and result2[2, 0] == False and result2[2, 1] == False)
++print()
++
++# Test 3: Multiple nesting levels
++print("Test 3: Multiple nesting levels")
++nested2 = m.Pix2Sky_TAN() & (m.Linear1D(10) & m.Linear1D(5))
++result3 = separability_matrix(nested2)
++print("Result:")
++print(result3)
++print("Should match the non-nested version")
++complex_direct = m.Pix2Sky_TAN() & m.Linear1D(10) & m.Linear1D(5)
++expected3 = separability_matrix(complex_direct)
++print("Expected:")
++print(expected3)
++print("Equal:", (result3 == expected3).all())
++print()
++
++# Test 4: Verify simple cases still work
++print("Test 4: Simple cases still work")
++simple1 = m.Linear1D(10) & m.Linear1D(5)
++result4 = separability_matrix(simple1)
++print("Simple case result:")
++print(result4)
++print("Should be diagonal:", 
++      result4[0, 0] == True and result4[1, 1] == True and 
++      result4[0, 1] == False and result4[1, 0] == False)
++print()
++
++print("All tests completed!")
+\ No newline at end of file

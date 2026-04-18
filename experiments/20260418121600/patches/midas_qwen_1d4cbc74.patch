@@ -1,0 +1,797 @@
+diff --git a/astropy/modeling/separable.py b/astropy/modeling/separable.py
+index a308e2729..f1f38e181 100644
+--- a/astropy/modeling/separable.py
++++ b/astropy/modeling/separable.py
+@@ -47,7 +47,7 @@ def is_separable(transform):
+         array([ True,  True]...)
+     >>> is_separable(Shift(1) & Shift(2) | Rotation2D(2))
+         array([False, False]...)
+-    >>> is_separable(Shift(1) & Shift(2) | Mapping([0, 1, 0, 1]) | \
++    >>> is_separable(Shift(1) & Shift(2) | Mapping([0, 1, 0, 1]) | \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+         Polynomial2D(1) & Polynomial2D(2))
+         array([False, False]...)
+     >>> is_separable(Shift(1) & Shift(2) | Mapping([0, 1, 0, 1]))
+@@ -87,7 +87,7 @@ def separability_matrix(transform):
+         array([[ True, False], [False,  True]]...)
+     >>> separability_matrix(Shift(1) & Shift(2) | Rotation2D(2))
+         array([[ True,  True], [ True,  True]]...)
+-    >>> separability_matrix(Shift(1) & Shift(2) | Mapping([0, 1, 0, 1]) | \
++    >>> separability_matrix(Shift(1) & Shift(2) | Mapping([0, 1, 0, 1]) | \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+         Polynomial2D(1) & Polynomial2D(2))
+         array([[ True,  True], [ True,  True]]...)
+     >>> separability_matrix(Shift(1) & Shift(2) | Mapping([0, 1, 0, 1]))
+@@ -242,7 +242,7 @@ def _cstack(left, right):
+         cright = _coord_matrix(right, 'right', noutp)
+     else:
+         cright = np.zeros((noutp, right.shape[1]))
+-        cright[-right.shape[0]:, -right.shape[1]:] = 1
++        cright[: right.shape[0], : right.shape[1]] = right
+ 
+     return np.hstack([cleft, cright])
+ 
+diff --git a/debug_associativity.py b/debug_associativity.py
+new file mode 100644
+index 000000000..6aadccfd5
+--- /dev/null
++++ b/debug_associativity.py
+@@ -0,0 +1,34 @@
++#!/usr/bin/env python
++"""
++Debugging associativity of compound models
++"""
++from astropy.modeling import models as m
++
++print("Debugging associativity of compound models")
++print("=" * 50)
++
++# Create the models
++cm = m.Linear1D(10) & m.Linear1D(5)
++complex_model = m.Pix2Sky_TAN() & m.Linear1D(10) & m.Linear1D(5)
++nested_model = m.Pix2Sky_TAN() & cm
++
++print("cm = Linear1D(10) & Linear1D(5)")
++print(f"cm.left = {cm.left}")
++print(f"cm.right = {cm.right}")
++print()
++
++print("complex_model = Pix2Sky_TAN() & Linear1D(10) & Linear1D(5)")
++print(f"complex_model.left = {complex_model.left}")
++print(f"complex_model.right = {complex_model.right}")
++print()
++
++print("nested_model = Pix2Sky_TAN() & (Linear1D(10) & Linear1D(5))")
++print(f"nested_model.left = {nested_model.left}")
++print(f"nested_model.right = {nested_model.right}")
++print()
++
++# Let's check what happens when we create a model with parentheses
++print("Let's create a model with explicit parentheses:")
++explicit = m.Pix2Sky_TAN() & (m.Linear1D(10) & m.Linear1D(5))
++print(f"explicit.left = {explicit.left}")
++print(f"explicit.right = {explicit.right}")
+\ No newline at end of file
+diff --git a/debug_coord_matrix.py b/debug_coord_matrix.py
+new file mode 100644
+index 000000000..e04a18b65
+--- /dev/null
++++ b/debug_coord_matrix.py
+@@ -0,0 +1,61 @@
++#!/usr/bin/env python
++"""
++Debug _coord_matrix function specifically
++"""
++from astropy.modeling import models as m
++from astropy.modeling.separable import _coord_matrix
++
++print("Debugging _coord_matrix function")
++print("=" * 40)
++
++# Create the models
++cm = m.Linear1D(10) & m.Linear1D(5)
++pix2sky = m.Pix2Sky_TAN()
++
++print("cm = Linear1D(10) & Linear1D(5)")
++print(f"cm.n_outputs = {cm.n_outputs}")
++print(f"cm.n_inputs = {cm.n_inputs}")
++print()
++
++print("pix2sky = Pix2Sky_TAN()")
++print(f"pix2sky.n_outputs = {pix2sky.n_outputs}")
++print(f"pix2sky.n_inputs = {pix2sky.n_inputs}")
++print()
++
++print("Testing _coord_matrix calls:")
++print("1. _coord_matrix(pix2sky, 'left', 4):")
++result1 = _coord_matrix(pix2sky, 'left', 4)
++print(result1)
++print()
++
++print("2. _coord_matrix(cm, 'left', 4):")
++result2 = _coord_matrix(cm, 'left', 4)
++print(result2)
++print()
++
++print("3. _coord_matrix(cm, 'right', 4):")
++result3 = _coord_matrix(cm, 'right', 4)
++print(result3)
++print()
++
++# Let's also check what happens with the individual components
++print("cm.left = Linear1D(10):")
++print(f"cm.left.n_outputs = {cm.left.n_outputs}")
++print(f"cm.left.n_inputs = {cm.left.n_inputs}")
++print()
++
++print("cm.right = Linear1D(5):")
++print(f"cm.right.n_outputs = {cm.right.n_outputs}")
++print(f"cm.right.n_inputs = {cm.right.n_inputs}")
++print()
++
++# Let's see what _coord_matrix does for the individual components
++print("4. _coord_matrix(cm.left, 'left', 2):")
++result4 = _coord_matrix(cm.left, 'left', 2)
++print(result4)
++print()
++
++print("5. _coord_matrix(cm.right, 'right', 2):")
++result5 = _coord_matrix(cm.right, 'right', 2)
++print(result5)
++print()
+\ No newline at end of file
+diff --git a/debug_detailed.py b/debug_detailed.py
+new file mode 100644
+index 000000000..f76ccaccc
+--- /dev/null
++++ b/debug_detailed.py
+@@ -0,0 +1,84 @@
++#!/usr/bin/env python
++"""
++Detailed debugging of the exact issue
++"""
++import numpy as np
++from astropy.modeling import models as m
++from astropy.modeling.separable import _separable, _cstack, _coord_matrix
++
++print("Detailed debugging of the nested case")
++print("=" * 50)
++
++# Create the models
++cm = m.Linear1D(10) & m.Linear1D(5)
++pix2sky = m.Pix2Sky_TAN()
++nested_model = m.Pix2Sky_TAN() & cm
++
++print("1. What we want to compute:")
++print("   _separable(nested_model) = _separable(Pix2Sky_TAN() & cm)")
++print("   This should call _operators['&'](_separable(Pix2Sky_TAN()), _separable(cm))")
++print()
++
++print("2. Let's compute each part:")
++separable_pix2sky = _separable(pix2sky)
++separable_cm = _separable(cm)
++print(f"_separable(Pix2Sky_TAN()) = {separable_pix2sky}")
++print(f"_separable(cm) = {separable_cm}")
++print()
++
++print("3. What _cstack should do:")
++print("   _cstack(separable_pix2sky, separable_cm)")
++print("   left = separable_pix2sky = [[1. 1.], [1. 1.]] (2x2)")
++print("   right = separable_cm = [[1. 0.], [0. 1.]] (2x2)")
++print("   noutp = _compute_n_outputs(left, right) = 2 + 2 = 4")
++print()
++
++print("4. Current _cstack logic:")
++print("   cleft = np.zeros((4, 2)) then cleft[:2, :2] = [[1. 1.], [1. 1.]]")
++print("   cleft = [[1. 1.], [1. 1.], [0. 0.], [0. 0.]]")
++print("   cright = np.zeros((4, 2)) then cright[:2, :2] = [[1. 0.], [0. 1.]]")
++print("   cright = [[1. 0.], [0. 1.], [0. 0.], [0. 0.]]")
++print("   result = np.hstack([cleft, cright]) = [[1. 1. 1. 0.], [1. 1. 0. 1.], [0. 0. 0. 0.], [0. 0. 0. 0.]]")
++print()
++
++print("5. But we want:")
++print("   [[1. 1. 1. 0.], [1. 1. 0. 1.], [0. 0. 1. 0.], [0. 0. 0. 1.]]")
++print("   This means the last two rows should be [[0. 0. 1. 0.], [0. 0. 0. 1.]]")
++print("   But we're getting [[0. 0. 0. 0.], [0. 0. 0. 0.]]")
++print()
++
++print("6. The issue is that the separability matrix for cm should be:")
++print("   cm = Linear1D(10) & Linear1D(5)")
++print("   This should be a 2x2 matrix where:")
++print("   - First output depends on first input")
++print("   - Second output depends on second input")
++print("   So it should be [[1. 0.], [0. 1.]]")
++print("   But we're getting [[1. 0.], [0. 1.]] which is correct!")
++print()
++
++print("7. Let's see what the actual result is:")
++print("   Let's manually compute what we expect:")
++print("   For Pix2Sky_TAN() & cm:")
++print("   - Pix2Sky_TAN() has 2 outputs, 2 inputs")
++print("   - cm has 2 outputs, 2 inputs")
++print("   - Total: 4 outputs, 4 inputs")
++print("   - Separability should be:")
++print("     - First 2 outputs depend on first 2 inputs")
++print("     - Last 2 outputs depend on last 2 inputs")
++print("     - So we want:")
++print("       [[1. 1. 0. 0.], [1. 1. 0. 0.], [0. 0. 1. 0.], [0. 0. 0. 1.]]")
++print()
++
++print("8. But we're getting:")
++print("   [[1. 1. 1. 0.], [1. 1. 0. 1.], [0. 0. 0. 0.], [0. 0. 0. 0.]]")
++print("   This is wrong because the last two rows are all zeros!")
++print()
++
++print("9. The problem is in the _coord_matrix function for cm when pos='right'")
++print("   Let's see what _coord_matrix(cm, 'right', 4) would return:")
++try:
++    result = _coord_matrix(cm, 'right', 4)
++    print(f"_coord_matrix(cm, 'right', 4) = {result}")
++except Exception as e:
++    print(f"Error in _coord_matrix(cm, 'right', 4): {e}")
++    print("This is the real issue - CompoundModel doesn't have separable property!")
+\ No newline at end of file
+diff --git a/debug_separable.py b/debug_separable.py
+new file mode 100644
+index 000000000..131fd9807
+--- /dev/null
++++ b/debug_separable.py
+@@ -0,0 +1,62 @@
++#!/usr/bin/env python
++"""
++Debug script to understand how separability_matrix works internally
++"""
++from astropy.modeling import models as m
++from astropy.modeling.separable import separability_matrix, _separable, _cstack, _cdot
++
++print("Debugging separability computation")
++print("=" * 40)
++
++# Create the models
++cm = m.Linear1D(10) & m.Linear1D(5)
++complex_model = m.Pix2Sky_TAN() & m.Linear1D(10) & m.Linear1D(5)
++nested_model = m.Pix2Sky_TAN() & cm
++
++print("cm = Linear1D(10) & Linear1D(5)")
++print(f"cm.left = {cm.left}")
++print(f"cm.right = {cm.right}")
++print(f"cm.op = {cm.op}")
++print()
++
++print("complex_model = Pix2Sky_TAN() & Linear1D(10) & Linear1D(5)")
++print(f"complex_model.left = {complex_model.left}")
++print(f"complex_model.right = {complex_model.right}")
++print(f"complex_model.op = {complex_model.op}")
++print()
++
++print("nested_model = Pix2Sky_TAN() & (Linear1D(10) & Linear1D(5))")
++print(f"nested_model.left = {nested_model.left}")
++print(f"nested_model.right = {nested_model.right}")
++print(f"nested_model.op = {nested_model.op}")
++print()
++
++# Let's manually trace what happens in _separable
++print("Tracing _separable function:")
++print("For nested_model (Pix2Sky_TAN() & cm):")
++print("  _separable(nested_model) -> _operators['&'](_separable(nested_model.left), _separable(nested_model.right))")
++print("  nested_model.left = Pix2Sky_TAN() -> _separable(Pix2Sky_TAN())")
++print("  nested_model.right = cm = Linear1D(10) & Linear1D(5) -> _separable(cm)")
++print()
++
++# Let's compute each part manually
++print("Computing _separable(Pix2Sky_TAN()):")
++pix2sky = m.Pix2Sky_TAN()
++separable_pix2sky = _separable(pix2sky)
++print(f"separable_pix2sky = {separable_pix2sky}")
++print()
++
++print("Computing _separable(cm):")
++separable_cm = _separable(cm)
++print(f"separable_cm = {separable_cm}")
++print()
++
++print("Computing _cstack(separable_pix2sky, separable_cm):")
++result = _cstack(separable_pix2sky, separable_cm)
++print(f"result = _cstack(separable_pix2sky, separable_cm)")
++print(result)
++print()
++
++print("Expected result should match complex_model:")
++expected = separability_matrix(complex_model)
++print(expected)
+\ No newline at end of file
+diff --git a/debug_separable2.py b/debug_separable2.py
+new file mode 100644
+index 000000000..3cf3f525a
+--- /dev/null
++++ b/debug_separable2.py
+@@ -0,0 +1,53 @@
++#!/usr/bin/env python
++"""
++Debug _separable function with CompoundModel
++"""
++from astropy.modeling import models as m
++from astropy.modeling.separable import _separable
++
++print("Debugging _separable function with CompoundModel")
++print("=" * 50)
++
++# Create the models
++cm = m.Linear1D(10) & m.Linear1D(5)
++pix2sky = m.Pix2Sky_TAN()
++
++print("cm = Linear1D(10) & Linear1D(5)")
++print(f"cm.n_outputs = {cm.n_outputs}")
++print(f"cm.n_inputs = {cm.n_inputs}")
++try:
++    print(f"cm.separable = {cm.separable}")
++except Exception as e:
++    print(f"cm.separable = ERROR: {e}")
++print()
++
++print("pix2sky = Pix2Sky_TAN()")
++print(f"pix2sky.n_outputs = {pix2sky.n_outputs}")
++print(f"pix2sky.n_inputs = {pix2sky.n_inputs}")
++try:
++    print(f"pix2sky.separable = {pix2sky.separable}")
++except Exception as e:
++    print(f"pix2sky.separable = ERROR: {e}")
++print()
++
++print("Testing _separable calls:")
++print("1. _separable(pix2sky):")
++try:
++    result1 = _separable(pix2sky)
++    print(result1)
++except Exception as e:
++    print(f"Error: {e}")
++print()
++
++print("2. _separable(cm):")
++try:
++    result2 = _separable(cm)
++    print(result2)
++except Exception as e:
++    print(f"Error: {e}")
++print()
++
++# Let's also check the _calculate_separability_matrix method
++print("Checking _calculate_separability_matrix:")
++print(f"cm._calculate_separability_matrix() = {cm._calculate_separability_matrix()}")
++print(f"pix2sky._calculate_separability_matrix() = {pix2sky._calculate_separability_matrix()}")
+\ No newline at end of file
+diff --git a/debug_separable_trace.py b/debug_separable_trace.py
+new file mode 100644
+index 000000000..2ccf7130f
+--- /dev/null
++++ b/debug_separable_trace.py
+@@ -0,0 +1,80 @@
++#!/usr/bin/env python
++"""
++Trace _separable function step by step
++"""
++import numpy as np
++from astropy.modeling import models as m
++from astropy.modeling.separable import _separable, _cstack, _coord_matrix
++
++print("Tracing _separable function step by step")
++print("=" * 50)
++
++# Create the models
++cm = m.Linear1D(10) & m.Linear1D(5)
++l10 = m.Linear1D(10)
++l5 = m.Linear1D(5)
++
++print("1. cm = Linear1D(10) & Linear1D(5)")
++print(f"   cm.left = {cm.left}")
++print(f"   cm.right = {cm.right}")
++print(f"   cm.op = {cm.op}")
++print()
++
++print("2. Let's trace _separable(cm):")
++print("   _separable(cm) -> since cm is CompoundModel:")
++print("   sepleft = _separable(cm.left) = _separable(Linear1D(10))")
++print("   sepright = _separable(cm.right) = _separable(Linear1D(5))")
++print("   return _cstack(sepleft, sepright)")
++print()
++
++print("3. _separable(Linear1D(10)):")
++print(f"   Linear1D(10).n_outputs = {l10.n_outputs}")
++print(f"   Linear1D(10).n_inputs = {l10.n_inputs}")
++print("   _coord_matrix(Linear1D(10), 'left', 1) =")
++result1 = _coord_matrix(l10, 'left', 1)
++print(result1)
++print()
++
++print("4. _separable(Linear1D(5)):")
++print(f"   Linear1D(5).n_outputs = {l5.n_outputs}")
++print(f"   Linear1D(5).n_inputs = {l5.n_inputs}")
++print("   _coord_matrix(Linear1D(5), 'left', 1) =")
++result2 = _coord_matrix(l5, 'left', 1)
++print(result2)
++print()
++
++print("5. _cstack([[1.]], [[1.]]) =")
++result3 = _cstack([[1.]], [[1.]])
++print(result3)
++print()
++
++print("6. But we should get [[1. 0.], [0. 1.]] for cm")
++print("   This means the issue is in how _cstack works with 1x1 matrices")
++print("   Let's see what _compute_n_outputs returns:")
++from astropy.modeling.separable import _compute_n_outputs
++noutp = _compute_n_outputs([[1.]], [[1.]])
++print(f"_compute_n_outputs([[1.]], [[1.]]) = {noutp}")
++print()
++
++print("7. Let's see what _cstack does with these inputs:")
++print("   cleft = np.zeros((2, 1)) then cleft[:1, :1] = [[1.]]")
++print("   cleft = [[1.], [0.]]")
++print("   cright = np.zeros((2, 1)) then cright[:1, :1] = [[1.]]")
++print("   cright = [[1.], [0.]]")
++print("   result = np.hstack([[1.], [0.]], [[1.], [0.]])) = [[1. 1.], [0. 0.]]")
++print()
++
++print("8. But we want [[1. 0.], [0. 1.]]")
++print("   This is the fundamental issue - the _cstack function is not working correctly")
++print("   for the case where we have 1x1 separability matrices from individual Linear1D models")
++print()
++
++print("9. The problem is that _coord_matrix for a separable model should create")
++print("   a matrix where each output depends on its corresponding input")
++print("   For Linear1D(10) with 1 input and 1 output:")
++print("   - Output 0 should depend on Input 0")
++print("   - So the matrix should be [[1.]]")
++print("   But for a 2-input 2-output model like cm:")
++print("   - Output 0 should depend on Input 0")
++print("   - Output 1 should depend on Input 1")
++print("   - So the matrix should be [[1. 0.], [0. 1.]]")
+\ No newline at end of file
+diff --git a/debug_separable_trace2.py b/debug_separable_trace2.py
+new file mode 100644
+index 000000000..206bc39f9
+--- /dev/null
++++ b/debug_separable_trace2.py
+@@ -0,0 +1,91 @@
++#!/usr/bin/env python
++"""
++Trace _separable function step by step - correct version
++"""
++import numpy as np
++from astropy.modeling import models as m
++from astropy.modeling.separable import _separable, _cstack, _coord_matrix
++
++print("Tracing _separable function step by step - correct version")
++print("=" * 60)
++
++# Create the models
++cm = m.Linear1D(10) & m.Linear1D(5)
++l10 = m.Linear1D(10)
++l5 = m.Linear1D(5)
++
++print("1. cm = Linear1D(10) & Linear1D(5)")
++print(f"   cm.left = {cm.left}")
++print(f"   cm.right = {cm.right}")
++print(f"   cm.op = {cm.op}")
++print()
++
++print("2. Let's trace _separable(cm):")
++print("   _separable(cm) -> since cm is CompoundModel:")
++print("   sepleft = _separable(cm.left) = _separable(Linear1D(10))")
++print("   sepright = _separable(cm.right) = _separable(Linear1D(5))")
++print("   return _cstack(sepleft, sepright)")
++print()
++
++print("3. _separable(Linear1D(10)):")
++print(f"   Linear1D(10).n_outputs = {l10.n_outputs}")
++print(f"   Linear1D(10).n_inputs = {l10.n_inputs}")
++print("   _coord_matrix(Linear1D(10), 'left', 1) =")
++result1 = _coord_matrix(l10, 'left', 1)
++print(result1)
++print(f"   Type: {type(result1)}")
++print()
++
++print("4. _separable(Linear1D(5)):")
++print(f"   Linear1D(5).n_outputs = {l5.n_outputs}")
++print(f"   Linear1D(5).n_inputs = {l5.n_inputs}")
++print("   _coord_matrix(Linear1D(5), 'left', 1) =")
++result2 = _coord_matrix(l5, 'left', 1)
++print(result2)
++print(f"   Type: {type(result2)}")
++print()
++
++print("5. What _cstack should do:")
++print("   _cstack(result1, result2) where:")
++print(f"   result1 = {result1}")
++print(f"   result2 = {result2}")
++print("   noutp = _compute_n_outputs(result1, result2) = 1 + 1 = 2")
++print()
++
++print("6. Let's manually compute what _cstack does:")
++print("   cleft = np.zeros((2, 1)) then cleft[:1, :1] = [[1.]]")
++print("   cleft = [[1.], [0.]]")
++print("   cright = np.zeros((2, 1)) then cright[:1, :1] = [[1.]]")
++print("   cright = [[1.], [0.]]")
++print("   result = np.hstack([[1.], [0.]], [[1.], [0.]])) = [[1. 1.], [0. 0.]]")
++print()
++
++print("7. But we want [[1. 0.], [0. 1.]]")
++print("   This means the issue is in the _coord_matrix function for separable models")
++print()
++
++print("8. Let's see what _coord_matrix does for cm directly:")
++print("   _coord_matrix(cm, 'left', 2) =")
++try:
++    result3 = _coord_matrix(cm, 'left', 2)
++    print(result3)
++except Exception as e:
++    print(f"Error: {e}")
++print()
++
++print("9. Let's see what _coord_matrix does for cm with pos='right':")
++print("   _coord_matrix(cm, 'right', 2) =")
++try:
++    result4 = _coord_matrix(cm, 'right', 2)
++    print(result4)
++except Exception as e:
++    print(f"Error: {e}")
++print()
++
++print("10. The issue is that _coord_matrix for a separable model should create")
++print("    a matrix where each output depends on its corresponding input")
++print("    For cm = Linear1D(10) & Linear1D(5) with 2 inputs and 2 outputs:")
++print("    - Output 0 should depend on Input 0")
++print("    - Output 1 should depend on Input 1")
++print("    - So the matrix should be [[1. 0.], [0. 1.]]")
++print("    But the current _coord_matrix logic is not doing this correctly")
+\ No newline at end of file
+diff --git a/reproduce_issue.py b/reproduce_issue.py
+new file mode 100644
+index 000000000..7c52072f5
+--- /dev/null
++++ b/reproduce_issue.py
+@@ -0,0 +1,49 @@
++#!/usr/bin/env python
++"""
++Reproduction script for separability_matrix issue with nested CompoundModels
++"""
++from astropy.modeling import models as m
++from astropy.modeling.separable import separability_matrix
++
++print("Testing separability_matrix with nested CompoundModels")
++print("=" * 60)
++
++# Create the basic models
++print("1. Basic Linear1D models:")
++cm = m.Linear1D(10) & m.Linear1D(5)
++print(f"cm = m.Linear1D(10) & m.Linear1D(5)")
++print(f"separability_matrix(cm):")
++result1 = separability_matrix(cm)
++print(result1)
++print()
++
++# Create more complex model
++print("2. More complex model with Pix2Sky_TAN:")
++complex_model = m.Pix2Sky_TAN() & m.Linear1D(10) & m.Linear1D(5)
++print(f"complex_model = m.Pix2Sky_TAN() & m.Linear1D(10) & m.Linear1D(5)")
++print(f"separability_matrix(complex_model):")
++result2 = separability_matrix(complex_model)
++print(result2)
++print()
++
++# Create nested model (this is where the issue occurs)
++print("3. Nested model (the problematic case):")
++nested_model = m.Pix2Sky_TAN() & cm
++print(f"nested_model = m.Pix2Sky_TAN() & cm")
++print(f"separability_matrix(nested_model):")
++result3 = separability_matrix(nested_model)
++print(result3)
++print()
++
++# Let's also check the shapes and properties
++print("4. Model properties:")
++print(f"cm.n_inputs: {cm.n_inputs}, cm.n_outputs: {cm.n_outputs}")
++print(f"complex_model.n_inputs: {complex_model.n_inputs}, complex_model.n_outputs: {complex_model.n_outputs}")
++print(f"nested_model.n_inputs: {nested_model.n_inputs}, nested_model.n_outputs: {nested_model.n_outputs}")
++print()
++
++# Let's also test the expected behavior by manually constructing what we expect
++print("5. Expected behavior analysis:")
++print("The nested model should behave like the complex_model since cm is just a simple & operation")
++print("Both should have the same separability structure")
++print("Expected result should be similar to result2 above")
+\ No newline at end of file
+diff --git a/trace_detailed.py b/trace_detailed.py
+new file mode 100644
+index 000000000..1cbef9642
+--- /dev/null
++++ b/trace_detailed.py
+@@ -0,0 +1,70 @@
++#!/usr/bin/env python
++"""
++Detailed trace of the separability computation
++"""
++from astropy.modeling import models as m
++from astropy.modeling.separable import _separable, _cstack, _coord_matrix
++
++print("Detailed trace of separability computation")
++print("=" * 50)
++
++# Create the models
++cm = m.Linear1D(10) & m.Linear1D(5)
++complex_model = m.Pix2Sky_TAN() & m.Linear1D(10) & m.Linear1D(5)
++nested_model = m.Pix2Sky_TAN() & cm
++
++print("1. Working case: complex_model = Pix2Sky_TAN() & Linear1D(10) & Linear1D(5)")
++print(f"   complex_model.left = {complex_model.left}")
++print(f"   complex_model.right = {complex_model.right}")
++print(f"   complex_model.op = {complex_model.op}")
++print()
++
++print("2. Broken case: nested_model = Pix2Sky_TAN() & (Linear1D(10) & Linear1D(5))")
++print(f"   nested_model.left = {nested_model.left}")
++print(f"   nested_model.right = {nested_model.right}")
++print(f"   nested_model.op = {nested_model.op}")
++print()
++
++print("3. Let's manually compute what should happen in _separable for nested_model:")
++print("   _separable(nested_model) -> _operators['&'](_separable(nested_model.left), _separable(nested_model.right))")
++print("   _separable(nested_model.left) = _separable(Pix2Sky_TAN()) = [[1. 1.], [1. 1.]]")
++print("   _separable(nested_model.right) = _separable(cm) = [[1. 0.], [0. 1.]]")
++print("   Then _cstack([[1. 1.], [1. 1.]], [[1. 0.], [0. 1.]]) should give:")
++print("   [[1. 1. 1. 0.], [1. 1. 0. 1.]]")
++print()
++
++print("4. But what we actually get from the broken case:")
++print("   Let's trace through _cstack manually:")
++print("   noutp = _compute_n_outputs(left, right) = _compute_n_outputs(Pix2Sky_TAN(), cm)")
++print("   cm has n_outputs=2, n_inputs=2")
++print("   Pix2Sky_TAN() has n_outputs=2, n_inputs=2")
++print("   So noutp = 2 + 2 = 4")
++print()
++
++# Let's compute what _cstack should do
++print("5. Manual _cstack computation:")
++print("   cleft = _coord_matrix(Pix2Sky_TAN(), 'left', 4)")
++cleft = _coord_matrix(m.Pix2Sky_TAN(), 'left', 4)
++print(cleft)
++print()
++
++print("   cright = _coord_matrix(cm, 'right', 4)")
++try:
++    cright = _coord_matrix(cm, 'right', 4)
++    print(cright)
++except Exception as e:
++    print(f"Error in _coord_matrix(cm, 'right', 4): {e}")
++    # Let's see what happens if we use the recursive approach
++    print("   Let's see what _separable(cm) gives us:")
++    separable_cm = _separable(cm)
++    print(f"   _separable(cm) = {separable_cm}")
++    print("   This should be used instead of _coord_matrix(cm, 'right', 4)")
++print()
++
++print("6. The real issue:")
++print("   In _cstack, when right is a Model (including CompoundModel),")
++print("   it calls _coord_matrix(right, 'right', noutp)")
++print("   But for CompoundModel, this should not be done directly.")
++print("   Instead, we should use the recursive approach that _separable already does.")
++print("   The problem is that _cstack is being called with the result of _separable,")
++print("   not with the original models.")
+\ No newline at end of file
+diff --git a/trace_problem.py b/trace_problem.py
+new file mode 100644
+index 000000000..649771b1c
+--- /dev/null
++++ b/trace_problem.py
+@@ -0,0 +1,46 @@
++#!/usr/bin/env python
++"""
++Tracing the exact problem in _cstack
++"""
++import numpy as np
++from astropy.modeling import models as m
++from astropy.modeling.separable import _separable, _cstack, _coord_matrix
++
++print("Tracing the exact _cstack problem")
++print("=" * 40)
++
++# Create the models
++cm = m.Linear1D(10) & m.Linear1D(5)
++pix2sky = m.Pix2Sky_TAN()
++
++print("1. What _separable returns for each:")
++print(f"_separable(pix2sky) = {np.array(_separable(pix2sky))}")
++print(f"_separable(cm) = {np.array(_separable(cm))}")
++print()
++
++print("2. What _cstack gets called with:")
++print("   _cstack(_separable(pix2sky), _separable(cm))")
++print("   left = _separable(pix2sky) = [[1. 1.], [1. 1.]] (2x2)")
++print("   right = _separable(cm) = [[1. 0.], [0. 1.]] (2x2)")
++print("   noutp = _compute_n_outputs(left, right) = 2 + 2 = 4")
++print()
++
++print("3. Current _cstack logic:")
++print("   cleft = np.zeros((4, 2)) then cleft[:2, :2] = [[1. 1.], [1. 1.]]")
++print("   cleft = [[1. 1.], [1. 1.], [0. 0.], [0. 0.]]")
++print("   cright = np.zeros((4, 2)) then cright[-2:, -2:] = 1")
++print("   cright = [[0. 0.], [0. 0.], [1. 1.], [1. 1.]]")
++print("   result = np.hstack([cleft, cright]) = [[1. 1. 0. 0.], [1. 1. 0. 0.], [0. 0. 1. 1.], [0. 0. 1. 1.]]")
++print()
++
++print("4. What we want:")
++print("   We want the separability matrix to be:")
++print("   [[1. 1. 1. 0.], [1. 1. 0. 1.], [0. 0. 1. 0.], [0. 0. 0. 1.]]")
++print("   This means:")
++print("   - First 2 rows: Pix2Sky_TAN separability (2 inputs)")
++print("   - Last 2 rows: cm separability (2 inputs)")
++print("   - But the columns should be arranged properly")
++print()
++
++print("5. The issue is that _cstack is designed for _coord_matrix output, not separability matrices")
++print("   When right is a separability matrix, it should be used directly, not positioned incorrectly")
+\ No newline at end of file
+diff --git a/understand_expected.py b/understand_expected.py
+new file mode 100644
+index 000000000..3ee1ff6fa
+--- /dev/null
++++ b/understand_expected.py
+@@ -0,0 +1,59 @@
++#!/usr/bin/env python
++"""
++Understanding what the expected result should be
++"""
++from astropy.modeling import models as m
++from astropy.modeling.separable import separability_matrix
++
++print("Understanding expected behavior")
++print("=" * 40)
++
++# Create the models
++cm = m.Linear1D(10) & m.Linear1D(5)
++complex_model = m.Pix2Sky_TAN() & m.Linear1D(10) & m.Linear1D(5)
++nested_model = m.Pix2Sky_TAN() & cm
++
++print("1. Complex model (working case):")
++print(f"complex_model = Pix2Sky_TAN() & Linear1D(10) & Linear1D(5)")
++result_complex = separability_matrix(complex_model)
++print(result_complex)
++print()
++
++print("2. Nested model (broken case):")
++print(f"nested_model = Pix2Sky_TAN() & (Linear1D(10) & Linear1D(5))")
++result_nested = separability_matrix(nested_model)
++print(result_nested)
++print()
++
++print("3. What we expect for nested model:")
++print("   It should be the same as complex_model")
++print("   The structure should be:")
++print("   - First 2 rows: Pix2Sky_TAN() outputs (2 inputs)")
++print("   - Last 2 rows: Linear1D(10) & Linear1D(5) outputs (2 inputs)")
++print("   - The first 2 inputs should be independent of the last 2 inputs")
++print("   - So we should get a matrix like:")
++print("     [[ True  True False False],")
++print("      [ True  True False False],")
++print("      [False False  True False],")
++print("      [False False False  True]]")
++print()
++
++print("4. Let's analyze the structure:")
++print("   complex_model has:")
++print("   - left part: Pix2Sky_TAN() -> 2 outputs, 2 inputs")
++print("   - right part: Linear1D(10) & Linear1D(5) -> 2 outputs, 2 inputs")
++print("   - Total: 4 outputs, 4 inputs")
++print("   - The separability should be:")
++print("     - Pix2Sky_TAN outputs depend on its 2 inputs")
++print("     - Linear1D outputs depend on their 2 inputs")
++print("     - The two parts are independent")
++print()
++
++print("5. The issue is in how _cstack handles the matrices:")
++print("   For nested_model, we have:")
++print("   - left = Pix2Sky_TAN() -> 2x2 separability matrix")
++print("   - right = cm = Linear1D(10) & Linear1D(5) -> 2x2 separability matrix")
++print("   - Expected result: 4x4 matrix where:")
++print("     - First 2 rows: Pix2Sky_TAN() separability")
++print("     - Last 2 rows: cm separability")
++print("     - But the columns should be arranged properly")
+\ No newline at end of file

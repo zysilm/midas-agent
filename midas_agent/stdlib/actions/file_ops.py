@@ -17,15 +17,14 @@ class ReadFileAction(Action):
 
     @property
     def description(self) -> str:
-        cwd_note = f"The current working directory is: {self.cwd}\n" if self.cwd else ""
-        return f"Reads a file and returns contents with line numbers.\n{cwd_note}"
+        return "Reads a file and returns contents with line numbers."
 
     @property
     def parameters(self) -> dict:
         return {
-            "path": {"type": "string", "required": True},
-            "offset": {"type": "integer", "required": False},
-            "limit": {"type": "integer", "required": False},
+            "path": {"type": "string", "required": True, "description": "Path to the file to read (absolute or relative to cwd)."},
+            "offset": {"type": "integer", "required": False, "description": "0-based line offset to start reading from. Defaults to 0."},
+            "limit": {"type": "integer", "required": False, "description": "Maximum number of lines to return. Defaults to 200."},
         }
 
     def _resolve(self, path: str) -> str:
@@ -100,9 +99,9 @@ class EditFileAction(Action):
     @property
     def parameters(self) -> dict:
         return {
-            "path": {"type": "string", "required": True},
-            "old_string": {"type": "string", "required": True},
-            "new_string": {"type": "string", "required": True},
+            "path": {"type": "string", "required": True, "description": "Path to the file to edit (absolute or relative to cwd)."},
+            "old_string": {"type": "string", "required": True, "description": "The exact string to find and replace. Must match exactly one occurrence."},
+            "new_string": {"type": "string", "required": True, "description": "The replacement string."},
             "undo": {"type": "boolean", "required": False, "description": "If True, revert the last edit to the file at path."},
         }
 
@@ -220,8 +219,8 @@ class WriteFileAction(Action):
     @property
     def parameters(self) -> dict:
         return {
-            "path": {"type": "string", "required": True},
-            "content": {"type": "string", "required": True},
+            "path": {"type": "string", "required": True, "description": "Path to the file to create or overwrite (absolute or relative to cwd)."},
+            "content": {"type": "string", "required": True, "description": "The full content to write to the file."},
         }
 
     def _resolve(self, path: str) -> str:

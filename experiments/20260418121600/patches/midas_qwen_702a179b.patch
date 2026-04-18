@@ -1,0 +1,326 @@
+diff --git a/astropy/coordinates/sky_coordinate.py b/astropy/coordinates/sky_coordinate.py
+index ab475f7d0..1bf0b2db7 100644
+--- a/astropy/coordinates/sky_coordinate.py
++++ b/astropy/coordinates/sky_coordinate.py
+@@ -762,7 +762,7 @@ class SkyCoord(ShapedLikeNDArray):
+             raise NotImplementedError(
+                 "Updating the coordinates in a frame with explicit time dependence is"
+                 " currently not supported. If you would like this functionality, please"
+-                " open an issue on github:\nhttps://github.com/astropy/astropy"
++                " open an issue on github:\\\\nhttps://github.com/astropy/astropy"
+             )
+ 
+         if new_obstime is not None and self.obstime is None:
+@@ -2097,7 +2097,7 @@ class SkyCoord(ShapedLikeNDArray):
+         The definition of alphanumeric here is based on Unicode's definition
+         of alphanumeric, except without ``_`` (which is normally considered
+         alphanumeric).  So for ASCII, this means the non-alphanumeric characters
+-        are ``<space>_!"#$%&'()*+,-./\:;<=>?@[]^`{|}~``).
++        are ``<space>_!"#$%&'()*+,-./\\\\:;<=>?@[]^`{|}~``).
+ 
+         Parameters
+         ----------
+@@ -2133,10 +2133,10 @@ class SkyCoord(ShapedLikeNDArray):
+             # this matches things like 'ra[...]'' but *not* 'rad'.
+             # note that the "_" must be in there explicitly, because
+             # "alphanumeric" usually includes underscores.
+-            starts_with_comp = comp_name + r"(\W|\b|_)"
++            starts_with_comp = comp_name + r"(\\\\W|\\\\b|_)"
+             # this part matches stuff like 'center_ra', but *not*
+             # 'aura'
+-            ends_with_comp = r".*(\W|\b|_)" + comp_name + r"\b"
++            ends_with_comp = r".*(\\\\W|\\\\b|_)" + comp_name + r"\\\\b"
+             # the final regex ORs together the two patterns
+             rex = re.compile(
+                 rf"({starts_with_comp})|({ends_with_comp})", re.IGNORECASE | re.UNICODE
+diff --git a/check_property.py b/check_property.py
+new file mode 100644
+index 000000000..ca19a9541
+--- /dev/null
++++ b/check_property.py
+@@ -0,0 +1,12 @@
++import astropy.coordinates as coord
++
++
++class custom_coord(coord.SkyCoord):
++    @property
++    def prop(self):
++        return self.random_attr
++
++
++print("Has prop attribute:", hasattr(custom_coord, 'prop'))
++print("Prop in class dict:", 'prop' in custom_coord.__dict__)
++print("Prop type:", type(custom_coord.__dict__.get('prop', None)))
+\ No newline at end of file
+diff --git a/debug_issue.py b/debug_issue.py
+new file mode 100644
+index 000000000..7f0a09c5a
+--- /dev/null
++++ b/debug_issue.py
+@@ -0,0 +1,21 @@
++import astropy.coordinates as coord
++
++
++class custom_coord(coord.SkyCoord):
++    @property
++    def prop(self):
++        print("Property getter called")
++        return self.random_attr
++
++
++c = custom_coord('00h42m30s', '+41d12m00s', frame='icrs')
++print("Created custom_coord object")
++print("Checking if prop exists in class:", hasattr(custom_coord, 'prop'))
++print("Checking if prop exists in instance:", hasattr(c, 'prop'))
++
++try:
++    result = c.prop
++    print(f"Result: {result}")
++except AttributeError as e:
++    print(f"Error: {e}")
++    print(f"Error type: {type(e)}")
+\ No newline at end of file
+diff --git a/debug_issue2.py b/debug_issue2.py
+new file mode 100644
+index 000000000..5cd97d9a8
+--- /dev/null
++++ b/debug_issue2.py
+@@ -0,0 +1,30 @@
++import astropy.coordinates as coord
++
++
++class custom_coord(coord.SkyCoord):
++    @property
++    def prop(self):
++        print("Property getter called")
++        print("About to access random_attr")
++        return self.random_attr
++
++
++c = custom_coord('00h42m30s', '+41d12m00s', frame='icrs')
++print("Created custom_coord object")
++
++# Let's see what happens when we try to access random_attr directly
++print("Trying to access random_attr directly:")
++try:
++    result = c.random_attr
++    print(f"Result: {result}")
++except AttributeError as e:
++    print(f"Error: {e}")
++
++print("\\nTrying to access prop:")
++try:
++    result = c.prop
++    print(f"Result: {result}")
++except AttributeError as e:
++    print(f"Error: {e}")
++    import traceback
++    traceback.print_exc()
+\ No newline at end of file
+diff --git a/debug_trace.py b/debug_trace.py
+new file mode 100644
+index 000000000..c4d4ee9c4
+--- /dev/null
++++ b/debug_trace.py
+@@ -0,0 +1,34 @@
++import astropy.coordinates as coord
++import traceback
++
++
++# Monkey patch to see what's happening
++original_getattr = coord.SkyCoord.__getattr__
++
++def debug_getattr(self, attr):
++    print(f"DEBUG: SkyCoord.__getattr__ called with attr='{attr}'")
++    try:
++        result = original_getattr(self, attr)
++        print(f"DEBUG: SkyCoord.__getattr__ returning: {result}")
++        return result
++    except Exception as e:
++        print(f"DEBUG: SkyCoord.__getattr__ raising: {e}")
++        raise
++
++coord.SkyCoord.__getattr__ = debug_getattr
++
++
++class custom_coord(coord.SkyCoord):
++    @property
++    def prop(self):
++        print("Property getter called")
++        return self.random_attr
++
++
++c = custom_coord('00h42m30s', '+41d12m00s', frame='icrs')
++print("About to access c.prop")
++try:
++    c.prop
++except Exception as e:
++    print(f"Final error: {e}")
++    traceback.print_exc()
+\ No newline at end of file
+diff --git a/exact_repro.py b/exact_repro.py
+new file mode 100644
+index 000000000..9f4bff163
+--- /dev/null
++++ b/exact_repro.py
+@@ -0,0 +1,12 @@
++import astropy.coordinates as coord
++
++
++class custom_coord(coord.SkyCoord):
++    @property
++    def prop(self):
++        return self.random_attr
++
++
++c = custom_coord('00h42m30s', '+41d12m00s', frame='icrs')
++print("About to access c.prop")
++c.prop
+\ No newline at end of file
+diff --git a/precise_test.py b/precise_test.py
+new file mode 100644
+index 000000000..b7bef7471
+--- /dev/null
++++ b/precise_test.py
+@@ -0,0 +1,24 @@
++import astropy.coordinates as coord
++import traceback
++
++
++class custom_coord(coord.SkyCoord):
++    @property
++    def prop(self):
++        print("Property getter called")
++        print("About to access random_attr")
++        return self.random_attr
++
++
++c = custom_coord('00h42m30s', '+41d12m00s', frame='icrs')
++print("Created custom_coord object")
++
++print("About to access c.prop")
++try:
++    result = c.prop
++    print(f"Result: {result}")
++except Exception as e:
++    print(f"Exception type: {type(e)}")
++    print(f"Exception message: {e}")
++    print("Full traceback:")
++    traceback.print_exc()
+\ No newline at end of file
+diff --git a/reproduce_issue.py b/reproduce_issue.py
+new file mode 100644
+index 000000000..54a5a7fe2
+--- /dev/null
++++ b/reproduce_issue.py
+@@ -0,0 +1,16 @@
++import astropy.coordinates as coord
++
++
++class custom_coord(coord.SkyCoord):
++    @property
++    def prop(self):
++        return self.random_attr
++
++
++c = custom_coord('00h42m30s', '+41d12m00s', frame='icrs')
++print("Created custom_coord object")
++try:
++    c.prop
++except AttributeError as e:
++    print(f"Error: {e}")
++    print(f"Error type: {type(e)}")
+\ No newline at end of file
+diff --git a/simple_test.py b/simple_test.py
+new file mode 100644
+index 000000000..6e9961e0d
+--- /dev/null
++++ b/simple_test.py
+@@ -0,0 +1,21 @@
++class BaseClass:
++    def __getattr__(self, attr):
++        print(f"BaseClass.__getattr__ called with: {attr}")
++        raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{attr}'")
++
++
++class SubClass(BaseClass):
++    @property
++    def prop(self):
++        print("Property getter called")
++        return self.random_attr
++
++
++# Test normal case
++obj = SubClass()
++print("Accessing prop:")
++try:
++    result = obj.prop
++    print(f"Result: {result}")
++except AttributeError as e:
++    print(f"Error: {e}")
+\ No newline at end of file
+diff --git a/trace_detailed.py b/trace_detailed.py
+new file mode 100644
+index 000000000..fc3eb7c08
+--- /dev/null
++++ b/trace_detailed.py
+@@ -0,0 +1,40 @@
++import astropy.coordinates as coord
++import traceback
++
++
++# Let's monkey patch to see the exact flow
++original_getattr = coord.SkyCoord.__getattr__
++
++def debug_getattr(self, attr):
++    print(f"DEBUG: SkyCoord.__getattr__ called with attr='{attr}' (type: {type(attr)})")
++    import sys
++    # Print the current frame to see where this is called from
++    frame = sys._getframe(1)
++    print(f"DEBUG: Called from: {frame.f_code.co_filename}:{frame.f_lineno}")
++    try:
++        result = original_getattr(self, attr)
++        print(f"DEBUG: SkyCoord.__getattr__ returning: {result}")
++        return result
++    except Exception as e:
++        print(f"DEBUG: SkyCoord.__getattr__ raising: {e}")
++        print(f"DEBUG: Exception type: {type(e)}")
++        raise
++
++coord.SkyCoord.__getattr__ = debug_getattr
++
++
++class custom_coord(coord.SkyCoord):
++    @property
++    def prop(self):
++        print("Property getter called")
++        print("About to access random_attr")
++        return self.random_attr
++
++
++c = custom_coord('00h42m30s', '+41d12m00s', frame='icrs')
++print("About to access c.prop")
++try:
++    c.prop
++except Exception as e:
++    print(f"Final error: {e}")
++    traceback.print_exc()
+\ No newline at end of file
+diff --git a/user_exact_test.py b/user_exact_test.py
+new file mode 100644
+index 000000000..6165ab05e
+--- /dev/null
++++ b/user_exact_test.py
+@@ -0,0 +1,11 @@
++import astropy.coordinates as coord
++
++
++class custom_coord(coord.SkyCoord):
++    @property
++    def prop(self):
++        return self.random_attr
++
++
++c = custom_coord('00h42m30s', '+41d12m00s', frame='icrs')
++c.prop
+\ No newline at end of file

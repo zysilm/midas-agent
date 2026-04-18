@@ -101,8 +101,14 @@ class ReactAgent:
             required = []
             for param_name, param_def in action.parameters.items():
                 prop = {"type": param_def.get("type", "string")}
+                if "description" in param_def:
+                    prop["description"] = param_def["description"]
                 if "default" in param_def:
                     prop["default"] = param_def["default"]
+                if "enum" in param_def:
+                    prop["enum"] = param_def["enum"]
+                if "items" in param_def:
+                    prop["items"] = param_def["items"]
                 properties[param_name] = prop
                 if param_def.get("required", False):
                     required.append(param_name)
