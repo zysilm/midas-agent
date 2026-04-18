@@ -48,7 +48,8 @@ class SWEBenchTestRunner:
         if not all_tests:
             return TestResult(all_passed=True, passed=0, total=0, failure_output="")
 
-        test_args = " ".join(all_tests)
+        import shlex
+        test_args = " ".join(shlex.quote(t) for t in all_tests)
         cmd = f"python -m pytest {test_args} --tb=short -q 2>&1"
         output = self._bash.execute(command=cmd)
 
