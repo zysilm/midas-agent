@@ -44,7 +44,11 @@ class SWEBenchTestRunner:
         self._pass_to_pass = pass_to_pass
 
     def __call__(self) -> TestResult:
-        all_tests = self._fail_to_pass + self._pass_to_pass
+        # Only run PASS_TO_PASS tests (regression check).
+        # FAIL_TO_PASS tests are new tests added by the SWE-bench test patch
+        # which is NOT applied to the agent's working container — only the
+        # scorer's evaluation container gets the test patch.
+        all_tests = list(self._pass_to_pass)
         if not all_tests:
             return TestResult(all_passed=True, passed=0, total=0, failure_output="")
 
