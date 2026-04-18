@@ -258,18 +258,11 @@ def run_training(
                     ws.work_dir = ws_repo
                     ws_repo_dirs.append(ws_repo)
 
-                # Docker mode: start container, inject all Docker actions
+                # Docker mode: start container, set IO backend
                 if config.execution_env == "docker":
                     try:
                         from midas_agent.docker.container_manager import ContainerManager
-                        from midas_agent.stdlib.actions.docker_actions import (
-                            DockerBashAction,
-                            DockerReadFileAction,
-                            DockerEditFileAction,
-                            DockerWriteFileAction,
-                            DockerSearchCodeAction,
-                            DockerFindFilesAction,
-                        )
+                        from midas_agent.runtime.io_backend import DockerIO
 
                         cm = ContainerManager()
                         image = _resolve_swebench_image(issue)
@@ -279,16 +272,10 @@ def run_training(
                             install_cmd=None,  # conda testbed env already has repo installed
                         )
                         containers.append(cm)
-                        # Inject all Docker actions into the workspace
-                        if hasattr(ws, "_action_overrides"):
-                            ws._action_overrides = {
-                                "bash": DockerBashAction(container_id=cid),
-                                "read_file": DockerReadFileAction(container_id=cid),
-                                "edit_file": DockerEditFileAction(container_id=cid),
-                                "write_file": DockerWriteFileAction(container_id=cid),
-                                "search_code": DockerSearchCodeAction(container_id=cid),
-                                "find_files": DockerFindFilesAction(container_id=cid),
-                            }
+                        # Set IO backend on workspace — no more action overrides
+                        docker_io = DockerIO(container_id=cid, workdir="/testbed")
+                        if hasattr(ws, "_io"):
+                            ws._io = docker_io
                         logger.info("  %s: Docker container %s", ws.workspace_id, cid)
                     except Exception as e:
                         logger.warning(

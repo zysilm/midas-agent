@@ -1,16 +1,23 @@
 """Search actions — code search and file find."""
+from __future__ import annotations
+
 import os
 import subprocess
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from midas_agent.stdlib.action import Action
+
+if TYPE_CHECKING:
+    from midas_agent.runtime.io_backend import IOBackend
 
 DEFAULT_SEARCH_LIMIT = 30
 
 
 class SearchCodeAction(Action):
-    def __init__(self, cwd: str | None = None) -> None:
+    def __init__(self, cwd: str | None = None, io: IOBackend | None = None) -> None:
         self.cwd = cwd
+        self._io = io
 
     @property
     def name(self) -> str:
@@ -51,6 +58,24 @@ class SearchCodeAction(Action):
         include = kwargs.get("include")
         path = kwargs.get("path")
         max_results = kwargs.get("max_results", DEFAULT_SEARCH_LIMIT)
+
+        # IO backend mode: delegate search to io.run_bash()
+        if self._io is not None:
+            import shlex
+            search_path = path or "."
+            cmd_parts = ["grep", "-rnE", shlex.quote(pattern)]
+            if include:
+                cmd_parts.extend(["--include", shlex.quote(include)])
+            cmd_parts.append(shlex.quote(search_path))
+            cmd_str = " ".join(cmd_parts)
+            try:
+                output = self._io.run_bash(cmd_str, cwd=self.cwd, timeout=30)
+                output = output.strip()
+                if not output:
+                    return "No matches found"
+                return self._apply_limit(output, max_results)
+            except Exception as e:
+                return f"Search error: {e}"
 
         search_dir = self.cwd or os.getcwd()
         if path:
@@ -101,8 +126,9 @@ DEFAULT_FIND_LIMIT = 50
 
 
 class FindFilesAction(Action):
-    def __init__(self, cwd: str | None = None) -> None:
+    def __init__(self, cwd: str | None = None, io: IOBackend | None = None) -> None:
         self.cwd = cwd
+        self._io = io
 
     @property
     def name(self) -> str:
@@ -124,6 +150,30 @@ class FindFilesAction(Action):
         pattern = kwargs["pattern"]
         path = kwargs.get("path")
         max_results = kwargs.get("max_results", DEFAULT_FIND_LIMIT)
+
+        # IO backend mode: delegate find to io.run_bash()
+        if self._io is not None:
+            import shlex
+            search_path = path or "."
+            # Convert glob pattern to find -name pattern
+            name_pattern = pattern.replace("**/", "")
+            cmd = f"find {shlex.quote(search_path)} -name {shlex.quote(name_pattern)} -type f"
+            try:
+                output = self._io.run_bash(cmd, cwd=self.cwd, timeout=30)
+                output = output.strip()
+                if not output:
+                    return f"No files found matching: {pattern}"
+                lines = [line.lstrip("./") for line in output.split("\n") if line.strip()]
+                lines = sorted(lines)
+                total = len(lines)
+                if total <= max_results:
+                    return "\n".join(lines)
+                show_count = max(max_results - 1, 1)
+                kept = lines[:show_count]
+                remaining = total - show_count
+                return "\n".join(kept) + f"\n... and {remaining} more files (use max_results to see more)"
+            except Exception as e:
+                return f"Error finding files: {e}"
 
         base_dir = Path(self.cwd) if self.cwd else Path.cwd()
         if path:

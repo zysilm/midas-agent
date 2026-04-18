@@ -1,15 +1,22 @@
 """File operation actions — read, edit, write."""
+from __future__ import annotations
+
 import ast
 import os
+from typing import TYPE_CHECKING
 
 from midas_agent.stdlib.action import Action
+
+if TYPE_CHECKING:
+    from midas_agent.runtime.io_backend import IOBackend
 
 DEFAULT_READ_LIMIT = 200
 
 
 class ReadFileAction(Action):
-    def __init__(self, cwd: str | None = None) -> None:
+    def __init__(self, cwd: str | None = None, io: IOBackend | None = None) -> None:
         self.cwd = cwd
+        self._io = io
 
     @property
     def name(self) -> str:
@@ -41,8 +48,12 @@ class ReadFileAction(Action):
         # Apply default limit when caller does not specify one
         effective_limit = limit if limit is not None else DEFAULT_READ_LIMIT
         try:
-            with open(file_path, "r") as f:
-                lines = f.readlines()
+            if self._io is not None:
+                raw = self._io.read_file(file_path)
+                lines = raw.splitlines(keepends=True)
+            else:
+                with open(file_path, "r") as f:
+                    lines = f.readlines()
             total_lines = len(lines)
             end_index = min(offset + effective_limit, total_lines)
             selected = lines[offset:end_index]
@@ -77,8 +88,9 @@ class ReadFileAction(Action):
 class EditFileAction(Action):
     _undo_history: dict[str, str] = {}
 
-    def __init__(self, cwd: str | None = None) -> None:
+    def __init__(self, cwd: str | None = None, io: IOBackend | None = None) -> None:
         self.cwd = cwd
+        self._io = io
 
     @property
     def name(self) -> str:
@@ -143,8 +155,11 @@ class EditFileAction(Action):
             if file_path in EditFileAction._undo_history:
                 prev = EditFileAction._undo_history.pop(file_path)
                 try:
-                    with open(file_path, "w") as f:
-                        f.write(prev)
+                    if self._io is not None:
+                        self._io.write_file(file_path, prev)
+                    else:
+                        with open(file_path, "w") as f:
+                            f.write(prev)
                     return f"Reverted {file_path} to previous content."
                 except Exception as e:
                     return f"Error reverting file: {e}"
@@ -157,8 +172,11 @@ class EditFileAction(Action):
 
         # Read existing file
         try:
-            with open(file_path, "r") as f:
-                content = f.read()
+            if self._io is not None:
+                content = self._io.read_file(file_path)
+            else:
+                with open(file_path, "r") as f:
+                    content = f.read()
         except FileNotFoundError:
             return f"Error: file not found: {file_path}"
         except Exception as e:
@@ -196,8 +214,11 @@ class EditFileAction(Action):
 
         # Write back
         try:
-            with open(file_path, "w") as f:
-                f.write(new_content)
+            if self._io is not None:
+                self._io.write_file(file_path, new_content)
+            else:
+                with open(file_path, "w") as f:
+                    f.write(new_content)
         except Exception as e:
             return f"Error writing file: {e}"
 
@@ -205,8 +226,9 @@ class EditFileAction(Action):
 
 
 class WriteFileAction(Action):
-    def __init__(self, cwd: str | None = None) -> None:
+    def __init__(self, cwd: str | None = None, io: IOBackend | None = None) -> None:
         self.cwd = cwd
+        self._io = io
 
     @property
     def name(self) -> str:
@@ -234,11 +256,14 @@ class WriteFileAction(Action):
         file_path = self._resolve(kwargs["path"])
         content = kwargs["content"]
         try:
-            dir_name = os.path.dirname(file_path)
-            if dir_name:
-                os.makedirs(dir_name, exist_ok=True)
-            with open(file_path, "w") as f:
-                f.write(content)
+            if self._io is not None:
+                self._io.write_file(file_path, content)
+            else:
+                dir_name = os.path.dirname(file_path)
+                if dir_name:
+                    os.makedirs(dir_name, exist_ok=True)
+                with open(file_path, "w") as f:
+                    f.write(content)
             return f"Written {len(content)} bytes to {file_path}"
         except Exception as e:
             return f"Error writing file: {e}"
