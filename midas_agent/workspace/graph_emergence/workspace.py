@@ -227,5 +227,6 @@ class GraphEmergenceWorkspace(Workspace):
         # Also review free agents that participated (spawned by this workspace)
         for agent in self._free_agent_manager.free_agents.values():
             if getattr(agent, "protected_by", None) == self._responsible_agent.agent_id:
-                self._skill_reviewer.review(agent, ws_results, action_history)
+                sub_history = getattr(agent, "_last_action_history", [])
+                self._skill_reviewer.review(agent, ws_results, sub_history)
         return None

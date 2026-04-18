@@ -130,10 +130,19 @@ def create_initial_skill(
         "You are a skill extraction engine. Based on the following action "
         "history from an agent that solved a coding task, create a reusable "
         "skill document.\n\n"
+        "The skill should capture PATTERNS, not specific fixes:\n"
+        "- What type of problem was this? (error message, computation, API)\n"
+        "- What investigation steps worked?\n"
+        "- What pitfalls were encountered?\n"
+        "- How was the fix verified?\n\n"
+        "Keep it focused but generalizable to similar problems.\n"
+        "Do NOT mention specific line numbers or variable values.\n\n"
         f"## Action History\n{actions_block}\n\n"
         f"## Evaluation Results\n{json.dumps(eval_results)}\n\n"
         "Respond with ONLY a JSON object with keys: name, description, content.\n"
-        "The content should be a concise, reusable procedure (max 5000 chars)."
+        "- name: short, descriptive (e.g. 'debug_computation_errors')\n"
+        "- description: one sentence for marketplace matching\n"
+        "- content: reusable procedure with pitfalls (max 5000 chars)"
     )
 
     request = LLMRequest(
@@ -144,18 +153,21 @@ def create_initial_skill(
         model="default",
     )
 
-    response = system_llm(request)
-    data = json.loads(response.content)
+    try:
+        response = system_llm(request)
+        data = json.loads(response.content)
 
-    content = data["content"]
-    if len(content) > 5000:
-        content = content[:5000]
+        content = data["content"]
+        if len(content) > 5000:
+            content = content[:5000]
 
-    return Skill(
-        name=data["name"],
-        description=data["description"],
-        content=content,
-    )
+        return Skill(
+            name=data["name"],
+            description=data["description"],
+            content=content,
+        )
+    except Exception:
+        return None
 
 
 # ===================================================================
