@@ -98,6 +98,15 @@ class SWEBenchScorer(ExecutionScorer):
 
         container = None
         try:
+            # Remove any stale container with the same name from a previous run
+            container_name = f"sweb.eval.{instance_id}.{self._run_id}"
+            try:
+                stale = client.containers.get(container_name)
+                stale.remove(force=True)
+                logger.info("Removed stale container %s", container_name)
+            except Exception:
+                pass
+
             container = build_container(
                 test_spec, client, self._run_id, logger, False, True,
             )
