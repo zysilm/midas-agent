@@ -23,7 +23,10 @@ from midas_agent.stdlib.plan_execute_agent import PlanExecuteAgent
 from midas_agent.types import Issue
 from midas_agent.workspace.base import Workspace
 from midas_agent.workspace.graph_emergence.agent import Agent, Soul
-from midas_agent.workspace.graph_emergence.free_agent_manager import FreeAgentManager
+from midas_agent.workspace.graph_emergence.free_agent_manager import (
+    FreeAgentManager,
+    compute_bankruptcy_rate,
+)
 from midas_agent.workspace.graph_emergence.skill import SkillReviewer
 
 
@@ -40,6 +43,8 @@ class GraphEmergenceWorkspace(Workspace):
         max_tool_output_chars: int | None = None,
         extra_actions: list | None = None,
         action_log: "IO | None" = None,
+        training_log: "object | None" = None,
+        evicted_ws_ids: "set[str] | None" = None,
     ) -> None:
         super().__init__(workspace_id, call_llm, system_llm)
         self._responsible_agent = responsible_agent
@@ -51,6 +56,8 @@ class GraphEmergenceWorkspace(Workspace):
         self._max_tool_output_chars = max_tool_output_chars
         self._extra_actions = extra_actions or []
         self._action_log = action_log
+        self._training_log = training_log
+        self._evicted_ws_ids = evicted_ws_ids or set()
         self._budget = 0
         self._last_result = None
         self._patches_dir: str = "/tmp/patches"
@@ -85,7 +92,15 @@ class GraphEmergenceWorkspace(Workspace):
         for agent_id, agent in agents.items():
             price = self._free_agent_manager._pricing_engine.calculate_price(agent)
             skill_name = agent.skill.name if agent.skill else "general"
-            agent_lines.append(f"{agent_id}: {skill_name} (price={price})")
+            if self._training_log is not None:
+                br = compute_bankruptcy_rate(
+                    agent_id, self._training_log, self._evicted_ws_ids,
+                )
+            else:
+                br = 0.0
+            agent_lines.append(
+                f"{agent_id}: {skill_name} (price={price}, bankruptcy={br:.2f})"
+            )
 
         env_context = EnvironmentContext(
             cwd="/testbed",
