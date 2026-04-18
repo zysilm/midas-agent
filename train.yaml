@@ -1,4 +1,4 @@
-initial_budget: 1000000
+initial_budget: 2000000
 workspace_count: 1
 runtime_mode: graph_emergence
 n_evict: 0
