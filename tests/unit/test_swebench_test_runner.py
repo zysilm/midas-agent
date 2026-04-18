@@ -125,4 +125,4 @@ class TestSWEBenchTestRunner:
         assert "python -m pytest" in bash.last_command
         assert "test_a.py::test_x" in bash.last_command
         assert "test_b.py::test_y" in bash.last_command
-        assert "--tb=short" in bash.last_command
+        assert "--tb=line" in bash.last_command
