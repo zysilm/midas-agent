@@ -17,7 +17,7 @@ class ContainerManager:
     Lifecycle:
       1. ``start(image, host_workspace, container_workspace)`` — pull image
          if needed, start container with volume mount, install repo.
-      2. Agent uses ``DockerBashAction`` with the returned ``container_id``.
+      2. Agent uses actions with ``DockerIO`` backend using the returned ``container_id``.
       3. ``stop()`` — stop and remove the container.
     """
 

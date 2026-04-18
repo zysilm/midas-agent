@@ -4,10 +4,33 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from midas_agent.scheduler.storage import LogFilter
 from midas_agent.workspace.graph_emergence.pricing import PricingEngineBase
 
 if TYPE_CHECKING:
+    from midas_agent.scheduler.training_log import TrainingLog
     from midas_agent.workspace.graph_emergence.agent import Agent
+
+
+def compute_bankruptcy_rate(
+    agent_id: str,
+    training_log: TrainingLog,
+    evicted_ws_ids: set[str],
+) -> float:
+    """Compute service bankruptcy rate for a free agent.
+
+    bankruptcy_rate = |{workspaces agent served that were evicted}|
+                    / |{workspaces agent served}|
+
+    Returns 0.0 when the agent has not served any workspace.
+    """
+    consume_entries = training_log.get_log_entries(
+        LogFilter(entity_id=agent_id, type="consume")
+    )
+    served = {e.workspace_id for e in consume_entries if e.workspace_id}
+    if not served:
+        return 0.0
+    return len(served & evicted_ws_ids) / len(served)
 
 
 @dataclass

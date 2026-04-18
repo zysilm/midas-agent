@@ -1,12 +1,19 @@
 """Bash action — shell command execution."""
+from __future__ import annotations
+
 import subprocess
+from typing import TYPE_CHECKING
 
 from midas_agent.stdlib.action import Action
 
+if TYPE_CHECKING:
+    from midas_agent.runtime.io_backend import IOBackend
+
 
 class BashAction(Action):
-    def __init__(self, cwd: str | None = None) -> None:
+    def __init__(self, cwd: str | None = None, io: IOBackend | None = None) -> None:
         self.cwd = cwd
+        self._io = io
 
     @property
     def name(self) -> str:
@@ -26,6 +33,8 @@ class BashAction(Action):
         command = kwargs["command"]
         timeout = kwargs.get("timeout", 120)
         try:
+            if self._io is not None:
+                return self._io.run_bash(command, cwd=self.cwd, timeout=timeout)
             result = subprocess.run(
                 command,
                 shell=True,

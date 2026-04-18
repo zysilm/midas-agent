@@ -138,13 +138,14 @@ class TestBuildActionSet:
         names = {a.name for a in actions}
         assert "task_done" in names
 
-    def test_docker_mode_has_docker_actions(self, tmp_path):
-        """Docker mode uses Docker variants of actions."""
+    def test_docker_mode_has_same_actions(self, tmp_path):
+        """Docker mode uses the same action classes with DockerIO backend."""
         actions = build_action_set(cwd=str(tmp_path), env="docker")
         names = {a.name for a in actions}
-        # Docker actions use the same names but are Docker implementations
+        # Same action names as local — unified via IO backend
         assert "bash" in names
         assert "read_file" in names
+        assert "edit_file" in names
 
     def test_actions_have_correct_cwd(self, tmp_path):
         """All file-aware actions receive the correct cwd."""

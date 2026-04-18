@@ -58,34 +58,12 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
 
 
 def build_action_set(cwd: str, env: str = "local") -> list[Action]:
-    """Build a list of Action instances for inference mode."""
-    if env == "docker":
-        from midas_agent.stdlib.actions.docker_actions import (
-            DockerBashAction,
-            DockerEditFileAction,
-            DockerFindFilesAction,
-            DockerReadFileAction,
-            DockerSearchCodeAction,
-            DockerWriteFileAction,
-        )
-        from midas_agent.stdlib.actions.task_done import TaskDoneAction
-        from midas_agent.stdlib.actions.update_plan import UpdatePlanAction
+    """Build a list of Action instances for inference mode.
 
-        # Docker actions require a container_id; use a placeholder for now.
-        # The real container_id is set at runtime before any action executes.
-        container_id = ""
-        return [
-            DockerBashAction(container_id=container_id, cwd=cwd),
-            DockerReadFileAction(container_id=container_id, cwd=cwd),
-            DockerEditFileAction(container_id=container_id, cwd=cwd),
-            DockerWriteFileAction(container_id=container_id, cwd=cwd),
-            DockerSearchCodeAction(container_id=container_id, cwd=cwd),
-            DockerFindFilesAction(container_id=container_id, cwd=cwd),
-            UpdatePlanAction(),
-            TaskDoneAction(),
-        ]
-
-    # Default: local environment
+    Same action classes for both local and docker modes — only the IO
+    backend differs. For docker mode, the IO backend is set later at
+    runtime when a container is available.
+    """
     from midas_agent.stdlib.actions.bash import BashAction
     from midas_agent.stdlib.actions.file_ops import (
         EditFileAction,
@@ -96,13 +74,20 @@ def build_action_set(cwd: str, env: str = "local") -> list[Action]:
     from midas_agent.stdlib.actions.task_done import TaskDoneAction
     from midas_agent.stdlib.actions.update_plan import UpdatePlanAction
 
+    io = None
+    if env == "docker":
+        from midas_agent.runtime.io_backend import DockerIO
+        # Docker IO requires a container_id; use a placeholder for now.
+        # The real container_id is set at runtime before any action executes.
+        io = DockerIO(container_id="", workdir=cwd)
+
     return [
-        BashAction(cwd=cwd),
-        ReadFileAction(cwd=cwd),
-        EditFileAction(cwd=cwd),
-        WriteFileAction(cwd=cwd),
-        SearchCodeAction(cwd=cwd),
-        FindFilesAction(cwd=cwd),
+        BashAction(cwd=cwd, io=io),
+        ReadFileAction(cwd=cwd, io=io),
+        EditFileAction(cwd=cwd, io=io),
+        WriteFileAction(cwd=cwd, io=io),
+        SearchCodeAction(cwd=cwd, io=io),
+        FindFilesAction(cwd=cwd, io=io),
         UpdatePlanAction(),
         TaskDoneAction(),
     ]

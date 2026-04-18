@@ -5,7 +5,7 @@ import os
 import subprocess
 import uuid
 from datetime import date
-from typing import Callable
+from typing import Callable, TYPE_CHECKING
 
 from midas_agent.context.environment import EnvironmentContext
 from midas_agent.llm.types import LLMRequest, LLMResponse
@@ -23,8 +23,14 @@ from midas_agent.stdlib.plan_execute_agent import PlanExecuteAgent
 from midas_agent.types import Issue
 from midas_agent.workspace.base import Workspace
 from midas_agent.workspace.graph_emergence.agent import Agent, Soul
-from midas_agent.workspace.graph_emergence.free_agent_manager import FreeAgentManager
+from midas_agent.workspace.graph_emergence.free_agent_manager import (
+    FreeAgentManager,
+    compute_bankruptcy_rate,
+)
 from midas_agent.workspace.graph_emergence.skill import SkillReviewer
+
+if TYPE_CHECKING:
+    from midas_agent.runtime.io_backend import IOBackend
 
 
 class GraphEmergenceWorkspace(Workspace):
@@ -40,6 +46,9 @@ class GraphEmergenceWorkspace(Workspace):
         max_tool_output_chars: int | None = None,
         extra_actions: list | None = None,
         action_log: "IO | None" = None,
+        training_log: "object | None" = None,
+        evicted_ws_ids: "set[str] | None" = None,
+        io: "IOBackend | None" = None,
     ) -> None:
         super().__init__(workspace_id, call_llm, system_llm)
         self._responsible_agent = responsible_agent
@@ -51,6 +60,9 @@ class GraphEmergenceWorkspace(Workspace):
         self._max_tool_output_chars = max_tool_output_chars
         self._extra_actions = extra_actions or []
         self._action_log = action_log
+        self._training_log = training_log
+        self._evicted_ws_ids = evicted_ws_ids or set()
+        self._io: IOBackend | None = io
         self._budget = 0
         self._last_result = None
         self._patches_dir: str = "/tmp/patches"
@@ -69,14 +81,14 @@ class GraphEmergenceWorkspace(Workspace):
         cwd = self.work_dir or None
         balance_provider = lambda: self._budget
 
-        ov = self._action_overrides
+        io = self._io  # None for local, DockerIO for training
         base_actions = [
-            ov.get("bash", BashAction(cwd=cwd)),
-            ov.get("read_file", ReadFileAction(cwd=cwd)),
-            ov.get("edit_file", EditFileAction(cwd=cwd)),
-            ov.get("write_file", WriteFileAction(cwd=cwd)),
-            ov.get("search_code", SearchCodeAction(cwd=cwd)),
-            ov.get("find_files", FindFilesAction(cwd=cwd)),
+            BashAction(cwd=cwd, io=io),
+            ReadFileAction(cwd=cwd, io=io),
+            EditFileAction(cwd=cwd, io=io),
+            WriteFileAction(cwd=cwd, io=io),
+            SearchCodeAction(cwd=cwd, io=io),
+            FindFilesAction(cwd=cwd, io=io),
         ]
 
         # Build environment context (replaces _build_market_info)
@@ -85,7 +97,15 @@ class GraphEmergenceWorkspace(Workspace):
         for agent_id, agent in agents.items():
             price = self._free_agent_manager._pricing_engine.calculate_price(agent)
             skill_name = agent.skill.name if agent.skill else "general"
-            agent_lines.append(f"{agent_id}: {skill_name} (price={price})")
+            if self._training_log is not None:
+                br = compute_bankruptcy_rate(
+                    agent_id, self._training_log, self._evicted_ws_ids,
+                )
+            else:
+                br = 0.0
+            agent_lines.append(
+                f"{agent_id}: {skill_name} (price={price}, bankruptcy={br:.2f})"
+            )
 
         env_context = EnvironmentContext(
             cwd="/testbed",
@@ -159,16 +179,14 @@ class GraphEmergenceWorkspace(Workspace):
 
         Supports two modes:
         - Local: work_dir is set, runs git locally.
-        - Docker: action_overrides has a "bash" DockerBashAction, runs git
-          inside the container.
+        - Docker: io backend is set, runs git inside the container.
         """
-        # Try Docker mode first (all ops inside container)
-        docker_bash = self._action_overrides.get("bash")
-        if docker_bash is not None and hasattr(docker_bash, "_container_id"):
+        # Try IO backend mode first (all ops inside container)
+        if self._io is not None:
             try:
-                docker_bash.execute(command="git add -A")
-                result = docker_bash.execute(command="git diff --cached")
-                docker_bash.execute(command="git reset")
+                self._io.run_bash("git add -A")
+                result = self._io.run_bash("git diff --cached")
+                self._io.run_bash("git reset")
                 return result
             except Exception:
                 pass
