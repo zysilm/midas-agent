@@ -8,9 +8,12 @@ from __future__ import annotations
 import ast
 import os
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from midas_agent.stdlib.action import Action
+
+if TYPE_CHECKING:
+    from midas_agent.runtime.io_backend import IOBackend
 
 SNIPPET_LINES: int = 4
 TRUNCATED_MESSAGE: str = (
@@ -53,8 +56,9 @@ class StrReplaceEditorAction(Action):
     # Shared undo history across all instances (class-level)
     _undo_history: dict[str, list[str]] = {}
 
-    def __init__(self, cwd: str | None = None) -> None:
+    def __init__(self, cwd: str | None = None, io: IOBackend | None = None) -> None:
         self.cwd = cwd
+        self._io = io
 
     @property
     def name(self) -> str:
@@ -184,15 +188,23 @@ class StrReplaceEditorAction(Action):
     # ------------------------------------------------------------------
 
     def _view(self, path: str, view_range: list[int] | None) -> str:
-        if not os.path.exists(path):
-            return f"Error: the path {path} does not exist. Please provide a valid path."
+        if self._io:
+            # Docker mode: try to read as file; directories not accessible via IO
+            try:
+                content = self._io.read_file(path)
+            except FileNotFoundError:
+                return f"Error: the path {path} does not exist. Please provide a valid path."
+            return self._view_file_content(path, content, view_range)
+        else:
+            if not os.path.exists(path):
+                return f"Error: the path {path} does not exist. Please provide a valid path."
 
-        if os.path.isdir(path):
-            if view_range:
-                return "Error: the `view_range` parameter is not allowed when `path` points to a directory."
-            return self._view_directory(path)
+            if os.path.isdir(path):
+                if view_range:
+                    return "Error: the `view_range` parameter is not allowed when `path` points to a directory."
+                return self._view_directory(path)
 
-        return self._view_file(path, view_range)
+            return self._view_file(path, view_range)
 
     def _view_directory(self, path: str) -> str:
         """List non-hidden files up to 2 levels deep."""
@@ -220,10 +232,17 @@ class StrReplaceEditorAction(Action):
 
     def _view_file(self, path: str, view_range: list[int] | None) -> str:
         try:
-            content = self._read_file(path)
+            if self._io:
+                content = self._io.read_file(path)
+            else:
+                content = self._read_file(path)
         except Exception as e:
             return f"Error reading file: {e}"
 
+        return self._view_file_content(path, content, view_range)
+
+    def _view_file_content(self, path: str, content: str, view_range: list[int] | None) -> str:
+        """Render file content with optional line range."""
         if view_range:
             if len(view_range) != 2 or not all(isinstance(i, int) for i in view_range):
                 return "Error: invalid `view_range`. It should be a list of two integers."
@@ -261,16 +280,27 @@ class StrReplaceEditorAction(Action):
     # ------------------------------------------------------------------
 
     def _create(self, path: str, file_text: str) -> str:
-        if os.path.exists(path):
-            return f"Error: file already exists at: {path}. Cannot overwrite files using command `create`."
+        if self._io:
+            # Check existence via IO
+            try:
+                self._io.read_file(path)
+                return f"Error: file already exists at: {path}. Cannot overwrite files using command `create`."
+            except FileNotFoundError:
+                pass
+        else:
+            if os.path.exists(path):
+                return f"Error: file already exists at: {path}. Cannot overwrite files using command `create`."
 
-        parent = os.path.dirname(path)
-        if parent and not os.path.exists(parent):
-            return f"Error: the parent directory {parent} does not exist. Please create it first."
+            parent = os.path.dirname(path)
+            if parent and not os.path.exists(parent):
+                return f"Error: the parent directory {parent} does not exist. Please create it first."
 
         try:
-            with open(path, "w") as f:
-                f.write(file_text)
+            if self._io:
+                self._io.write_file(path, file_text)
+            else:
+                with open(path, "w") as f:
+                    f.write(file_text)
         except Exception as e:
             return f"Error writing file: {e}"
 
@@ -284,7 +314,10 @@ class StrReplaceEditorAction(Action):
 
     def _str_replace(self, path: str, old_str: str, new_str: str | None) -> str:
         try:
-            content = self._read_file(path)
+            if self._io:
+                content = self._io.read_file(path)
+            else:
+                content = self._read_file(path)
         except FileNotFoundError:
             return f"Error: file not found: {path}"
         except Exception as e:
@@ -327,8 +360,11 @@ class StrReplaceEditorAction(Action):
         self._undo_history.setdefault(path, []).append(content)
 
         try:
-            with open(path, "w") as f:
-                f.write(new_content)
+            if self._io:
+                self._io.write_file(path, new_content)
+            else:
+                with open(path, "w") as f:
+                    f.write(new_content)
         except Exception as e:
             return f"Error writing file: {e}"
 
@@ -352,7 +388,10 @@ class StrReplaceEditorAction(Action):
 
     def _insert(self, path: str, insert_line: int, new_str: str) -> str:
         try:
-            content = self._read_file(path)
+            if self._io:
+                content = self._io.read_file(path)
+            else:
+                content = self._read_file(path)
         except FileNotFoundError:
             return f"Error: file not found: {path}"
         except Exception as e:
@@ -378,8 +417,11 @@ class StrReplaceEditorAction(Action):
         self._undo_history.setdefault(path, []).append(content)
 
         try:
-            with open(path, "w") as f:
-                f.write(new_content)
+            if self._io:
+                self._io.write_file(path, new_content)
+            else:
+                with open(path, "w") as f:
+                    f.write(new_content)
         except Exception as e:
             return f"Error writing file: {e}"
 
@@ -415,8 +457,11 @@ class StrReplaceEditorAction(Action):
 
         old_text = history.pop()
         try:
-            with open(path, "w") as f:
-                f.write(old_text)
+            if self._io:
+                self._io.write_file(path, old_text)
+            else:
+                with open(path, "w") as f:
+                    f.write(old_text)
         except Exception as e:
             return f"Error reverting file: {e}"
 

@@ -54,6 +54,7 @@ class GraphEmergenceWorkspace(Workspace):
         self._action_log = action_log
         self._training_log = training_log
         self._evicted_ws_ids = evicted_ws_ids or set()
+        self._io = None  # Set by training.py for Docker execution mode
         self._budget = 0
         self._last_result = None
         self._patches_dir: str = "/tmp/patches"
@@ -73,11 +74,12 @@ class GraphEmergenceWorkspace(Workspace):
         balance_provider = lambda: self._budget
 
         ov = self._action_overrides
+        io = self._io
         base_actions = [
-            ov.get("bash", BashAction(cwd=cwd)),
-            ov.get("str_replace_editor", StrReplaceEditorAction(cwd=cwd)),
-            ov.get("search_code", SearchCodeAction(cwd=cwd)),
-            ov.get("find_files", FindFilesAction(cwd=cwd)),
+            ov.get("bash", BashAction(cwd=cwd, io=io)),
+            ov.get("str_replace_editor", StrReplaceEditorAction(cwd=cwd, io=io)),
+            ov.get("search_code", SearchCodeAction(cwd=cwd, io=io)),
+            ov.get("find_files", FindFilesAction(cwd=cwd, io=io)),
         ]
 
         # Build environment context (replaces _build_market_info)
