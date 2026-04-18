@@ -122,11 +122,13 @@ class TestBuildActionSet:
     """build_action_set assembles the right actions for inference mode."""
 
     def test_local_mode_has_core_actions(self, tmp_path):
-        """Local mode includes bash, str_replace_editor, search_code, find_files."""
+        """Local mode includes bash, read_file, edit_file, write_file, search_code, find_files."""
         actions = build_action_set(cwd=str(tmp_path), env="local")
         names = {a.name for a in actions}
         assert "bash" in names
-        assert "str_replace_editor" in names
+        assert "read_file" in names
+        assert "edit_file" in names
+        assert "write_file" in names
         assert "search_code" in names
         assert "find_files" in names
 
@@ -136,13 +138,14 @@ class TestBuildActionSet:
         names = {a.name for a in actions}
         assert "task_done" in names
 
-    def test_docker_mode_has_docker_actions(self, tmp_path):
-        """Docker mode uses Docker variants of actions."""
+    def test_docker_mode_has_same_actions(self, tmp_path):
+        """Docker mode uses the same action classes with DockerIO backend."""
         actions = build_action_set(cwd=str(tmp_path), env="docker")
         names = {a.name for a in actions}
-        # Docker actions use the same names but are Docker implementations
+        # Same action names as local — unified via IO backend
         assert "bash" in names
-        assert "str_replace_editor" in names
+        assert "read_file" in names
+        assert "edit_file" in names
 
     def test_actions_have_correct_cwd(self, tmp_path):
         """All file-aware actions receive the correct cwd."""
@@ -160,7 +163,7 @@ class TestBuildActionSet:
         assert isinstance(actions, list)
         assert all(isinstance(a, Action) for a in actions)
 
-    def test_at_least_six_actions(self, tmp_path):
-        """Local mode provides at least 6 actions (4 core + update_plan + task_done)."""
+    def test_at_least_seven_actions(self, tmp_path):
+        """Local mode provides at least 7 actions (6 core + task_done)."""
         actions = build_action_set(cwd=str(tmp_path), env="local")
-        assert len(actions) >= 6
+        assert len(actions) >= 7

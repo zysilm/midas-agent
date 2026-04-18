@@ -1,0 +1,84 @@
+2026-04-18 01:08:21,238 - INFO - Creating container for astropy__astropy-13236...
+2026-04-18 01:08:21,248 - ERROR - Error creating container for astropy__astropy-13236: 409 Client Error for http+docker://localhost/v1.54/containers/create?name=sweb.eval.astropy__astropy-13236.midas&platform=linux%2Fx86_64: Conflict ("Conflict. The container name "/sweb.eval.astropy__astropy-13236.midas" is already in use by container "a1d4629e12eadd44dfb726387392d2d49eb3790a0504443b390d17c3d758bf08". You have to remove (or rename) that container to be able to reuse that name.")
+2026-04-18 01:08:21,256 - INFO - Traceback (most recent call last):
+  File "/Users/ziyang/Documents/midas-agent/.venv/lib/python3.13/site-packages/docker/api/client.py", line 275, in _raise_for_status
+    response.raise_for_status()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/Users/ziyang/Documents/midas-agent/.venv/lib/python3.13/site-packages/requests/models.py", line 1028, in raise_for_status
+    raise HTTPError(http_error_msg, response=self)
+requests.exceptions.HTTPError: 409 Client Error: Conflict for url: http+docker://localhost/v1.54/containers/create?name=sweb.eval.astropy__astropy-13236.midas&platform=linux%2Fx86_64
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/Users/ziyang/Documents/midas-agent/.venv/lib/python3.13/site-packages/swebench/harness/docker_build.py", line 479, in build_container
+    container = client.containers.create(
+        image=test_spec.instance_image_key,
+    ...<5 lines>...
+        cap_add=cap_add,
+    )
+  File "/Users/ziyang/Documents/midas-agent/.venv/lib/python3.13/site-packages/docker/models/containers.py", line 935, in create
+    resp = self.client.api.create_container(**create_kwargs)
+  File "/Users/ziyang/Documents/midas-agent/.venv/lib/python3.13/site-packages/docker/api/container.py", line 440, in create_container
+    return self.create_container_from_config(config, name, platform)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/ziyang/Documents/midas-agent/.venv/lib/python3.13/site-packages/docker/api/container.py", line 457, in create_container_from_config
+    return self._result(res, True)
+           ~~~~~~~~~~~~^^^^^^^^^^^
+  File "/Users/ziyang/Documents/midas-agent/.venv/lib/python3.13/site-packages/docker/api/client.py", line 281, in _result
+    self._raise_for_status(response)
+    ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^
+  File "/Users/ziyang/Documents/midas-agent/.venv/lib/python3.13/site-packages/docker/api/client.py", line 277, in _raise_for_status
+    raise create_api_error_from_http_exception(e) from e
+          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^
+  File "/Users/ziyang/Documents/midas-agent/.venv/lib/python3.13/site-packages/docker/errors.py", line 39, in create_api_error_from_http_exception
+    raise cls(e, response=response, explanation=explanation) from e
+docker.errors.APIError: 409 Client Error for http+docker://localhost/v1.54/containers/create?name=sweb.eval.astropy__astropy-13236.midas&platform=linux%2Fx86_64: Conflict ("Conflict. The container name "/sweb.eval.astropy__astropy-13236.midas" is already in use by container "a1d4629e12eadd44dfb726387392d2d49eb3790a0504443b390d17c3d758bf08". You have to remove (or rename) that container to be able to reuse that name.")
+
+2026-04-18 01:08:21,258 - INFO - Traceback (most recent call last):
+  File "/Users/ziyang/Documents/midas-agent/.venv/lib/python3.13/site-packages/docker/api/client.py", line 275, in _raise_for_status
+    response.raise_for_status()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/Users/ziyang/Documents/midas-agent/.venv/lib/python3.13/site-packages/requests/models.py", line 1028, in raise_for_status
+    raise HTTPError(http_error_msg, response=self)
+requests.exceptions.HTTPError: 409 Client Error: Conflict for url: http+docker://localhost/v1.54/containers/create?name=sweb.eval.astropy__astropy-13236.midas&platform=linux%2Fx86_64
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/Users/ziyang/Documents/midas-agent/.venv/lib/python3.13/site-packages/swebench/harness/docker_build.py", line 479, in build_container
+    container = client.containers.create(
+        image=test_spec.instance_image_key,
+    ...<5 lines>...
+        cap_add=cap_add,
+    )
+  File "/Users/ziyang/Documents/midas-agent/.venv/lib/python3.13/site-packages/docker/models/containers.py", line 935, in create
+    resp = self.client.api.create_container(**create_kwargs)
+  File "/Users/ziyang/Documents/midas-agent/.venv/lib/python3.13/site-packages/docker/api/container.py", line 440, in create_container
+    return self.create_container_from_config(config, name, platform)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/ziyang/Documents/midas-agent/.venv/lib/python3.13/site-packages/docker/api/container.py", line 457, in create_container_from_config
+    return self._result(res, True)
+           ~~~~~~~~~~~~^^^^^^^^^^^
+  File "/Users/ziyang/Documents/midas-agent/.venv/lib/python3.13/site-packages/docker/api/client.py", line 281, in _result
+    self._raise_for_status(response)
+    ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^
+  File "/Users/ziyang/Documents/midas-agent/.venv/lib/python3.13/site-packages/docker/api/client.py", line 277, in _raise_for_status
+    raise create_api_error_from_http_exception(e) from e
+          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^
+  File "/Users/ziyang/Documents/midas-agent/.venv/lib/python3.13/site-packages/docker/errors.py", line 39, in create_api_error_from_http_exception
+    raise cls(e, response=response, explanation=explanation) from e
+docker.errors.APIError: 409 Client Error for http+docker://localhost/v1.54/containers/create?name=sweb.eval.astropy__astropy-13236.midas&platform=linux%2Fx86_64: Conflict ("Conflict. The container name "/sweb.eval.astropy__astropy-13236.midas" is already in use by container "a1d4629e12eadd44dfb726387392d2d49eb3790a0504443b390d17c3d758bf08". You have to remove (or rename) that container to be able to reuse that name.")
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/Users/ziyang/Documents/midas-agent/.venv/lib/python3.13/site-packages/swebench/harness/run_evaluation.py", line 140, in run_instance
+    container = build_container(
+        test_spec, client, run_id, logger, rm_image, force_rebuild
+    )
+  File "/Users/ziyang/Documents/midas-agent/.venv/lib/python3.13/site-packages/swebench/harness/docker_build.py", line 495, in build_container
+    raise BuildImageError(test_spec.instance_id, str(e), logger) from e
+swebench.harness.docker_build.BuildImageError: Error building image astropy__astropy-13236: 409 Client Error for http+docker://localhost/v1.54/containers/create?name=sweb.eval.astropy__astropy-13236.midas&platform=linux%2Fx86_64: Conflict ("Conflict. The container name "/sweb.eval.astropy__astropy-13236.midas" is already in use by container "a1d4629e12eadd44dfb726387392d2d49eb3790a0504443b390d17c3d758bf08". You have to remove (or rename) that container to be able to reuse that name.")
+Check (logs/run_evaluation/midas/midas-agent/astropy__astropy-13236/run_instance.log) for more information.
+

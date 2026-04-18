@@ -1,0 +1,24 @@
+diff --git a/astropy/io/ascii/html.py b/astropy/io/ascii/html.py
+index 266cf229c..e3a93b7d4 100644
+--- a/astropy/io/ascii/html.py
++++ b/astropy/io/ascii/html.py
+@@ -348,13 +348,18 @@ class HTML(core.BaseReader):
+ 
+         cols = list(table.columns.values())
+ 
+-        self.data.header.cols = cols
++        # Set up the header and data with the columns
++        self.header.cols = cols
++        self.data.cols = cols
+ 
+         if isinstance(self.data.fill_values, tuple):
+             self.data.fill_values = [self.data.fill_values]
+ 
+         self.data._set_fill_values(cols)
+ 
++        # Apply column formats if they exist
++        self.data._set_col_formats()
++
+         lines = []
+ 
+         # Set HTML escaping to False for any column in the raw_html_cols input

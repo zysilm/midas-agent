@@ -1,0 +1,2727 @@
+2026-04-18 10:32:31,483 - INFO - rex-deploy - Building image docker.io/swebench/sweb.eval.x86_64.astropy_1776_astropy-12907:latest to install a standalone python to /root. This might take a while (but you only have to do it once). To skip this step, set `python_standalone_dir` to None.
+2026-04-18 10:32:33,377 - INFO - rex-deploy - Starting container docker.ioswebenchsweb.eval.x86_64.astropy_1776_astropy-12907latest-375e72a9-73e4-4335-ad48-7f427b918aff with image docker.io/swebench/sweb.eval.x86_64.astropy_1776_astropy-12907:latest serving on port 59940
+2026-04-18 10:32:33,382 - INFO - rex-deploy - Starting runtime at 59940
+2026-04-18 10:32:34,977 - INFO - rex-deploy - Runtime started in 1.59s
+2026-04-18 10:32:36,254 - INFO - swea-env - Environment Initialized
+2026-04-18 10:32:37,395 - INFO - swea-agent - Setting up agent for instance astropy__astropy-12907
+2026-04-18 10:32:37,397 - INFO - swea-agent - Trajectory will be saved to /Users/ziyang/Documents/midas-agent/logs/sweagent_10issues_minimax/astropy__astropy-12907/astropy__astropy-12907.traj
+2026-04-18 10:32:41,286 - INFO - swea-tools - Resetting tools
+2026-04-18 10:32:41,917 - INFO - swea-agent - SYSTEM (main)
+You are a helpful assistant that can interact with a computer to solve tasks.
+2026-04-18 10:32:42,239 - INFO - swea-agent - 🤖 MODEL INPUT
+<uploaded_files>
+/testbed
+</uploaded_files>
+I've uploaded a python code repository in the directory /testbed. Consider the following PR description:
+
+<pr_description>
+Modeling's `separability_matrix` does not compute separability correctly for nested CompoundModels
+Consider the following model:
+
+```python
+from astropy.modeling import models as m
+from astropy.modeling.separable import separability_matrix
+
+cm = m.Linear1D(10) & m.Linear1D(5)
+```
+
+It's separability matrix as you might expect is a diagonal:
+
+```python
+>>> separability_matrix(cm)
+array([[ True, False],
+       [False,  True]])
+```
+
+If I make the model more complex:
+```python
+>>> separability_matrix(m.Pix2Sky_TAN() & m.Linear1D(10) & m.Linear1D(5))
+array([[ True,  True, False, False],
+       [ True,  True, False, False],
+       [False, False,  True, False],
+       [False, False, False,  True]])
+```
+
+The output matrix is again, as expected, the outputs and inputs to the linear models are separable and independent of each other.
+
+If however, I nest these compound models:
+```python
+>>> separability_matrix(m.Pix2Sky_TAN() & cm)
+array([[ True,  True, False, False],
+       [ True,  True, False, False],
+       [False, False,  True,  True],
+       [False, False,  True,  True]])
+```
+Suddenly the inputs and outputs are no longer separable?
+
+This feels like a bug to me, but I might be missing something?
+
+</pr_description>
+
+Can you help me implement the necessary changes to the repository so that the requirements specified in the <pr_description> are met?
+I've already taken care of all changes to any of the test files described in the <pr_description>. This means you DON'T have to modify the testing logic or any of the tests in any way!
+Your task is to make the minimal changes to non-tests files in the /testbed directory to ensure the <pr_description> is satisfied.
+Follow these steps to resolve the issue:
+1. As a first step, it might be a good idea to find and read code relevant to the <pr_description>
+2. Create a script to reproduce the error and execute it with `python <filename.py>` using the bash tool, to confirm the error
+3. Edit the sourcecode of the repo to resolve the issue
+4. Rerun your reproduce script and confirm that the error is fixed!
+5. Think about edgecases and make sure your fix handles them as well
+Your thinking should be thorough and so it's fine if it's very long.
+2026-04-18 10:32:42,244 - INFO - swea-agent - ========================= STEP 1 =========================
+2026-04-18 10:32:47,845 - INFO - swea-agent - 💭 THOUGHT
+
+
+🎬 ACTION
+str_replace_editor view /testbed
+2026-04-18 10:32:48,544 - INFO - swea-agent - 🤖 MODEL INPUT
+OBSERVATION:
+Here's the files and directories up to 2 levels deep in /testbed, excluding hidden items:
+/testbed
+/testbed/pyproject.toml
+/testbed/MANIFEST.in
+/testbed/tox.ini
+/testbed/cextern
+/testbed/cextern/cfitsio
+/testbed/cextern/README.rst
+/testbed/cextern/trim_cfitsio.sh
+/testbed/cextern/wcslib
+/testbed/cextern/trim_expat.sh
+/testbed/cextern/trim_wcslib.sh
+/testbed/cextern/expat
+/testbed/setup.cfg
+/testbed/README.rst
+/testbed/examples
+/testbed/examples/coordinates
+/testbed/examples/README.rst
+/testbed/examples/template
+/testbed/examples/io
+/testbed/codecov.yml
+/testbed/conftest.py
+/testbed/azure-pipelines.yml
+/testbed/LICENSE.rst
+/testbed/GOVERNANCE.md
+/testbed/astropy.egg-info
+/testbed/astropy.egg-info/requires.txt
+/testbed/astropy.egg-info/top_level.txt
+/testbed/astropy.egg-info/dependency_links.txt
+/testbed/astropy.egg-info/PKG-INFO
+/testbed/astropy.egg-info/not-zip-safe
+/testbed/astropy.egg-info/SOURCES.txt
+/testbed/astropy.egg-info/entry_points.txt
+/testbed/setup.py
+/testbed/CONTRIBUTING.md
+/testbed/pip-requirements
+/testbed/docs
+/testbed/docs/logging.rst
+/testbed/docs/coordinates
+/testbed/docs/uncertainty
+/testbed/docs/constants
+/testbed/docs/known_issues.rst
+/testbed/docs/conf.py
+/testbed/docs/nddata
+/testbed/docs/_static
+/testbed/docs/conftest.py
+/testbed/docs/warnings.rst
+/testbed/docs/utils
+/testbed/docs/stats
+/testbed/docs/changes
+/testbed/docs/visualization
+/testbed/docs/config
+/testbed/docs/glossary.rst
+/testbed/docs/samp
+/testbed/docs/cosmology
+/testbed/docs/common_links.txt
+/testbed/docs/table
+/testbed/docs/modeling
+/testbed/docs/robots.txt
+/testbed/docs/Makefile
+/testbed/docs/credits.rst
+/testbed/docs/nitpick-exceptions
+/testbed/docs/testhelpers.rst
+/testbed/docs/development
+/testbed/docs/importing_astropy.rst
+/testbed/docs/timeseries
+/testbed/docs/_templates
+/testbed/docs/whatsnew
+/testbed/docs/time
+/testbed/docs/changelog.rst
+/testbed/docs/install.rst
+/testbed/docs/_pkgtemplate.rst
+/testbed/docs/index.rst
+/testbed/docs/io
+/testbed/docs/wcs
+/testbed/docs/units
+/testbed/docs/license.rst
+/testbed/docs/convolution
+/testbed/docs/overview.rst
+/testbed/docs/lts_policy.rst
+/testbed/docs/getting_started.rst
+/testbed/docs/make.bat
+/testbed/CODE_OF_CONDUCT.md
+/testbed/CHANGES.rst
+/testbed/astropy
+/testbed/astropy/coordinates
+/testbed/astropy/uncertainty
+/testbed/astropy/constants
+/testbed/astropy/nddata
+/testbed/astropy/conftest.py
+/testbed/astropy/version.py
+/testbed/astropy/utils
+/testbed/astropy/stats
+/testbed/astropy/_dev
+/testbed/astropy/_compiler.c
+/testbed/astropy/visualization
+/testbed/astropy/config
+/testbed/astropy/samp
+/testbed/astropy/cosmology
+/testbed/astropy/table
+/testbed/astropy/tests
+/testbed/astropy/modeling
+/testbed/astropy/_version.py
+/testbed/astropy/__init__.py
+/testbed/astropy/timeseries
+/testbed/astropy/time
+/testbed/astropy/io
+/testbed/astropy/wcs
+/testbed/astropy/units
+/testbed/astropy/compiler_version.cpython-39-x86_64-linux-gnu.so
+/testbed/astropy/logger.py
+/testbed/astropy/convolution
+/testbed/astropy/CITATION
+/testbed/astropy/_erfa
+/testbed/astropy/extern
+/testbed/CITATION
+/testbed/licenses
+/testbed/licenses/DATATABLES_LICENSE.rst
+/testbed/licenses/README.rst
+/testbed/licenses/AURA_LICENSE.rst
+/testbed/licenses/CONFIGOBJ_LICENSE.rst
+/testbed/licenses/PLY_LICENSE.rst
+/testbed/licenses/EXPAT_LICENSE.rst
+/testbed/licenses/JQUERY_LICENSE.rst
+/testbed/licenses/PYTHON.rst
+/testbed/licenses/WCSLIB_LICENSE.rst
+/testbed/licenses/PYFITS.rst
+/testbed/licenses/ERFA.rst
+/testbed/licenses/NUMPY_LICENSE.rst
+
+
+
+2026-04-18 10:32:48,551 - INFO - swea-agent - ========================= STEP 2 =========================
+2026-04-18 10:32:49,676 - INFO - swea-agent - 💭 THOUGHT
+
+
+🎬 ACTION
+str_replace_editor view /testbed/astropy/modeling
+2026-04-18 10:32:50,375 - INFO - swea-agent - 🤖 MODEL INPUT
+OBSERVATION:
+Here's the files and directories up to 2 levels deep in /testbed/astropy/modeling, excluding hidden items:
+/testbed/astropy/modeling
+/testbed/astropy/modeling/models.py
+/testbed/astropy/modeling/mappings.py
+/testbed/astropy/modeling/powerlaws.py
+/testbed/astropy/modeling/polynomial.py
+/testbed/astropy/modeling/rotations.py
+/testbed/astropy/modeling/physical_models.py
+/testbed/astropy/modeling/projections.py
+/testbed/astropy/modeling/optimizers.py
+/testbed/astropy/modeling/separable.py
+/testbed/astropy/modeling/spline.py
+/testbed/astropy/modeling/bounding_box.py
+/testbed/astropy/modeling/core.py
+/testbed/astropy/modeling/tests
+/testbed/astropy/modeling/tests/test_math_func.py
+/testbed/astropy/modeling/tests/test_projections.py
+/testbed/astropy/modeling/tests/test_spline.py
+/testbed/astropy/modeling/tests/test_units_mapping.py
+/testbed/astropy/modeling/tests/test_physical_models.py
+/testbed/astropy/modeling/tests/test_convolution.py
+/testbed/astropy/modeling/tests/test_polynomial.py
+/testbed/astropy/modeling/tests/test_quantities_parameters.py
+/testbed/astropy/modeling/tests/test_quantities_rotations.py
+/testbed/astropy/modeling/tests/test_mappings.py
+/testbed/astropy/modeling/tests/test_models_quantities.py
+/testbed/astropy/modeling/tests/test_quantities_model.py
+/testbed/astropy/modeling/tests/test_utils.py
+/testbed/astropy/modeling/tests/test_model_sets.py
+/testbed/astropy/modeling/tests/test_bounding_box.py
+/testbed/astropy/modeling/tests/example_models.py
+/testbed/astropy/modeling/tests/test_fitters.py
+/testbed/astropy/modeling/tests/test_input.py
+/testbed/astropy/modeling/tests/test_models.py
+/testbed/astropy/modeling/tests/irafutil.py
+/testbed/astropy/modeling/tests/test_rotations.py
+/testbed/astropy/modeling/tests/test_quantities_evaluation.py
+/testbed/astropy/modeling/tests/test_parameters.py
+/testbed/astropy/modeling/tests/test_functional_models.py
+/testbed/astropy/modeling/tests/data
+/testbed/astropy/modeling/tests/test_separable.py
+/testbed/astropy/modeling/tests/__init__.py
+/testbed/astropy/modeling/tests/test_statistics.py
+/testbed/astropy/modeling/tests/test_core.py
+/testbed/astropy/modeling/tests/test_quantities_fitting.py
+/testbed/astropy/modeling/tests/test_constraints.py
+/testbed/astropy/modeling/tests/test_compound.py
+/testbed/astropy/modeling/fitting.py
+/testbed/astropy/modeling/utils.py
+/testbed/astropy/modeling/__pycache__
+/testbed/astropy/modeling/__pycache__/setup_package.cpython-39.pyc
+/testbed/astropy/modeling/setup_package.py
+/testbed/astropy/modeling/math_functions.py
+/testbed/astropy/modeling/functional_models.py
+/testbed/astropy/modeling/__init__.py
+/testbed/astropy/modeling/tabular.py
+/testbed/astropy/modeling/convolution.py
+/testbed/astropy/modeling/statistic.py
+/testbed/astropy/modeling/parameters.py
+
+
+
+2026-04-18 10:32:50,381 - INFO - swea-agent - ========================= STEP 3 =========================
+2026-04-18 10:32:51,453 - INFO - swea-agent - 💭 THOUGHT
+
+
+🎬 ACTION
+str_replace_editor view /testbed/astropy/modeling/separable.py
+2026-04-18 10:32:52,093 - INFO - swea-agent - 🤖 MODEL INPUT
+OBSERVATION:
+Here's the result of running `cat -n` on /testbed/astropy/modeling/separable.py:
+     1	# Licensed under a 3-clause BSD style license - see LICENSE.rst
+     2	
+     3	"""
+     4	Functions to determine if a model is separable, i.e.
+     5	if the model outputs are independent.
+     6	
+     7	It analyzes ``n_inputs``, ``n_outputs`` and the operators
+     8	in a compound model by stepping through the transforms
+     9	and creating a ``coord_matrix`` of shape (``n_outputs``, ``n_inputs``).
+    10	
+    11	
+    12	Each modeling operator is represented by a function which
+    13	takes two simple models (or two ``coord_matrix`` arrays) and
+    14	returns an array of shape (``n_outputs``, ``n_inputs``).
+    15	
+    16	"""
+    17	
+    18	import numpy as np
+    19	
+    20	from .core import Model, ModelDefinitionError, CompoundModel
+    21	from .mappings import Mapping
+    22	
+    23	
+    24	__all__ = ["is_separable", "separability_matrix"]
+    25	
+    26	
+    27	def is_separable(transform):
+    28	    """
+    29	    A separability test for the outputs of a transform.
+    30	
+    31	    Parameters
+    32	    ----------
+    33	    transform : `~astropy.modeling.core.Model`
+    34	        A (compound) model.
+    35	
+    36	    Returns
+    37	    -------
+    38	    is_separable : ndarray
+    39	        A boolean array with size ``transform.n_outputs`` where
+    40	        each element indicates whether the output is independent
+    41	        and the result of a separable transform.
+    42	
+    43	    Examples
+    44	    --------
+    45	    >>> from astropy.modeling.models import Shift, Scale, Rotation2D, Polynomial2D
+    46	    >>> is_separable(Shift(1) & Shift(2) | Scale(1) & Scale(2))
+    47	        array([ True,  True]...)
+    48	    >>> is_separable(Shift(1) & Shift(2) | Rotation2D(2))
+    49	        array([False, False]...)
+    50	    >>> is_separable(Shift(1) & Shift(2) | Mapping([0, 1, 0, 1]) | \
+    51	        Polynomial2D(1) & Polynomial2D(2))
+    52	        array([False, False]...)
+    53	    >>> is_separable(Shift(1) & Shift(2) | Mapping([0, 1, 0, 1]))
+    54	        array([ True,  True,  True,  True]...)
+    55	
+    56	    """
+    57	    if transform.n_inputs == 1 and transform.n_outputs > 1:
+    58	        is_separable = np.array([False] * transform.n_outputs).T
+    59	        return is_separable
+    60	    separable_matrix = _separable(transform)
+    61	    is_separable = separable_matrix.sum(1)
+    62	    is_separable = np.where(is_separable != 1, False, True)
+    63	    return is_separable
+    64	
+    65	
+    66	def separability_matrix(transform):
+    67	    """
+    68	    Compute the correlation between outputs and inputs.
+    69	
+    70	    Parameters
+    71	    ----------
+    72	    transform : `~astropy.modeling.core.Model`
+    73	        A (compound) model.
+    74	
+    75	    Returns
+    76	    -------
+    77	    separable_matrix : ndarray
+    78	        A boolean correlation matrix of shape (n_outputs, n_inputs).
+    79	        Indicates the dependence of outputs on inputs. For completely
+    80	        independent outputs, the diagonal elements are True and
+    81	        off-diagonal elements are False.
+    82	
+    83	    Examples
+    84	    --------
+    85	    >>> from astropy.modeling.models import Shift, Scale, Rotation2D, Polynomial2D
+    86	    >>> separability_matrix(Shift(1) & Shift(2) | Scale(1) & Scale(2))
+    87	        array([[ True, False], [False,  True]]...)
+    88	    >>> separability_matrix(Shift(1) & Shift(2) | Rotation2D(2))
+    89	        array([[ True,  True], [ True,  True]]...)
+    90	    >>> separability_matrix(Shift(1) & Shift(2) | Mapping([0, 1, 0, 1]) | \
+    91	        Polynomial2D(1) & Polynomial2D(2))
+    92	        array([[ True,  True], [ True,  True]]...)
+    93	    >>> separability_matrix(Shift(1) & Shift(2) | Mapping([0, 1, 0, 1]))
+    94	        array([[ True, False], [False,  True], [ True, False], [False,  True]]...)
+    95	
+    96	    """
+    97	    if transform.n_inputs == 1 and transform.n_outputs > 1:
+    98	        return np.ones((transform.n_outputs, transform.n_inputs),
+    99	                       dtype=np.bool_)
+   100	    separable_matrix = _separable(transform)
+   101	    separable_matrix = np.where(separable_matrix != 0, True, False)
+   102	    return separable_matrix
+   103	
+   104	
+   105	def _compute_n_outputs(left, right):
+   106	    """
+   107	    Compute the number of outputs of two models.
+   108	
+   109	    The two models are the left and right model to an operation in
+   110	    the expression tree of a compound model.
+   111	
+   112	    Parameters
+   113	    ----------
+   114	    left, right : `astropy.modeling.Model` or ndarray
+   115	        If input is of an array, it is the output of `coord_matrix`.
+   116	
+   117	    """
+   118	    if isinstance(left, Model):
+   119	        lnout = left.n_outputs
+   120	    else:
+   121	        lnout = left.shape[0]
+   122	    if isinstance(right, Model):
+   123	        rnout = right.n_outputs
+   124	    else:
+   125	        rnout = right.shape[0]
+   126	    noutp = lnout + rnout
+   127	    return noutp
+   128	
+   129	
+   130	def _arith_oper(left, right):
+   131	    """
+   132	    Function corresponding to one of the arithmetic operators
+   133	    ['+', '-'. '*', '/', '**'].
+   134	
+   135	    This always returns a nonseparable output.
+   136	
+   137	
+   138	    Parameters
+   139	    ----------
+   140	    left, right : `astropy.modeling.Model` or ndarray
+   141	        If input is of an array, it is the output of `coord_matrix`.
+   142	
+   143	    Returns
+   144	    -------
+   145	    result : ndarray
+   146	        Result from this operation.
+   147	    """
+   148	    # models have the same number of inputs and outputs
+   149	    def _n_inputs_outputs(input):
+   150	        if isinstance(input, Model):
+   151	            n_outputs, n_inputs = input.n_outputs, input.n_inputs
+   152	        else:
+   153	            n_outputs, n_inputs = input.shape
+   154	        return n_inputs, n_outputs
+   155	
+   156	    left_inputs, left_outputs = _n_inputs_outputs(left)
+   157	    right_inputs, right_outputs = _n_inputs_outputs(right)
+   158	
+   159	    if left_inputs != right_inputs or left_outputs != right_outputs:
+   160	        raise ModelDefinitionError(
+   161	            "Unsupported operands for arithmetic operator: left (n_inputs={}, "
+   162	            "n_outputs={}) and right (n_inputs={}, n_outputs={}); "
+   163	            "models must have the same n_inputs and the same "
+   164	            "n_outputs for this operator.".format(
+   165	                left_inputs, left_outputs, right_inputs, right_outputs))
+   166	
+   167	    result = np.ones((left_outputs, left_inputs))
+   168	    return result
+   169	
+   170	
+   171	def _coord_matrix(model, pos, noutp):
+   172	    """
+   173	    Create an array representing inputs and outputs of a simple model.
+   174	
+   175	    The array has a shape (noutp, model.n_inputs).
+   176	
+   177	    Parameters
+   178	    ----------
+   179	    model : `astropy.modeling.Model`
+   180	        model
+   181	    pos : str
+   182	        Position of this model in the expression tree.
+   183	        One of ['left', 'right'].
+   184	    noutp : int
+   185	        Number of outputs of the compound model of which the input model
+   186	        is a left or right child.
+   187	
+   188	    """
+   189	    if isinstance(model, Mapping):
+   190	        axes = []
+   191	        for i in model.mapping:
+   192	            axis = np.zeros((model.n_inputs,))
+   193	            axis[i] = 1
+   194	            axes.append(axis)
+   195	        m = np.vstack(axes)
+   196	        mat = np.zeros((noutp, model.n_inputs))
+   197	        if pos == 'left':
+   198	            mat[: model.n_outputs, :model.n_inputs] = m
+   199	        else:
+   200	            mat[-model.n_outputs:, -model.n_inputs:] = m
+   201	        return mat
+   202	    if not model.separable:
+   203	        # this does not work for more than 2 coordinates
+   204	        mat = np.zeros((noutp, model.n_inputs))
+   205	        if pos == 'left':
+   206	            mat[:model.n_outputs, : model.n_inputs] = 1
+   207	        else:
+   208	            mat[-model.n_outputs:, -model.n_inputs:] = 1
+   209	    else:
+   210	        mat = np.zeros((noutp, model.n_inputs))
+   211	
+   212	        for i in range(model.n_inputs):
+   213	            mat[i, i] = 1
+   214	        if pos == 'right':
+   215	            mat = np.roll(mat, (noutp - model.n_outputs))
+   216	    return mat
+   217	
+   218	
+   219	def _cstack(left, right):
+   220	    """
+   221	    Function corresponding to '&' operation.
+   222	
+   223	    Parameters
+   224	    ----------
+   225	    left, right : `astropy.modeling.Model` or ndarray
+   226	        If input is of an array, it is the output of `coord_matrix`.
+   227	
+   228	    Returns
+   229	    -------
+   230	    result : ndarray
+   231	        Result from this operation.
+   232	
+   233	    """
+   234	    noutp = _compute_n_outputs(left, right)
+   235	
+   236	    if isinstance(left, Model):
+   237	        cleft = _coord_matrix(left, 'left', noutp)
+   238	    else:
+   239	        cleft = np.zeros((noutp, left.shape[1]))
+   240	        cleft[: left.shape[0], : left.shape[1]] = left
+   241	    if isinstance(right, Model):
+   242	        cright = _coord_matrix(right, 'right', noutp)
+   243	    else:
+   244	        cright = np.zeros((noutp, right.shape[1]))
+   245	        cright[-right.shape[0]:, -right.shape[1]:] = 1
+   246	
+   247	    return np.hstack([cleft, cright])
+   248	
+   249	
+   250	def _cdot(left, right):
+   251	    """
+   252	    Function corresponding to "|" operation.
+   253	
+   254	    Parameters
+   255	    ----------
+   256	    left, right : `astropy.modeling.Model` or ndarray
+   257	        If input is of an array, it is the output of `coord_matrix`.
+   258	
+   259	    Returns
+   260	    -------
+   261	    result : ndarray
+   262	        Result from this operation.
+   263	    """
+   264	
+   265	    left, right = right, left
+   266	
+   267	    def _n_inputs_outputs(input, position):
+   268	        """
+   269	        Return ``n_inputs``, ``n_outputs`` for a model or coord_matrix.
+   270	        """
+   271	        if isinstance(input, Model):
+   272	            coords = _coord_matrix(input, position, input.n_outputs)
+   273	        else:
+   274	            coords = input
+   275	        return coords
+   276	
+   277	    cleft = _n_inputs_outputs(left, 'left')
+   278	    cright = _n_inputs_outputs(right, 'right')
+   279	
+   280	    try:
+   281	        result = np.dot(cleft, cright)
+   282	    except ValueError:
+   283	        raise ModelDefinitionError(
+   284	            'Models cannot be combined with the "|" operator; '
+   285	            'left coord_matrix is {}, right coord_matrix is {}'.format(
+   286	                cright, cleft))
+   287	    return result
+   288	
+   289	
+   290	def _separable(transform):
+   291	    """
+   292	    Calculate the separability of outputs.
+   293	
+   294	    Parameters
+   295	    ----------
+   296	    transform : `astropy.modeling.Model`
+   297	        A transform (usually a compound model).
+   298	
+   299	    Returns :
+   300	    is_separable : ndarray of dtype np.bool
+   301	        An array of shape (transform.n_outputs,) of boolean type
+   302	        Each element represents the separablity of the corresponding output.
+   303	    """
+   304	    if (transform_matrix := transform._calculate_separability_matrix()) is not NotImplemented:
+   305	        return transform_matrix
+   306	    elif isinstance(transform, CompoundModel):
+   307	        sepleft = _separable(transform.left)
+   308	        sepright = _separable(transform.right)
+   309	        return _operators[transform.op](sepleft, sepright)
+   310	    elif isinstance(transform, Model):
+   311	        return _coord_matrix(transform, 'left', transform.n_outputs)
+   312	
+   313	
+   314	# Maps modeling operators to a function computing and represents the
+   315	# relationship of axes as an array of 0-es and 1-s
+   316	_operators = {'&': _cstack, '|': _cdot, '+': _arith_oper, '-': _arith_oper,
+   317	              '*': _arith_oper, '/': _arith_oper, '**': _arith_oper}
+   318	
+
+
+2026-04-18 10:32:52,119 - INFO - swea-agent - ========================= STEP 4 =========================
+2026-04-18 10:32:59,076 - INFO - swea-agent - 💭 THOUGHT
+
+
+🎬 ACTION
+str_replace_editor create /testbed/test_issue.py --file_text 'from astropy.modeling import models as m
+from astropy.modeling.separable import separability_matrix
+
+# Test case 1: Simple compound model
+cm = m.Linear1D(10) & m.Linear1D(5)
+print("Test 1: cm = m.Linear1D(10) & m.Linear1D(5)")
+print(separability_matrix(cm))
+print()
+
+# Test case 2: More complex compound model
+print("Test 2: m.Pix2Sky_TAN() & m.Linear1D(10) & m.Linear1D(5)")
+result2 = separability_matrix(m.Pix2Sky_TAN() & m.Linear1D(10) & m.Linear1D(5))
+print(result2)
+print()
+
+# Test case 3: Nested compound model (the bug)
+print("Test 3: m.Pix2Sky_TAN() & cm (where cm = m.Linear1D(10) & m.Linear1D(5))")
+result3 = separability_matrix(m.Pix2Sky_TAN() & cm)
+print(result3)
+print()
+
+# Expected result for test 3:
+# array([[ True,  True, False, False],
+#        [ True,  True, False, False],
+#        [False, False,  True, False],
+#        [False, False, False,  True]])
+
+# Let'"'"'s verify the expected output
+print("Expected for test 3:")
+expected = np.array([[ True,  True, False, False],
+                     [ True,  True, False, False],
+                     [False, False,  True, False],
+                     [False, False, False,  True]])
+print(expected)
+print()
+
+# Check if they match
+import numpy as np
+print("Match:", np.array_equal(result3, expected))'
+2026-04-18 10:32:59,746 - INFO - swea-agent - 🤖 MODEL INPUT
+OBSERVATION:
+File created successfully at: /testbed/test_issue.py
+
+2026-04-18 10:32:59,750 - INFO - swea-agent - ========================= STEP 5 =========================
+2026-04-18 10:33:00,481 - INFO - swea-agent - 💭 THOUGHT
+
+
+🎬 ACTION
+cd /testbed && python test_issue.py
+2026-04-18 10:33:02,145 - INFO - swea-agent - 🤖 MODEL INPUT
+OBSERVATION:
+Test 1: cm = m.Linear1D(10) & m.Linear1D(5)
+[[ True False]
+ [False  True]]
+
+Test 2: m.Pix2Sky_TAN() & m.Linear1D(10) & m.Linear1D(5)
+[[ True  True False False]
+ [ True  True False False]
+ [False False  True False]
+ [False False False  True]]
+
+Test 3: m.Pix2Sky_TAN() & cm (where cm = m.Linear1D(10) & m.Linear1D(5))
+[[ True  True False False]
+ [ True  True False False]
+ [False False  True  True]
+ [False False  True  True]]
+
+Expected for test 3:
+Traceback (most recent call last):
+  File "/testbed/test_issue.py", line 30, in <module>
+    expected = np.array([[ True,  True, False, False],
+NameError: name 'np' is not defined
+
+2026-04-18 10:33:02,151 - INFO - swea-agent - ========================= STEP 6 =========================
+2026-04-18 10:33:03,847 - INFO - swea-agent - 💭 THOUGHT
+
+
+🎬 ACTION
+str_replace_editor str_replace /testbed/test_issue.py   --old_str 'from astropy.modeling import models as m
+from astropy.modeling.separable import separability_matrix' --new_str 'import numpy as np
+from astropy.modeling import models as m
+from astropy.modeling.separable import separability_matrix'
+2026-04-18 10:33:04,495 - INFO - swea-agent - 🤖 MODEL INPUT
+OBSERVATION:
+The file /testbed/test_issue.py has been edited. Here's the result of running `cat -n` on a snippet of /testbed/test_issue.py:
+     1	import numpy as np
+     2	from astropy.modeling import models as m
+     3	from astropy.modeling.separable import separability_matrix
+     4	
+     5	# Test case 1: Simple compound model
+     6	cm = m.Linear1D(10) & m.Linear1D(5)
+Review the changes and make sure they are as expected. Edit the file again if necessary.
+
+2026-04-18 10:33:04,499 - INFO - swea-agent - ========================= STEP 7 =========================
+2026-04-18 10:33:05,239 - INFO - swea-agent - 💭 THOUGHT
+
+
+🎬 ACTION
+cd /testbed && python test_issue.py
+2026-04-18 10:33:06,492 - INFO - swea-agent - 🤖 MODEL INPUT
+OBSERVATION:
+Test 1: cm = m.Linear1D(10) & m.Linear1D(5)
+[[ True False]
+ [False  True]]
+
+Test 2: m.Pix2Sky_TAN() & m.Linear1D(10) & m.Linear1D(5)
+[[ True  True False False]
+ [ True  True False False]
+ [False False  True False]
+ [False False False  True]]
+
+Test 3: m.Pix2Sky_TAN() & cm (where cm = m.Linear1D(10) & m.Linear1D(5))
+[[ True  True False False]
+ [ True  True False False]
+ [False False  True  True]
+ [False False  True  True]]
+
+Expected for test 3:
+[[ True  True False False]
+ [ True  True False False]
+ [False False  True False]
+ [False False False  True]]
+
+Match: False
+
+2026-04-18 10:33:06,497 - INFO - swea-agent - ========================= STEP 8 =========================
+2026-04-18 10:33:13,859 - INFO - swea-agent - 💭 THOUGHT
+
+
+🎬 ACTION
+str_replace_editor view /testbed/astropy/modeling/tests/test_separable.py
+2026-04-18 10:33:14,544 - INFO - swea-agent - 🤖 MODEL INPUT
+OBSERVATION:
+Here's the result of running `cat -n` on /testbed/astropy/modeling/tests/test_separable.py:
+     1	# Licensed under a 3-clause BSD style license - see LICENSE.rst
+     2	"""
+     3	Test separability of models.
+     4	
+     5	"""
+     6	# pylint: disable=invalid-name
+     7	import pytest
+     8	import numpy as np
+     9	from numpy.testing import assert_allclose
+    10	
+    11	from astropy.modeling import custom_model, models
+    12	from astropy.modeling.models import Mapping
+    13	from astropy.modeling.separable import (_coord_matrix, is_separable, _cdot,
+    14	                                        _cstack, _arith_oper, separability_matrix)
+    15	from astropy.modeling.core import ModelDefinitionError
+    16	
+    17	
+    18	sh1 = models.Shift(1, name='shift1')
+    19	sh2 = models.Shift(2, name='sh2')
+    20	scl1 = models.Scale(1, name='scl1')
+    21	scl2 = models.Scale(2, name='scl2')
+    22	map1 = Mapping((0, 1, 0, 1), name='map1')
+    23	map2 = Mapping((0, 0, 1), name='map2')
+    24	map3 = Mapping((0, 0), name='map3')
+    25	rot = models.Rotation2D(2, name='rotation')
+    26	p2 = models.Polynomial2D(1, name='p2')
+    27	p22 = models.Polynomial2D(2, name='p22')
+    28	p1 = models.Polynomial1D(1, name='p1')
+    29	
+    30	
+    31	compound_models = {
+    32	    'cm1': (map3 & sh1 | rot & sh1 | sh1 & sh2 & sh1,
+    33	            (np.array([False, False, True]),
+    34	             np.array([[True, False], [True, False], [False, True]]))
+    35	            ),
+    36	    'cm2': (sh1 & sh2 | rot | map1 | p2 & p22,
+    37	            (np.array([False, False]),
+    38	             np.array([[True, True], [True, True]]))
+    39	            ),
+    40	    'cm3': (map2 | rot & scl1,
+    41	            (np.array([False, False, True]),
+    42	             np.array([[True, False], [True, False], [False, True]]))
+    43	            ),
+    44	    'cm4': (sh1 & sh2 | map2 | rot & scl1,
+    45	            (np.array([False, False, True]),
+    46	             np.array([[True, False], [True, False], [False, True]]))
+    47	            ),
+    48	    'cm5': (map3 | sh1 & sh2 | scl1 & scl2,
+    49	            (np.array([False, False]),
+    50	             np.array([[True], [True]]))
+    51	            ),
+    52	    'cm7': (map2 | p2 & sh1,
+    53	            (np.array([False, True]),
+    54	             np.array([[True, False], [False, True]]))
+    55	            )
+    56	}
+    57	
+    58	
+    59	def test_coord_matrix():
+    60	    c = _coord_matrix(p2, 'left', 2)
+    61	    assert_allclose(np.array([[1, 1], [0, 0]]), c)
+    62	    c = _coord_matrix(p2, 'right', 2)
+    63	    assert_allclose(np.array([[0, 0], [1, 1]]), c)
+    64	    c = _coord_matrix(p1, 'left', 2)
+    65	    assert_allclose(np.array([[1], [0]]), c)
+    66	    c = _coord_matrix(p1, 'left', 1)
+    67	    assert_allclose(np.array([[1]]), c)
+    68	    c = _coord_matrix(sh1, 'left', 2)
+    69	    assert_allclose(np.array([[1], [0]]), c)
+    70	    c = _coord_matrix(sh1, 'right', 2)
+    71	    assert_allclose(np.array([[0], [1]]), c)
+    72	    c = _coord_matrix(sh1, 'right', 3)
+    73	    assert_allclose(np.array([[0], [0], [1]]), c)
+    74	    c = _coord_matrix(map3, 'left', 2)
+    75	    assert_allclose(np.array([[1], [1]]), c)
+    76	    c = _coord_matrix(map3, 'left', 3)
+    77	    assert_allclose(np.array([[1], [1], [0]]), c)
+    78	
+    79	
+    80	def test_cdot():
+    81	    result = _cdot(sh1, scl1)
+    82	    assert_allclose(result, np.array([[1]]))
+    83	
+    84	    result = _cdot(rot, p2)
+    85	    assert_allclose(result, np.array([[2, 2]]))
+    86	
+    87	    result = _cdot(rot, rot)
+    88	    assert_allclose(result, np.array([[2, 2], [2, 2]]))
+    89	
+    90	    result = _cdot(Mapping((0, 0)), rot)
+    91	    assert_allclose(result, np.array([[2], [2]]))
+    92	
+    93	    with pytest.raises(ModelDefinitionError,
+    94	                       match=r"Models cannot be combined with the \"|\" operator; .*"):
+    95	        _cdot(sh1, map1)
+    96	
+    97	
+    98	def test_cstack():
+    99	    result = _cstack(sh1, scl1)
+   100	    assert_allclose(result, np.array([[1, 0], [0, 1]]))
+   101	
+   102	    result = _cstack(sh1, rot)
+   103	    assert_allclose(result,
+   104	                    np.array([[1, 0, 0],
+   105	                              [0, 1, 1],
+   106	                              [0, 1, 1]])
+   107	                    )
+   108	    result = _cstack(rot, sh1)
+   109	    assert_allclose(result,
+   110	                    np.array([[1, 1, 0],
+   111	                              [1, 1, 0],
+   112	                              [0, 0, 1]])
+   113	                    )
+   114	
+   115	
+   116	def test_arith_oper():
+   117	    # Models as inputs
+   118	    result = _arith_oper(sh1, scl1)
+   119	    assert_allclose(result, np.array([[1]]))
+   120	    result = _arith_oper(rot, rot)
+   121	    assert_allclose(result, np.array([[1, 1], [1, 1]]))
+   122	
+   123	    # ndarray
+   124	    result = _arith_oper(np.array([[1, 2], [3, 4]]), np.array([[1, 2], [3, 4]]))
+   125	    assert_allclose(result, np.array([[1, 1], [1, 1]]))
+   126	
+   127	    # Error
+   128	    with pytest.raises(ModelDefinitionError, match=r"Unsupported operands for arithmetic operator: .*"):
+   129	        _arith_oper(sh1, map1)
+   130	
+   131	
+   132	@pytest.mark.parametrize(('compound_model', 'result'), compound_models.values())
+   133	def test_separable(compound_model, result):
+   134	    assert_allclose(is_separable(compound_model), result[0])
+   135	    assert_allclose(separability_matrix(compound_model), result[1])
+   136	
+   137	
+   138	def test_custom_model_separable():
+   139	    @custom_model
+   140	    def model_a(x):
+   141	        return x
+   142	
+   143	    assert model_a().separable
+   144	
+   145	    @custom_model
+   146	    def model_c(x, y):
+   147	        return x + y
+   148	
+   149	    assert not model_c().separable
+   150	    assert np.all(separability_matrix(model_c()) == [True, True])
+   151	
+
+
+2026-04-18 10:33:14,560 - INFO - swea-agent - ========================= STEP 9 =========================
+2026-04-18 10:33:19,940 - INFO - swea-agent - 💭 THOUGHT
+
+
+🎬 ACTION
+str_replace_editor view /testbed/astropy/modeling/separable.py  --view_range 219 248
+2026-04-18 10:33:20,810 - INFO - swea-agent - 🤖 MODEL INPUT
+OBSERVATION:
+Here's the result of running `cat -n` on /testbed/astropy/modeling/separable.py:
+   219	def _cstack(left, right):
+   220	    """
+   221	    Function corresponding to '&' operation.
+   222	
+   223	    Parameters
+   224	    ----------
+   225	    left, right : `astropy.modeling.Model` or ndarray
+   226	        If input is of an array, it is the output of `coord_matrix`.
+   227	
+   228	    Returns
+   229	    -------
+   230	    result : ndarray
+   231	        Result from this operation.
+   232	
+   233	    """
+   234	    noutp = _compute_n_outputs(left, right)
+   235	
+   236	    if isinstance(left, Model):
+   237	        cleft = _coord_matrix(left, 'left', noutp)
+   238	    else:
+   239	        cleft = np.zeros((noutp, left.shape[1]))
+   240	        cleft[: left.shape[0], : left.shape[1]] = left
+   241	    if isinstance(right, Model):
+   242	        cright = _coord_matrix(right, 'right', noutp)
+   243	    else:
+   244	        cright = np.zeros((noutp, right.shape[1]))
+   245	        cright[-right.shape[0]:, -right.shape[1]:] = 1
+   246	
+   247	    return np.hstack([cleft, cright])
+   248	
+
+
+2026-04-18 10:33:20,833 - INFO - swea-agent - ========================= STEP 10 =========================
+2026-04-18 10:33:30,452 - INFO - swea-agent - 💭 THOUGHT
+
+
+🎬 ACTION
+str_replace_editor str_replace /testbed/astropy/modeling/separable.py   --old_str 'if isinstance(right, Model):
+        cright = _coord_matrix(right, '"'"'right'"'"', noutp)
+    else:
+        cright = np.zeros((noutp, right.shape[1]))
+        cright[-right.shape[0]:, -right.shape[1]:] = 1' --new_str 'if isinstance(right, Model):
+        cright = _coord_matrix(right, '"'"'right'"'"', noutp)
+    else:
+        cright = np.zeros((noutp, right.shape[1]))
+        cright[-right.shape[0]:, -right.shape[1]:] = right'
+2026-04-18 10:33:31,152 - INFO - swea-agent - 🤖 MODEL INPUT
+OBSERVATION:
+The file /testbed/astropy/modeling/separable.py has been edited. Here's the result of running `cat -n` on a snippet of /testbed/astropy/modeling/separable.py:
+   236	    if isinstance(left, Model):
+   237	        cleft = _coord_matrix(left, 'left', noutp)
+   238	    else:
+   239	        cleft = np.zeros((noutp, left.shape[1]))
+   240	        cleft[: left.shape[0], : left.shape[1]] = left
+   241	    if isinstance(right, Model):
+   242	        cright = _coord_matrix(right, 'right', noutp)
+   243	    else:
+   244	        cright = np.zeros((noutp, right.shape[1]))
+   245	        cright[-right.shape[0]:, -right.shape[1]:] = right
+   246	
+   247	    return np.hstack([cleft, cright])
+   248	
+Review the changes and make sure they are as expected. Edit the file again if necessary.
+
+2026-04-18 10:33:31,164 - INFO - swea-agent - ========================= STEP 11 =========================
+2026-04-18 10:33:35,637 - INFO - swea-agent - 💭 THOUGHT
+
+
+🎬 ACTION
+cd /testbed && python test_issue.py
+2026-04-18 10:33:36,829 - INFO - swea-agent - 🤖 MODEL INPUT
+OBSERVATION:
+Test 1: cm = m.Linear1D(10) & m.Linear1D(5)
+[[ True False]
+ [False  True]]
+
+Test 2: m.Pix2Sky_TAN() & m.Linear1D(10) & m.Linear1D(5)
+[[ True  True False False]
+ [ True  True False False]
+ [False False  True False]
+ [False False False  True]]
+
+Test 3: m.Pix2Sky_TAN() & cm (where cm = m.Linear1D(10) & m.Linear1D(5))
+[[ True  True False False]
+ [ True  True False False]
+ [False False  True False]
+ [False False False  True]]
+
+Expected for test 3:
+[[ True  True False False]
+ [ True  True False False]
+ [False False  True False]
+ [False False False  True]]
+
+Match: True
+
+2026-04-18 10:33:36,843 - INFO - swea-agent - ========================= STEP 12 =========================
+2026-04-18 10:33:37,940 - INFO - swea-agent - 💭 THOUGHT
+
+
+🎬 ACTION
+cd /testbed && python -m pytest astropy/modeling/tests/test_separable.py -v
+2026-04-18 10:33:39,896 - INFO - swea-agent - 🤖 MODEL INPUT
+OBSERVATION:
+<frozen importlib._bootstrap>:228: RuntimeWarning: numpy.ndarray size changed, may indicate binary incompatibility. Expected 80 from C header, got 96 from PyObject
+Internet access disabled
+============================= test session starts ==============================
+platform linux -- Python 3.9.20, pytest-7.4.0, pluggy-1.3.0 -- /opt/miniconda3/envs/testbed/bin/python
+cachedir: .pytest_cache
+hypothesis profile 'ci' -> database=None, deadline=None, print_blob=True, derandomize=True
+
+Running tests with Astropy version 5.1.dev623+gd16bfe05a.d20250910.
+Running tests in astropy/modeling/tests/test_separable.py.
+
+Date: 2026-04-18T08:33:39
+
+Platform: Linux-6.12.76-linuxkit-x86_64-with-glibc2.35
+
+Executable: /opt/miniconda3/envs/testbed/bin/python
+
+Full Python Version: 
+3.9.20 (main, Oct  3 2024, 07:27:41) 
+[GCC 11.2.0]
+
+encodings: sys: utf-8, locale: UTF-8, filesystem: utf-8
+byteorder: little
+float info: dig: 15, mant_dig: 15
+
+Package versions: 
+Numpy: 1.25.2
+Scipy: not available
+Matplotlib: not available
+h5py: not available
+Pandas: not available
+PyERFA: 2.0.0.3
+Cython: not available
+Scikit-image: not available
+asdf: not available
+pyarrow: not available
+
+Using Astropy options: remote_data: none.
+
+ARCH_ON_CI: undefined
+IS_CRON: undefined
+
+rootdir: /testbed
+configfile: setup.cfg
+plugins: hypothesis-6.82.6, cov-4.1.0, filter-subpackage-0.1.2, doctestplus-1.0.0, astropy-header-0.2.2, xdist-3.3.1, arraydiff-0.5.0, astropy-0.10.0, openfiles-0.5.0, mock-3.11.1, remotedata-0.4.0
+collecting ... collected 11 items                                                             
+
+astropy/modeling/tests/test_separable.py::test_coord_matrix PASSED       [  9%]
+astropy/modeling/tests/test_separable.py::test_cdot PASSED               [ 18%]
+astropy/modeling/tests/test_separable.py::test_cstack PASSED             [ 27%]
+astropy/modeling/tests/test_separable.py::test_arith_oper PASSED         [ 36%]
+astropy/modeling/tests/test_separable.py::test_separable[compound_model0-result0] PASSED [ 45%]
+astropy/modeling/tests/test_separable.py::test_separable[compound_model1-result1] PASSED [ 54%]
+astropy/modeling/tests/test_separable.py::test_separable[compound_model2-result2] PASSED [ 63%]
+astropy/modeling/tests/test_separable.py::test_separable[compound_model3-result3] PASSED [ 72%]
+astropy/modeling/tests/test_separable.py::test_separable[compound_model4-result4] PASSED [ 81%]
+astropy/modeling/tests/test_separable.py::test_separable[compound_model5-result5] PASSED [ 90%]
+astropy/modeling/tests/test_separable.py::test_custom_model_separable PASSED [100%]
+
+============================== 11 passed in 0.23s ==============================
+
+2026-04-18 10:33:39,913 - INFO - swea-agent - ========================= STEP 13 =========================
+2026-04-18 10:33:58,002 - INFO - swea-agent - 💭 THOUGHT
+
+
+🎬 ACTION
+str_replace_editor create /testbed/test_edge_cases.py --file_text 'import numpy as np
+from astropy.modeling import models as m
+from astropy.modeling.separable import separability_matrix
+
+# Test case 1: Simple compound model
+print("Test 1: cm = m.Linear1D(10) & m.Linear1D(5)")
+cm = m.Linear1D(10) & m.Linear1D(5)
+result1 = separability_matrix(cm)
+print(result1)
+expected1 = np.array([[ True, False],
+                      [False,  True]])
+print("Match:", np.array_equal(result1, expected1))
+print()
+
+# Test case 2: More complex compound model
+print("Test 2: m.Pix2Sky_TAN() & m.Linear1D(10) & m.Linear1D(5)")
+result2 = separability_matrix(m.Pix2Sky_TAN() & m.Linear1D(10) & m.Linear1D(5))
+print(result2)
+expected2 = np.array([[ True,  True, False, False],
+                      [ True,  True, False, False],
+                      [False, False,  True, False],
+                      [False, False, False,  True]])
+print("Match:", np.array_equal(result2, expected2))
+print()
+
+# Test case 3: Nested compound model on the right (the original bug)
+print("Test 3: m.Pix2Sky_TAN() & cm (where cm = m.Linear1D(10) & m.Linear1D(5))")
+result3 = separability_matrix(m.Pix2Sky_TAN() & cm)
+print(result3)
+expected3 = np.array([[ True,  True, False, False],
+                      [ True,  True, False, False],
+                      [False, False,  True, False],
+                      [False, False, False,  True]])
+print("Match:", np.array_equal(result3, expected3))
+print()
+
+# Test case 4: Nested compound model on the left
+print("Test 4: cm & m.Pix2Sky_TAN()")
+result4 = separability_matrix(cm & m.Pix2Sky_TAN())
+print(result4)
+expected4 = np.array([[ True, False, False, False],
+                      [False,  True, False, False],
+                      [False, False,  True,  True],
+                      [False, False,  True,  True]])
+print("Match:", np.array_equal(result4, expected4))
+print()
+
+# Test case 5: More deeply nested
+print("Test 5: (m.Linear1D(1) & m.Linear1D(2)) & (m.Linear1D(3) & m.Linear1D(4))")
+cm1 = m.Linear1D(1) & m.Linear1D(2)
+cm2 = m.Linear1D(3) & m.Linear1D(4)
+result5 = separability_matrix(cm1 & cm2)
+print(result5)
+expected5 = np.array([[ True, False, False, False],
+                      [False,  True, False, False],
+                      [False, False,  True, False],
+                      [False, False, False,  True]])
+print("Match:", np.array_equal(result5, expected5))
+print()
+
+# Test case 6: Nested on both sides
+print("Test 6: cm1 & m.Pix2Sky_TAN() & cm2")
+result6 = separability_matrix(cm1 & m.Pix2Sky_TAN() & cm2)
+print(result6)
+expected6 = np.array([[ True, False, False, False, False, False],
+                      [False,  True, False, False, False, False],
+                      [False, False,  True,  True, False, False],
+                      [False, False,  True,  True, False, False],
+                      [False, False, False, False,  True, False],
+                      [False, False, False, False, False,  True]])
+print("Match:", np.array_equal(result6, expected6))
+print()
+
+# Test case 7: Test with | operator
+print("Test 7: (m.Linear1D(1) & m.Linear1D(2)) | (m.Linear1D(3) & m.Linear1D(4))")
+cm1 = m.Linear1D(1) & m.Linear1D(2)
+cm2 = m.Linear1D(3) & m.Linear1D(4)
+result7 = separability_matrix(cm1 | cm2)
+print(result7)
+# This should be identity since both are separable
+expected7 = np.array([[ True, False, False, False],
+                      [False,  True, False, False],
+                      [False, False,  True, False],
+                      [False, False, False,  True]])
+print("Match:", np.array_equal(result7, expected7))
+print()
+
+# Test case 8: Test with | operator and non-separable model
+print("Test 8: m.Pix2Sky_TAN() | (m.Linear1D(1) & m.Linear1D(2))")
+result8 = separability_matrix(m.Pix2Sky_TAN() | (m.Linear1D(1) & m.Linear1D(2)))
+print(result8)
+expected8 = np.array([[ True, False],
+                      [ True, False],
+                      [False,  True],
+                      [False,  True]])
+print("Match:", np.array_equal(result8, expected8))
+print()
+
+# Test case 9: More complex nested with |
+print("Test 9: (m.Linear1D(1) & m.Linear1D(2)) | m.Pix2Sky_TAN()")
+result9 = separability_matrix((m.Linear1D(1) & m.Linear1D(2)) | m.Pix2Sky_TAN())
+print(result9)
+expected9 = np.array([[ True,  True],
+                      [ True,  True],
+                      [ True,  True],
+                      [ True,  True]])
+print("Match:", np.array_equal(result9, expected9))
+print()
+
+print("All tests completed!")'
+2026-04-18 10:33:58,690 - INFO - swea-agent - 🤖 MODEL INPUT
+OBSERVATION:
+File created successfully at: /testbed/test_edge_cases.py
+
+2026-04-18 10:33:58,705 - INFO - swea-agent - ========================= STEP 14 =========================
+2026-04-18 10:33:59,606 - INFO - swea-agent - 💭 THOUGHT
+
+
+🎬 ACTION
+cd /testbed && python test_edge_cases.py
+2026-04-18 10:34:00,832 - INFO - swea-agent - 🤖 MODEL INPUT
+OBSERVATION:
+Test 1: cm = m.Linear1D(10) & m.Linear1D(5)
+[[ True False]
+ [False  True]]
+Match: True
+
+Test 2: m.Pix2Sky_TAN() & m.Linear1D(10) & m.Linear1D(5)
+[[ True  True False False]
+ [ True  True False False]
+ [False False  True False]
+ [False False False  True]]
+Match: True
+
+Test 3: m.Pix2Sky_TAN() & cm (where cm = m.Linear1D(10) & m.Linear1D(5))
+[[ True  True False False]
+ [ True  True False False]
+ [False False  True False]
+ [False False False  True]]
+Match: True
+
+Test 4: cm & m.Pix2Sky_TAN()
+[[ True False False False]
+ [False  True False False]
+ [False False  True  True]
+ [False False  True  True]]
+Match: True
+
+Test 5: (m.Linear1D(1) & m.Linear1D(2)) & (m.Linear1D(3) & m.Linear1D(4))
+[[ True False False False]
+ [False  True False False]
+ [False False  True False]
+ [False False False  True]]
+Match: True
+
+Test 6: cm1 & m.Pix2Sky_TAN() & cm2
+[[ True False False False False False]
+ [False  True False False False False]
+ [False False  True  True False False]
+ [False False  True  True False False]
+ [False False False False  True False]
+ [False False False False False  True]]
+Match: True
+
+Test 7: (m.Linear1D(1) & m.Linear1D(2)) | (m.Linear1D(3) & m.Linear1D(4))
+[[ True False]
+ [False  True]]
+Match: False
+
+Test 8: m.Pix2Sky_TAN() | (m.Linear1D(1) & m.Linear1D(2))
+[[ True  True]
+ [ True  True]]
+Match: False
+
+Test 9: (m.Linear1D(1) & m.Linear1D(2)) | m.Pix2Sky_TAN()
+[[ True  True]
+ [ True  True]]
+Match: False
+
+All tests completed!
+
+2026-04-18 10:34:00,848 - INFO - swea-agent - ========================= STEP 15 =========================
+2026-04-18 10:34:53,370 - INFO - swea-agent - 💭 THOUGHT
+
+
+🎬 ACTION
+str_replace_editor view /testbed/astropy/modeling/separable.py  --view_range 250 288
+2026-04-18 10:34:54,032 - INFO - swea-agent - 🤖 MODEL INPUT
+OBSERVATION:
+Here's the result of running `cat -n` on /testbed/astropy/modeling/separable.py:
+   250	def _cdot(left, right):
+   251	    """
+   252	    Function corresponding to "|" operation.
+   253	
+   254	    Parameters
+   255	    ----------
+   256	    left, right : `astropy.modeling.Model` or ndarray
+   257	        If input is of an array, it is the output of `coord_matrix`.
+   258	
+   259	    Returns
+   260	    -------
+   261	    result : ndarray
+   262	        Result from this operation.
+   263	    """
+   264	
+   265	    left, right = right, left
+   266	
+   267	    def _n_inputs_outputs(input, position):
+   268	        """
+   269	        Return ``n_inputs``, ``n_outputs`` for a model or coord_matrix.
+   270	        """
+   271	        if isinstance(input, Model):
+   272	            coords = _coord_matrix(input, position, input.n_outputs)
+   273	        else:
+   274	            coords = input
+   275	        return coords
+   276	
+   277	    cleft = _n_inputs_outputs(left, 'left')
+   278	    cright = _n_inputs_outputs(right, 'right')
+   279	
+   280	    try:
+   281	        result = np.dot(cleft, cright)
+   282	    except ValueError:
+   283	        raise ModelDefinitionError(
+   284	            'Models cannot be combined with the "|" operator; '
+   285	            'left coord_matrix is {}, right coord_matrix is {}'.format(
+   286	                cright, cleft))
+   287	    return result
+   288	
+
+
+2026-04-18 10:34:54,046 - INFO - swea-agent - ========================= STEP 16 =========================
+2026-04-18 10:35:09,071 - INFO - swea-agent - 💭 THOUGHT
+
+
+🎬 ACTION
+str_replace_editor create /testbed/test_debug.py --file_text 'import numpy as np
+from astropy.modeling import models as m
+from astropy.modeling.separable import separability_matrix, _separable, _cdot
+
+# Test case 7: Test with | operator
+print("Test 7: (m.Linear1D(1) & m.Linear1D(2)) | (m.Linear1D(3) & m.Linear1D(4))")
+cm1 = m.Linear1D(1) & m.Linear1D(2)
+cm2 = m.Linear1D(3) & m.Linear1D(4)
+
+# Let'"'"'s trace through what happens
+print("cm1:", cm1)
+print("cm2:", cm2)
+
+# Get the separability matrices for each
+sep_cm1 = _separable(cm1)
+sep_cm2 = _separable(cm2)
+print("sep_cm1:", sep_cm1)
+print("sep_cm2:", sep_cm2)
+
+# Now call _cdot directly
+result_cdot = _cdot(sep_cm1, sep_cm2)
+print("result from _cdot:", result_cdot)
+
+# Now get the full separability matrix
+result7 = separability_matrix(cm1 | cm2)
+print("result7:", result7)
+
+# This should be identity since both are separable
+expected7 = np.array([[ True, False, False, False],
+                      [False,  True, False, False],
+                      [False, False,  True, False],
+                      [False, False, False,  True]])
+print("expected7:", expected7)
+print("Match:", np.array_equal(result7, expected7))'
+2026-04-18 10:35:09,721 - INFO - swea-agent - 🤖 MODEL INPUT
+OBSERVATION:
+File created successfully at: /testbed/test_debug.py
+
+2026-04-18 10:35:09,734 - INFO - swea-agent - ========================= STEP 17 =========================
+2026-04-18 10:35:10,679 - INFO - swea-agent - 💭 THOUGHT
+
+
+🎬 ACTION
+cd /testbed && python test_debug.py
+2026-04-18 10:35:11,813 - INFO - swea-agent - 🤖 MODEL INPUT
+OBSERVATION:
+Test 7: (m.Linear1D(1) & m.Linear1D(2)) | (m.Linear1D(3) & m.Linear1D(4))
+cm1: Model: CompoundModel
+Inputs: ('x0', 'x1')
+Outputs: ('y0', 'y1')
+Model set size: 1
+Expression: [0] & [1]
+Components: 
+    [0]: <Linear1D(slope=1., intercept=0.)>
+
+    [1]: <Linear1D(slope=2., intercept=0.)>
+Parameters:
+    slope_0 intercept_0 slope_1 intercept_1
+    ------- ----------- ------- -----------
+        1.0         0.0     2.0         0.0
+cm2: Model: CompoundModel
+Inputs: ('x0', 'x1')
+Outputs: ('y0', 'y1')
+Model set size: 1
+Expression: [0] & [1]
+Components: 
+    [0]: <Linear1D(slope=3., intercept=0.)>
+
+    [1]: <Linear1D(slope=4., intercept=0.)>
+Parameters:
+    slope_0 intercept_0 slope_1 intercept_1
+    ------- ----------- ------- -----------
+        3.0         0.0     4.0         0.0
+sep_cm1: [[1. 0.]
+ [0. 1.]]
+sep_cm2: [[1. 0.]
+ [0. 1.]]
+result from _cdot: [[1. 0.]
+ [0. 1.]]
+result7: [[ True False]
+ [False  True]]
+expected7: [[ True False False False]
+ [False  True False False]
+ [False False  True False]
+ [False False False  True]]
+Match: False
+
+2026-04-18 10:35:11,830 - INFO - swea-agent - ========================= STEP 18 =========================
+2026-04-18 10:36:18,972 - INFO - swea-agent - 💭 THOUGHT
+
+
+🎬 ACTION
+str_replace_editor create /testbed/test_edge_cases_fixed.py --file_text 'import numpy as np
+from astropy.modeling import models as m
+from astropy.modeling.separable import separability_matrix
+
+# Test case 7: Test with | operator
+# The | operator is composition, so (f | g)(x) = g(f(x))
+# For (m.Linear1D(1) & m.Linear1D(2)) | (m.Linear1D(3) & m.Linear1D(4)):
+# - Left model has 2 inputs, 2 outputs
+# - Right model has 2 inputs, 2 outputs
+# - Composition: outputs of left become inputs of right
+# - Final: 2 inputs (from left), 2 outputs (from right)
+print("Test 7: (m.Linear1D(1) & m.Linear1D(2)) | (m.Linear1D(3) & m.Linear1D(4))")
+cm1 = m.Linear1D(1) & m.Linear1D(2)
+cm2 = m.Linear1D(3) & m.Linear1D(4)
+result7 = separability_matrix(cm1 | cm2)
+print(result7)
+# This should be 2x2 (not 4x4) because | is composition
+expected7 = np.array([[ True, False],
+                      [False,  True]])
+print("Match:", np.array_equal(result7, expected7))
+print()
+
+# Test case 8: Test with | operator and non-separable model
+# m.Pix2Sky_TAN() has 2 inputs, 2 outputs
+# (m.Linear1D(1) & m.Linear1D(2)) has 2 inputs, 2 outputs
+# Composition: outputs of left (2) become inputs of right (2)
+# Final: 2 inputs, 2 outputs
+print("Test 8: m.Pix2Sky_TAN() | (m.Linear1D(1) & m.Linear1D(2))")
+result8 = separability_matrix(m.Pix2Sky_TAN() | (m.Linear1D(1) & m.Linear1D(2)))
+print(result8)
+# The left model (Pix2Sky_TAN) is not separable, so both outputs depend on both inputs
+# Then the right model (Linear1D & Linear1D) is separable, but since the left is not separable,
+# the final result should not be separable
+expected8 = np.array([[ True,  True],
+                      [ True,  True]])
+print("Match:", np.array_equal(result8, expected8))
+print()
+
+# Test case 9: More complex nested with |
+# (m.Linear1D(1) & m.Linear1D(2)) has 2 inputs, 2 outputs
+# m.Pix2Sky_TAN() has 2 inputs, 2 outputs
+# Composition: outputs of left (2) become inputs of right (2)
+# Final: 2 inputs, 2 outputs
+print("Test 9: (m.Linear1D(1) & m.Linear1D(2)) | m.Pix2Sky_TAN()")
+result9 = separability_matrix((m.Linear1D(1) & m.Linear1D(2)) | m.Pix2Sky_TAN())
+print(result9)
+expected9 = np.array([[ True,  True],
+                      [ True,  True]])
+print("Match:", np.array_equal(result9, expected9))
+print()
+
+print("All tests completed!")'
+2026-04-18 10:36:19,731 - INFO - swea-agent - 🤖 MODEL INPUT
+OBSERVATION:
+File created successfully at: /testbed/test_edge_cases_fixed.py
+
+2026-04-18 10:36:19,747 - INFO - swea-agent - ========================= STEP 19 =========================
+2026-04-18 10:36:20,778 - INFO - swea-agent - 💭 THOUGHT
+
+
+🎬 ACTION
+cd /testbed && python test_edge_cases_fixed.py
+2026-04-18 10:36:22,094 - INFO - swea-agent - 🤖 MODEL INPUT
+OBSERVATION:
+Test 7: (m.Linear1D(1) & m.Linear1D(2)) | (m.Linear1D(3) & m.Linear1D(4))
+[[ True False]
+ [False  True]]
+Match: True
+
+Test 8: m.Pix2Sky_TAN() | (m.Linear1D(1) & m.Linear1D(2))
+[[ True  True]
+ [ True  True]]
+Match: True
+
+Test 9: (m.Linear1D(1) & m.Linear1D(2)) | m.Pix2Sky_TAN()
+[[ True  True]
+ [ True  True]]
+Match: True
+
+All tests completed!
+
+2026-04-18 10:36:22,106 - INFO - swea-agent - ========================= STEP 20 =========================
+2026-04-18 10:36:23,215 - INFO - swea-agent - 💭 THOUGHT
+
+
+🎬 ACTION
+cd /testbed && python -m pytest astropy/modeling/tests/test_separable.py -v
+2026-04-18 10:36:25,198 - INFO - swea-agent - 🤖 MODEL INPUT
+OBSERVATION:
+<frozen importlib._bootstrap>:228: RuntimeWarning: numpy.ndarray size changed, may indicate binary incompatibility. Expected 80 from C header, got 96 from PyObject
+Internet access disabled
+============================= test session starts ==============================
+platform linux -- Python 3.9.20, pytest-7.4.0, pluggy-1.3.0 -- /opt/miniconda3/envs/testbed/bin/python
+cachedir: .pytest_cache
+hypothesis profile 'ci' -> database=None, deadline=None, print_blob=True, derandomize=True
+
+Running tests with Astropy version 5.1.dev623+gd16bfe05a.d20250910.
+Running tests in astropy/modeling/tests/test_separable.py.
+
+Date: 2026-04-18T08:36:24
+
+Platform: Linux-6.12.76-linuxkit-x86_64-with-glibc2.35
+
+Executable: /opt/miniconda3/envs/testbed/bin/python
+
+Full Python Version: 
+3.9.20 (main, Oct  3 2024, 07:27:41) 
+[GCC 11.2.0]
+
+encodings: sys: utf-8, locale: UTF-8, filesystem: utf-8
+byteorder: little
+float info: dig: 15, mant_dig: 15
+
+Package versions: 
+Numpy: 1.25.2
+Scipy: not available
+Matplotlib: not available
+h5py: not available
+Pandas: not available
+PyERFA: 2.0.0.3
+Cython: not available
+Scikit-image: not available
+asdf: not available
+pyarrow: not available
+
+Using Astropy options: remote_data: none.
+
+ARCH_ON_CI: undefined
+IS_CRON: undefined
+
+rootdir: /testbed
+configfile: setup.cfg
+plugins: hypothesis-6.82.6, cov-4.1.0, filter-subpackage-0.1.2, doctestplus-1.0.0, astropy-header-0.2.2, xdist-3.3.1, arraydiff-0.5.0, astropy-0.10.0, openfiles-0.5.0, mock-3.11.1, remotedata-0.4.0
+collecting ... collected 11 items                                                             
+
+astropy/modeling/tests/test_separable.py::test_coord_matrix PASSED       [  9%]
+astropy/modeling/tests/test_separable.py::test_cdot PASSED               [ 18%]
+astropy/modeling/tests/test_separable.py::test_cstack PASSED             [ 27%]
+astropy/modeling/tests/test_separable.py::test_arith_oper PASSED         [ 36%]
+astropy/modeling/tests/test_separable.py::test_separable[compound_model0-result0] PASSED [ 45%]
+astropy/modeling/tests/test_separable.py::test_separable[compound_model1-result1] PASSED [ 54%]
+astropy/modeling/tests/test_separable.py::test_separable[compound_model2-result2] PASSED [ 63%]
+astropy/modeling/tests/test_separable.py::test_separable[compound_model3-result3] PASSED [ 72%]
+astropy/modeling/tests/test_separable.py::test_separable[compound_model4-result4] PASSED [ 81%]
+astropy/modeling/tests/test_separable.py::test_separable[compound_model5-result5] PASSED [ 90%]
+astropy/modeling/tests/test_separable.py::test_custom_model_separable PASSED [100%]
+
+============================== 11 passed in 0.24s ==============================
+
+2026-04-18 10:36:25,208 - INFO - swea-agent - ========================= STEP 21 =========================
+2026-04-18 10:36:26,969 - INFO - swea-agent - 💭 THOUGHT
+Let me also run some more tests to make sure nothing else is broken:
+
+
+🎬 ACTION
+cd /testbed && python -m pytest astropy/modeling/tests/test_compound.py -v -x --timeout=60 2>&1 | head -100
+2026-04-18 10:36:28,181 - INFO - swea-agent - 🤖 MODEL INPUT
+OBSERVATION:
+ERROR: usage: __main__.py [options] [file_or_dir] [file_or_dir] [...]
+__main__.py: error: unrecognized arguments: --timeout=60
+  inifile: /testbed/setup.cfg
+  rootdir: /testbed
+
+
+2026-04-18 10:36:28,194 - INFO - swea-agent - ========================= STEP 22 =========================
+2026-04-18 10:36:29,203 - INFO - swea-agent - 💭 THOUGHT
+
+
+🎬 ACTION
+cd /testbed && python -m pytest astropy/modeling/tests/test_compound.py -v -x 2>&1 | head -100
+2026-04-18 10:36:31,505 - INFO - swea-agent - 🤖 MODEL INPUT
+OBSERVATION:
+<frozen importlib._bootstrap>:228: RuntimeWarning: numpy.ndarray size changed, may indicate binary incompatibility. Expected 80 from C header, got 96 from PyObject
+Internet access disabled
+============================= test session starts ==============================
+platform linux -- Python 3.9.20, pytest-7.4.0, pluggy-1.3.0 -- /opt/miniconda3/envs/testbed/bin/python
+cachedir: .pytest_cache
+hypothesis profile 'ci' -> database=None, deadline=None, print_blob=True, derandomize=True
+
+Running tests with Astropy version 5.1.dev623+gd16bfe05a.d20250910.
+Running tests in astropy/modeling/tests/test_compound.py.
+
+Date: 2026-04-18T08:36:30
+
+Platform: Linux-6.12.76-linuxkit-x86_64-with-glibc2.35
+
+Executable: /opt/miniconda3/envs/testbed/bin/python
+
+Full Python Version: 
+3.9.20 (main, Oct  3 2024, 07:27:41) 
+[GCC 11.2.0]
+
+encodings: sys: utf-8, locale: UTF-8, filesystem: utf-8
+byteorder: little
+float info: dig: 15, mant_dig: 15
+
+Package versions: 
+Numpy: 1.25.2
+Scipy: not available
+Matplotlib: not available
+h5py: not available
+Pandas: not available
+PyERFA: 2.0.0.3
+Cython: not available
+Scikit-image: not available
+asdf: not available
+pyarrow: not available
+
+Using Astropy options: remote_data: none.
+
+ARCH_ON_CI: undefined
+IS_CRON: undefined
+
+rootdir: /testbed
+configfile: setup.cfg
+plugins: hypothesis-6.82.6, cov-4.1.0, filter-subpackage-0.1.2, doctestplus-1.0.0, astropy-header-0.2.2, xdist-3.3.1, arraydiff-0.5.0, astropy-0.10.0, openfiles-0.5.0, mock-3.11.1, remotedata-0.4.0
+collecting ... collected 69 items
+
+astropy/modeling/tests/test_compound.py::test_model_set[<lambda>-result0] PASSED [  1%]
+astropy/modeling/tests/test_compound.py::test_model_set[<lambda>-result1] PASSED [  2%]
+astropy/modeling/tests/test_compound.py::test_model_set[<lambda>-result2] PASSED [  4%]
+astropy/modeling/tests/test_compound.py::test_model_set[<lambda>-result3] PASSED [  5%]
+astropy/modeling/tests/test_compound.py::test_model_set[<lambda>-result4] PASSED [  7%]
+astropy/modeling/tests/test_compound.py::test_model_set_raises_value_error[<lambda>-result0] PASSED [  8%]
+astropy/modeling/tests/test_compound.py::test_model_set_raises_value_error[<lambda>-result1] PASSED [ 10%]
+astropy/modeling/tests/test_compound.py::test_model_set_raises_value_error[<lambda>-result2] PASSED [ 11%]
+astropy/modeling/tests/test_compound.py::test_model_set_raises_value_error[<lambda>-result3] PASSED [ 13%]
+astropy/modeling/tests/test_compound.py::test_model_set_raises_value_error[<lambda>-result4] PASSED [ 14%]
+astropy/modeling/tests/test_compound.py::test_two_model_instance_arithmetic_1d[<lambda>-5.0] PASSED [ 15%]
+astropy/modeling/tests/test_compound.py::test_two_model_instance_arithmetic_1d[<lambda>--1.0] PASSED [ 17%]
+astropy/modeling/tests/test_compound.py::test_two_model_instance_arithmetic_1d[<lambda>-6.0] PASSED [ 18%]
+astropy/modeling/tests/test_compound.py::test_two_model_instance_arithmetic_1d[<lambda>-0.6666666666666666] PASSED [ 20%]
+astropy/modeling/tests/test_compound.py::test_two_model_instance_arithmetic_1d[<lambda>-8.0] PASSED [ 21%]
+astropy/modeling/tests/test_compound.py::test_simple_two_model_compose_1d PASSED [ 23%]
+astropy/modeling/tests/test_compound.py::test_simple_two_model_compose_2d FAILED [ 24%]
+
+=================================== FAILURES ===================================
+_______________________ test_simple_two_model_compose_2d _______________________
+
+    def test_simple_two_model_compose_2d():
+        """
+        A simple example consisting of two rotations.
+        """
+    
+        r1 = Rotation2D(45) | Rotation2D(45)
+    
+        assert isinstance(r1, CompoundModel)
+        assert r1.n_inputs == 2
+        assert r1.n_outputs == 2
+>       assert_allclose(r1(0, 1), (-1, 0), atol=1e-10)
+
+astropy/modeling/tests/test_compound.py:106: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+astropy/modeling/core.py:1080: in __call__
+    outputs = self._generic_evaluate(evaluate, inputs,
+astropy/modeling/core.py:1044: in _generic_evaluate
+    outputs = evaluate(_inputs)
+astropy/modeling/core.py:3200: in evaluate
+    return self._evaluate(*_inputs, **kwargs)
+astropy/modeling/core.py:3226: in _evaluate
+    leftval = self.left(*args, **kw)
+astropy/modeling/core.py:398: in __call__
+    new_call = make_function_with_signature(
+astropy/modeling/core.py:377: in __call__
+    return super(cls, self).__call__(*inputs, **kwargs)
+astropy/modeling/core.py:1080: in __call__
+    outputs = self._generic_evaluate(evaluate, inputs,
+astropy/modeling/core.py:1044: in _generic_evaluate
+    outputs = evaluate(_inputs)
+astropy/modeling/core.py:940: in evaluate
+    return self.evaluate(*chain(_inputs, parameters))
+astropy/modeling/rotations.py:504: in evaluate
+
+2026-04-18 10:36:31,522 - INFO - swea-agent - ========================= STEP 23 =========================
+2026-04-18 10:36:32,648 - INFO - swea-agent - 💭 THOUGHT
+
+
+🎬 ACTION
+cd /testbed && git diff
+2026-04-18 10:36:33,222 - INFO - swea-agent - 🤖 MODEL INPUT
+OBSERVATION:
+diff --git a/astropy/modeling/separable.py b/astropy/modeling/separable.py
+index a308e2729..45bea3608 100644
+--- a/astropy/modeling/separable.py
++++ b/astropy/modeling/separable.py
+@@ -242,7 +242,7 @@ def _cstack(left, right):
+         cright = _coord_matrix(right, 'right', noutp)
+     else:
+         cright = np.zeros((noutp, right.shape[1]))
+-        cright[-right.shape[0]:, -right.shape[1]:] = 1
++        cright[-right.shape[0]:, -right.shape[1]:] = right
+ 
+     return np.hstack([cleft, cright])
+ 
+
+2026-04-18 10:36:33,232 - INFO - swea-agent - ========================= STEP 24 =========================
+2026-04-18 10:36:34,087 - INFO - swea-agent - 💭 THOUGHT
+
+
+🎬 ACTION
+cd /testbed && git stash
+2026-04-18 10:36:34,845 - INFO - swea-agent - 🤖 MODEL INPUT
+OBSERVATION:
+Saved working directory and index state WIP on (no branch): d16bfe05a Merge pull request #12900 from Cadair/custom_compound_model
+
+2026-04-18 10:36:34,863 - INFO - swea-agent - ========================= STEP 25 =========================
+2026-04-18 10:36:36,107 - INFO - swea-agent - 💭 THOUGHT
+
+
+🎬 ACTION
+cd /testbed && python -m pytest astropy/modeling/tests/test_compound.py::test_simple_two_model_compose_2d -v
+2026-04-18 10:36:37,993 - INFO - swea-agent - 🤖 MODEL INPUT
+OBSERVATION:
+<frozen importlib._bootstrap>:228: RuntimeWarning: numpy.ndarray size changed, may indicate binary incompatibility. Expected 80 from C header, got 96 from PyObject
+Internet access disabled
+============================= test session starts ==============================
+platform linux -- Python 3.9.20, pytest-7.4.0, pluggy-1.3.0 -- /opt/miniconda3/envs/testbed/bin/python
+cachedir: .pytest_cache
+hypothesis profile 'ci' -> database=None, deadline=None, print_blob=True, derandomize=True
+
+Running tests with Astropy version 5.1.dev623+gd16bfe05a.d20250910.
+Running tests in astropy/modeling/tests/test_compound.py::test_simple_two_model_compose_2d.
+
+Date: 2026-04-18T08:36:37
+
+Platform: Linux-6.12.76-linuxkit-x86_64-with-glibc2.35
+
+Executable: /opt/miniconda3/envs/testbed/bin/python
+
+Full Python Version: 
+3.9.20 (main, Oct  3 2024, 07:27:41) 
+[GCC 11.2.0]
+
+encodings: sys: utf-8, locale: UTF-8, filesystem: utf-8
+byteorder: little
+float info: dig: 15, mant_dig: 15
+
+Package versions: 
+Numpy: 1.25.2
+Scipy: not available
+Matplotlib: not available
+h5py: not available
+Pandas: not available
+PyERFA: 2.0.0.3
+Cython: not available
+Scikit-image: not available
+asdf: not available
+pyarrow: not available
+
+Using Astropy options: remote_data: none.
+
+ARCH_ON_CI: undefined
+IS_CRON: undefined
+
+rootdir: /testbed
+configfile: setup.cfg
+plugins: hypothesis-6.82.6, cov-4.1.0, filter-subpackage-0.1.2, doctestplus-1.0.0, astropy-header-0.2.2, xdist-3.3.1, arraydiff-0.5.0, astropy-0.10.0, openfiles-0.5.0, mock-3.11.1, remotedata-0.4.0
+collecting ... collected 1 item                                                               
+
+astropy/modeling/tests/test_compound.py::test_simple_two_model_compose_2d FAILED [100%]
+
+=================================== FAILURES ===================================
+_______________________ test_simple_two_model_compose_2d _______________________
+
+    def test_simple_two_model_compose_2d():
+        """
+        A simple example consisting of two rotations.
+        """
+    
+        r1 = Rotation2D(45) | Rotation2D(45)
+    
+        assert isinstance(r1, CompoundModel)
+        assert r1.n_inputs == 2
+        assert r1.n_outputs == 2
+>       assert_allclose(r1(0, 1), (-1, 0), atol=1e-10)
+
+astropy/modeling/tests/test_compound.py:106: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+astropy/modeling/core.py:1080: in __call__
+    outputs = self._generic_evaluate(evaluate, inputs,
+astropy/modeling/core.py:1044: in _generic_evaluate
+    outputs = evaluate(_inputs)
+astropy/modeling/core.py:3200: in evaluate
+    return self._evaluate(*_inputs, **kwargs)
+astropy/modeling/core.py:3226: in _evaluate
+    leftval = self.left(*args, **kw)
+astropy/modeling/core.py:398: in __call__
+    new_call = make_function_with_signature(
+astropy/modeling/core.py:377: in __call__
+    return super(cls, self).__call__(*inputs, **kwargs)
+astropy/modeling/core.py:1080: in __call__
+    outputs = self._generic_evaluate(evaluate, inputs,
+astropy/modeling/core.py:1044: in _generic_evaluate
+    outputs = evaluate(_inputs)
+astropy/modeling/core.py:940: in evaluate
+    return self.evaluate(*chain(_inputs, parameters))
+astropy/modeling/rotations.py:504: in evaluate
+    result = np.dot(cls._compute_matrix(angle), inarr)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+angle = array([0.78539816])
+
+    @staticmethod
+    def _compute_matrix(angle):
+>       return np.array([[math.cos(angle), -math.sin(angle)],
+                         [math.sin(angle), math.cos(angle)]],
+                        dtype=np.float64)
+E       DeprecationWarning: Conversion of an array with ndim > 0 to a scalar is deprecated, and will error in future. Ensure you extract a single element from your array before performing this operation. (Deprecated NumPy 1.25.)
+
+astropy/modeling/rotations.py:513: DeprecationWarning
+=========================== short test summary info ============================
+FAILED astropy/modeling/tests/test_compound.py::test_simple_two_model_compose_2d - DeprecationWarning: Conversion of an array with ndim > 0 to a scalar is dep...
+============================== 1 failed in 0.40s ===============================
+
+2026-04-18 10:36:38,009 - INFO - swea-agent - ========================= STEP 26 =========================
+2026-04-18 10:36:39,106 - INFO - swea-agent - 💭 THOUGHT
+
+
+🎬 ACTION
+cd /testbed && git stash pop
+2026-04-18 10:36:39,868 - INFO - swea-agent - 🤖 MODEL INPUT
+OBSERVATION:
+HEAD detached at d16bfe05a
+Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git restore <file>..." to discard changes in working directory)
+	modified:   astropy/modeling/separable.py
+
+Untracked files:
+  (use "git add <file>..." to include in what will be committed)
+	test_debug.py
+	test_edge_cases.py
+	test_edge_cases_fixed.py
+	test_issue.py
+
+no changes added to commit (use "git add" and/or "git commit -a")
+Dropped refs/stash@{0} (e1433955c169f7123e5ed384fe21f8491395b2bf)
+
+2026-04-18 10:36:39,884 - INFO - swea-agent - ========================= STEP 27 =========================
+2026-04-18 10:36:41,204 - INFO - swea-agent - 💭 THOUGHT
+
+
+🎬 ACTION
+cd /testbed && python test_issue.py
+2026-04-18 10:36:42,475 - INFO - swea-agent - 🤖 MODEL INPUT
+OBSERVATION:
+Test 1: cm = m.Linear1D(10) & m.Linear1D(5)
+[[ True False]
+ [False  True]]
+
+Test 2: m.Pix2Sky_TAN() & m.Linear1D(10) & m.Linear1D(5)
+[[ True  True False False]
+ [ True  True False False]
+ [False False  True False]
+ [False False False  True]]
+
+Test 3: m.Pix2Sky_TAN() & cm (where cm = m.Linear1D(10) & m.Linear1D(5))
+[[ True  True False False]
+ [ True  True False False]
+ [False False  True False]
+ [False False False  True]]
+
+Expected for test 3:
+[[ True  True False False]
+ [ True  True False False]
+ [False False  True False]
+ [False False False  True]]
+
+Match: True
+
+2026-04-18 10:36:42,492 - INFO - swea-agent - ========================= STEP 28 =========================
+2026-04-18 10:36:43,562 - INFO - swea-agent - 💭 THOUGHT
+
+
+🎬 ACTION
+cd /testbed && python -m pytest astropy/modeling/tests/test_separable.py -v
+2026-04-18 10:36:45,185 - INFO - swea-agent - 🤖 MODEL INPUT
+OBSERVATION:
+<frozen importlib._bootstrap>:228: RuntimeWarning: numpy.ndarray size changed, may indicate binary incompatibility. Expected 80 from C header, got 96 from PyObject
+Internet access disabled
+============================= test session starts ==============================
+platform linux -- Python 3.9.20, pytest-7.4.0, pluggy-1.3.0 -- /opt/miniconda3/envs/testbed/bin/python
+cachedir: .pytest_cache
+hypothesis profile 'ci' -> database=None, deadline=None, print_blob=True, derandomize=True
+
+Running tests with Astropy version 5.1.dev623+gd16bfe05a.d20250910.
+Running tests in astropy/modeling/tests/test_separable.py.
+
+Date: 2026-04-18T08:36:44
+
+Platform: Linux-6.12.76-linuxkit-x86_64-with-glibc2.35
+
+Executable: /opt/miniconda3/envs/testbed/bin/python
+
+Full Python Version: 
+3.9.20 (main, Oct  3 2024, 07:27:41) 
+[GCC 11.2.0]
+
+encodings: sys: utf-8, locale: UTF-8, filesystem: utf-8
+byteorder: little
+float info: dig: 15, mant_dig: 15
+
+Package versions: 
+Numpy: 1.25.2
+Scipy: not available
+Matplotlib: not available
+h5py: not available
+Pandas: not available
+PyERFA: 2.0.0.3
+Cython: not available
+Scikit-image: not available
+asdf: not available
+pyarrow: not available
+
+Using Astropy options: remote_data: none.
+
+ARCH_ON_CI: undefined
+IS_CRON: undefined
+
+rootdir: /testbed
+configfile: setup.cfg
+plugins: hypothesis-6.82.6, cov-4.1.0, filter-subpackage-0.1.2, doctestplus-1.0.0, astropy-header-0.2.2, xdist-3.3.1, arraydiff-0.5.0, astropy-0.10.0, openfiles-0.5.0, mock-3.11.1, remotedata-0.4.0
+collecting ... collected 11 items                                                             
+
+astropy/modeling/tests/test_separable.py::test_coord_matrix PASSED       [  9%]
+astropy/modeling/tests/test_separable.py::test_cdot PASSED               [ 18%]
+astropy/modeling/tests/test_separable.py::test_cstack PASSED             [ 27%]
+astropy/modeling/tests/test_separable.py::test_arith_oper PASSED         [ 36%]
+astropy/modeling/tests/test_separable.py::test_separable[compound_model0-result0] PASSED [ 45%]
+astropy/modeling/tests/test_separable.py::test_separable[compound_model1-result1] PASSED [ 54%]
+astropy/modeling/tests/test_separable.py::test_separable[compound_model2-result2] PASSED [ 63%]
+astropy/modeling/tests/test_separable.py::test_separable[compound_model3-result3] PASSED [ 72%]
+astropy/modeling/tests/test_separable.py::test_separable[compound_model4-result4] PASSED [ 81%]
+astropy/modeling/tests/test_separable.py::test_separable[compound_model5-result5] PASSED [ 90%]
+astropy/modeling/tests/test_separable.py::test_custom_model_separable PASSED [100%]
+
+============================== 11 passed in 0.21s ==============================
+
+2026-04-18 10:36:45,204 - INFO - swea-agent - ========================= STEP 29 =========================
+2026-04-18 10:36:46,438 - INFO - swea-agent - 💭 THOUGHT
+
+
+🎬 ACTION
+cd /testbed && python -m pytest astropy/modeling/tests/ -k separable -v
+2026-04-18 10:36:50,505 - INFO - swea-agent - 🤖 MODEL INPUT
+OBSERVATION:
+<frozen importlib._bootstrap>:228: RuntimeWarning: numpy.ndarray size changed, may indicate binary incompatibility. Expected 80 from C header, got 96 from PyObject
+Internet access disabled
+============================= test session starts ==============================
+platform linux -- Python 3.9.20, pytest-7.4.0, pluggy-1.3.0 -- /opt/miniconda3/envs/testbed/bin/python
+cachedir: .pytest_cache
+hypothesis profile 'ci' -> database=None, deadline=None, print_blob=True, derandomize=True
+
+Running tests with Astropy version 5.1.dev623+gd16bfe05a.d20250910.
+Running tests in astropy/modeling/tests/.
+
+Date: 2026-04-18T08:36:47
+
+Platform: Linux-6.12.76-linuxkit-x86_64-with-glibc2.35
+
+Executable: /opt/miniconda3/envs/testbed/bin/python
+
+Full Python Version: 
+3.9.20 (main, Oct  3 2024, 07:27:41) 
+[GCC 11.2.0]
+
+encodings: sys: utf-8, locale: UTF-8, filesystem: utf-8
+byteorder: little
+float info: dig: 15, mant_dig: 15
+
+Package versions: 
+Numpy: 1.25.2
+Scipy: not available
+Matplotlib: not available
+h5py: not available
+Pandas: not available
+PyERFA: 2.0.0.3
+Cython: not available
+Scikit-image: not available
+asdf: not available
+pyarrow: not available
+
+Using Astropy options: remote_data: none.
+
+ARCH_ON_CI: undefined
+IS_CRON: undefined
+
+rootdir: /testbed
+configfile: setup.cfg
+plugins: hypothesis-6.82.6, cov-4.1.0, filter-subpackage-0.1.2, doctestplus-1.0.0, astropy-header-0.2.2, xdist-3.3.1, arraydiff-0.5.0, astropy-0.10.0, openfiles-0.5.0, mock-3.11.1, remotedata-0.4.0
+collecting ... collecting 0 items                                                             collecting 363 items                                                           collecting 1236 items                                                          collected 1866 items / 1855 deselected / 11 selected                           
+
+astropy/modeling/tests/test_separable.py::test_coord_matrix PASSED       [  9%]
+astropy/modeling/tests/test_separable.py::test_cdot PASSED               [ 18%]
+astropy/modeling/tests/test_separable.py::test_cstack PASSED             [ 27%]
+astropy/modeling/tests/test_separable.py::test_arith_oper PASSED         [ 36%]
+astropy/modeling/tests/test_separable.py::test_separable[compound_model0-result0] PASSED [ 45%]
+astropy/modeling/tests/test_separable.py::test_separable[compound_model1-result1] PASSED [ 54%]
+astropy/modeling/tests/test_separable.py::test_separable[compound_model2-result2] PASSED [ 63%]
+astropy/modeling/tests/test_separable.py::test_separable[compound_model3-result3] PASSED [ 72%]
+astropy/modeling/tests/test_separable.py::test_separable[compound_model4-result4] PASSED [ 81%]
+astropy/modeling/tests/test_separable.py::test_separable[compound_model5-result5] PASSED [ 90%]
+astropy/modeling/tests/test_separable.py::test_custom_model_separable PASSED [100%]
+
+===================== 11 passed, 1855 deselected in 2.42s ======================
+
+2026-04-18 10:36:50,528 - INFO - swea-agent - ========================= STEP 30 =========================
+2026-04-18 10:37:04,287 - INFO - swea-agent - 💭 THOUGHT
+
+
+🎬 ACTION
+str_replace_editor create /testbed/test_left_nested.py --file_text 'import numpy as np
+from astropy.modeling import models as m
+from astropy.modeling.separable import separability_matrix
+
+# Test case: Nested compound model on the left
+print("Test: cm & m.Pix2Sky_TAN() where cm = m.Linear1D(10) & m.Linear1D(5)")
+cm = m.Linear1D(10) & m.Linear1D(5)
+result = separability_matrix(cm & m.Pix2Sky_TAN())
+print(result)
+expected = np.array([[ True, False, False, False],
+                     [False,  True, False, False],
+                     [False, False,  True,  True],
+                     [False, False,  True,  True]])
+print("Expected:", expected)
+print("Match:", np.array_equal(result, expected))
+print()
+
+# Test case: Both sides nested
+print("Test: cm1 & cm2 where cm1 = m.Linear1D(1) & m.Linear1D(2), cm2 = m.Linear1D(3) & m.Linear1D(4)")
+cm1 = m.Linear1D(1) & m.Linear1D(2)
+cm2 = m.Linear1D(3) & m.Linear1D(4)
+result = separability_matrix(cm1 & cm2)
+print(result)
+expected = np.array([[ True, False, False, False],
+                     [False,  True, False, False],
+                     [False, False,  True, False],
+                     [False, False, False,  True]])
+print("Expected:", expected)
+print("Match:", np.array_equal(result, expected))
+print()
+
+# Test case: More complex nesting
+print("Test: (m.Linear1D(1) & m.Linear1D(2)) & m.Pix2Sky_TAN() & (m.Linear1D(3) & m.Linear1D(4))")
+cm1 = m.Linear1D(1) & m.Linear1D(2)
+cm2 = m.Linear1D(3) & m.Linear1D(4)
+result = separability_matrix(cm1 & m.Pix2Sky_TAN() & cm2)
+print(result)
+expected = np.array([[ True, False, False, False, False, False],
+                     [False,  True, False, False, False, False],
+                     [False, False,  True,  True, False, False],
+                     [False, False,  True,  True, False, False],
+                     [False, False, False, False,  True, False],
+                     [False, False, False, False, False,  True]])
+print("Expected:", expected)
+print("Match:", np.array_equal(result, expected))
+print()
+
+print("All tests completed!")'
+2026-04-18 10:37:04,950 - INFO - swea-agent - 🤖 MODEL INPUT
+OBSERVATION:
+File created successfully at: /testbed/test_left_nested.py
+
+2026-04-18 10:37:04,965 - INFO - swea-agent - ========================= STEP 31 =========================
+2026-04-18 10:37:06,339 - INFO - swea-agent - 💭 THOUGHT
+
+
+🎬 ACTION
+cd /testbed && python test_left_nested.py
+2026-04-18 10:37:07,645 - INFO - swea-agent - 🤖 MODEL INPUT
+OBSERVATION:
+Test: cm & m.Pix2Sky_TAN() where cm = m.Linear1D(10) & m.Linear1D(5)
+[[ True False False False]
+ [False  True False False]
+ [False False  True  True]
+ [False False  True  True]]
+Expected: [[ True False False False]
+ [False  True False False]
+ [False False  True  True]
+ [False False  True  True]]
+Match: True
+
+Test: cm1 & cm2 where cm1 = m.Linear1D(1) & m.Linear1D(2), cm2 = m.Linear1D(3) & m.Linear1D(4)
+[[ True False False False]
+ [False  True False False]
+ [False False  True False]
+ [False False False  True]]
+Expected: [[ True False False False]
+ [False  True False False]
+ [False False  True False]
+ [False False False  True]]
+Match: True
+
+Test: (m.Linear1D(1) & m.Linear1D(2)) & m.Pix2Sky_TAN() & (m.Linear1D(3) & m.Linear1D(4))
+[[ True False False False False False]
+ [False  True False False False False]
+ [False False  True  True False False]
+ [False False  True  True False False]
+ [False False False False  True False]
+ [False False False False False  True]]
+Expected: [[ True False False False False False]
+ [False  True False False False False]
+ [False False  True  True False False]
+ [False False  True  True False False]
+ [False False False False  True False]
+ [False False False False False  True]]
+Match: True
+
+All tests completed!
+
+2026-04-18 10:37:07,665 - INFO - swea-agent - ========================= STEP 32 =========================
+2026-04-18 10:37:11,116 - INFO - swea-agent - 💭 THOUGHT
+
+
+🎬 ACTION
+cd /testbed && rm test_debug.py test_edge_cases.py test_edge_cases_fixed.py test_issue.py test_left_nested.py
+2026-04-18 10:37:11,674 - INFO - swea-agent - 🤖 MODEL INPUT
+Your command ran successfully and did not produce any output.
+2026-04-18 10:37:11,691 - INFO - swea-agent - ========================= STEP 33 =========================
+2026-04-18 10:37:12,456 - INFO - swea-agent - 💭 THOUGHT
+
+
+🎬 ACTION
+cd /testbed && git diff
+2026-04-18 10:37:12,990 - INFO - swea-agent - 🤖 MODEL INPUT
+OBSERVATION:
+diff --git a/astropy/modeling/separable.py b/astropy/modeling/separable.py
+index a308e2729..45bea3608 100644
+--- a/astropy/modeling/separable.py
++++ b/astropy/modeling/separable.py
+@@ -242,7 +242,7 @@ def _cstack(left, right):
+         cright = _coord_matrix(right, 'right', noutp)
+     else:
+         cright = np.zeros((noutp, right.shape[1]))
+-        cright[-right.shape[0]:, -right.shape[1]:] = 1
++        cright[-right.shape[0]:, -right.shape[1]:] = right
+ 
+     return np.hstack([cleft, cright])
+ 
+
+2026-04-18 10:37:13,004 - INFO - swea-agent - ========================= STEP 34 =========================
+2026-04-18 10:37:20,188 - INFO - swea-agent - 💭 THOUGHT
+
+
+🎬 ACTION
+cd /testbed && python -c "
+from astropy.modeling import models as m
+from astropy.modeling.separable import separability_matrix
+import numpy as np
+
+cm = m.Linear1D(10) & m.Linear1D(5)
+
+# Test 1: Simple compound model
+print('Test 1: cm = m.Linear1D(10) & m.Linear1D(5)')
+result1 = separability_matrix(cm)
+print(result1)
+expected1 = np.array([[ True, False], [False,  True]])
+print('Match:', np.array_equal(result1, expected1))
+print()
+
+# Test 2: More complex compound model
+print('Test 2: m.Pix2Sky_TAN() & m.Linear1D(10) & m.Linear1D(5)')
+result2 = separability_matrix(m.Pix2Sky_TAN() & m.Linear1D(10) & m.Linear1D(5))
+print(result2)
+expected2 = np.array([[ True,  True, False, False],
+                      [ True,  True, False, False],
+                      [False, False,  True, False],
+                      [False, False, False,  True]])
+print('Match:', np.array_equal(result2, expected2))
+print()
+
+# Test 3: Nested compound model (the bug)
+print('Test 3: m.Pix2Sky_TAN() & cm (the bug)')
+result3 = separability_matrix(m.Pix2Sky_TAN() & cm)
+print(result3)
+expected3 = np.array([[ True,  True, False, False],
+                      [ True,  True, False, False],
+                      [False, False,  True, False],
+                      [False, False, False,  True]])
+print('Match:', np.array_equal(result3, expected3))
+print()
+
+print('All tests passed!' if all([np.array_equal(result1, expected1), 
+                                   np.array_equal(result2, expected2), 
+                                   np.array_equal(result3, expected3)]) else 'Some tests failed!')
+"
+2026-04-18 10:37:21,643 - INFO - swea-agent - 🤖 MODEL INPUT
+OBSERVATION:
+Test 1: cm = m.Linear1D(10) & m.Linear1D(5)
+[[ True False]
+ [False  True]]
+Match: True
+
+Test 2: m.Pix2Sky_TAN() & m.Linear1D(10) & m.Linear1D(5)
+[[ True  True False False]
+ [ True  True False False]
+ [False False  True False]
+ [False False False  True]]
+Match: True
+
+Test 3: m.Pix2Sky_TAN() & cm (the bug)
+[[ True  True False False]
+ [ True  True False False]
+ [False False  True False]
+ [False False False  True]]
+Match: True
+
+All tests passed!
+
+2026-04-18 10:37:21,668 - INFO - swea-agent - ========================= STEP 35 =========================
+2026-04-18 10:37:32,115 - INFO - swea-agent - 💭 THOUGHT
+
+
+🎬 ACTION
+cd /testbed && python -c "
+from astropy.modeling import models as m
+from astropy.modeling.separable import separability_matrix
+import numpy as np
+
+cm = m.Linear1D(10) & m.Linear1D(5)
+
+# Test: Nested compound model on the left
+print('Test: cm & m.Pix2Sky_TAN()')
+result = separability_matrix(cm & m.Pix2Sky_TAN())
+print(result)
+expected = np.array([[ True, False, False, False],
+                     [False,  True, False, False],
+                     [False, False,  True,  True],
+                     [False, False,  True,  True]])
+print('Match:', np.array_equal(result, expected))
+print()
+
+# Test: Both sides nested
+print('Test: cm1 & cm2')
+cm1 = m.Linear1D(1) & m.Linear1D(2)
+cm2 = m.Linear1D(3) & m.Linear1D(4)
+result = separability_matrix(cm1 & cm2)
+print(result)
+expected = np.array([[ True, False, False, False],
+                     [False,  True, False, False],
+                     [False, False,  True, False],
+                     [False, False, False,  True]])
+print('Match:', np.array_equal(result, expected))
+"
+2026-04-18 10:37:33,375 - INFO - swea-agent - 🤖 MODEL INPUT
+OBSERVATION:
+Test: cm & m.Pix2Sky_TAN()
+[[ True False False False]
+ [False  True False False]
+ [False False  True  True]
+ [False False  True  True]]
+Match: True
+
+Test: cm1 & cm2
+[[ True False False False]
+ [False  True False False]
+ [False False  True False]
+ [False False False  True]]
+Match: True
+
+2026-04-18 10:37:33,416 - INFO - swea-agent - ========================= STEP 36 =========================
+2026-04-18 10:37:35,044 - INFO - swea-agent - 💭 THOUGHT
+
+
+🎬 ACTION
+cd /testbed && python -m pytest astropy/modeling/tests/test_separable.py astropy/modeling/tests/test_functional_models.py -v 2>&1 | tail -30
+2026-04-18 10:37:37,044 - INFO - swea-agent - 🤖 MODEL INPUT
+OBSERVATION:
+astropy/modeling/tests/test_functional_models.py:207: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+astropy/modeling/core.py:398: in __call__
+    new_call = make_function_with_signature(
+astropy/modeling/core.py:377: in __call__
+    return super(cls, self).__call__(*inputs, **kwargs)
+astropy/modeling/core.py:1080: in __call__
+    outputs = self._generic_evaluate(evaluate, inputs,
+astropy/modeling/core.py:1044: in _generic_evaluate
+    outputs = evaluate(_inputs)
+astropy/modeling/core.py:940: in evaluate
+    return self.evaluate(*chain(_inputs, parameters))
+astropy/modeling/rotations.py:504: in evaluate
+    result = np.dot(cls._compute_matrix(angle), inarr)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+angle = array([0.78539816])
+
+    @staticmethod
+    def _compute_matrix(angle):
+>       return np.array([[math.cos(angle), -math.sin(angle)],
+                         [math.sin(angle), math.cos(angle)]],
+                        dtype=np.float64)
+E       DeprecationWarning: Conversion of an array with ndim > 0 to a scalar is deprecated, and will error in future. Ensure you extract a single element from your array before performing this operation. (Deprecated NumPy 1.25.)
+
+astropy/modeling/rotations.py:513: DeprecationWarning
+=========================== short test summary info ============================
+FAILED astropy/modeling/tests/test_functional_models.py::test_Gaussian2DRotation
+FAILED astropy/modeling/tests/test_functional_models.py::test_Ellipse2D - Dep...
+=================== 2 failed, 46 passed, 14 skipped in 0.53s ===================
+
+2026-04-18 10:37:37,080 - INFO - swea-agent - ========================= STEP 37 =========================
+2026-04-18 10:37:38,467 - INFO - swea-agent - 💭 THOUGHT
+
+
+🎬 ACTION
+cd /testbed && git stash
+2026-04-18 10:37:39,283 - INFO - swea-agent - 🤖 MODEL INPUT
+OBSERVATION:
+Saved working directory and index state WIP on (no branch): d16bfe05a Merge pull request #12900 from Cadair/custom_compound_model
+
+2026-04-18 10:37:39,322 - INFO - swea-agent - ========================= STEP 38 =========================
+2026-04-18 10:37:40,830 - INFO - swea-agent - 💭 THOUGHT
+
+
+🎬 ACTION
+cd /testbed && python -m pytest astropy/modeling/tests/test_functional_models.py::test_Gaussian2DRotation astropy/modeling/tests/test_functional_models.py::test_Ellipse2D -v 2>&1 | tail -20
+2026-04-18 10:37:42,864 - INFO - swea-agent - 🤖 MODEL INPUT
+OBSERVATION:
+astropy/modeling/core.py:940: in evaluate
+    return self.evaluate(*chain(_inputs, parameters))
+astropy/modeling/rotations.py:504: in evaluate
+    result = np.dot(cls._compute_matrix(angle), inarr)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+angle = array([0.78539816])
+
+    @staticmethod
+    def _compute_matrix(angle):
+>       return np.array([[math.cos(angle), -math.sin(angle)],
+                         [math.sin(angle), math.cos(angle)]],
+                        dtype=np.float64)
+E       DeprecationWarning: Conversion of an array with ndim > 0 to a scalar is deprecated, and will error in future. Ensure you extract a single element from your array before performing this operation. (Deprecated NumPy 1.25.)
+
+astropy/modeling/rotations.py:513: DeprecationWarning
+=========================== short test summary info ============================
+FAILED astropy/modeling/tests/test_functional_models.py::test_Gaussian2DRotation
+FAILED astropy/modeling/tests/test_functional_models.py::test_Ellipse2D - Dep...
+============================== 2 failed in 0.47s ===============================
+
+2026-04-18 10:37:42,902 - INFO - swea-agent - ========================= STEP 39 =========================
+2026-04-18 10:37:43,838 - INFO - swea-agent - 💭 THOUGHT
+
+
+🎬 ACTION
+cd /testbed && git stash pop
+2026-04-18 10:37:44,529 - INFO - swea-agent - 🤖 MODEL INPUT
+OBSERVATION:
+HEAD detached at d16bfe05a
+Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git restore <file>..." to discard changes in working directory)
+	modified:   astropy/modeling/separable.py
+
+no changes added to commit (use "git add" and/or "git commit -a")
+Dropped refs/stash@{0} (6a29bacb4a650a43b523d0cc7ba638cd3a018074)
+
+2026-04-18 10:37:44,560 - INFO - swea-agent - ========================= STEP 40 =========================
+2026-04-18 10:37:46,709 - INFO - swea-agent - 💭 THOUGHT
+Let me verify the fix is correct by running the separable tests one more time:
+
+
+🎬 ACTION
+cd /testbed && python -m pytest astropy/modeling/tests/test_separable.py -v
+2026-04-18 10:37:48,228 - INFO - swea-agent - 🤖 MODEL INPUT
+OBSERVATION:
+<frozen importlib._bootstrap>:228: RuntimeWarning: numpy.ndarray size changed, may indicate binary incompatibility. Expected 80 from C header, got 96 from PyObject
+Internet access disabled
+============================= test session starts ==============================
+platform linux -- Python 3.9.20, pytest-7.4.0, pluggy-1.3.0 -- /opt/miniconda3/envs/testbed/bin/python
+cachedir: .pytest_cache
+hypothesis profile 'ci' -> database=None, deadline=None, print_blob=True, derandomize=True
+
+Running tests with Astropy version 5.1.dev623+gd16bfe05a.d20250910.
+Running tests in astropy/modeling/tests/test_separable.py.
+
+Date: 2026-04-18T08:37:47
+
+Platform: Linux-6.12.76-linuxkit-x86_64-with-glibc2.35
+
+Executable: /opt/miniconda3/envs/testbed/bin/python
+
+Full Python Version: 
+3.9.20 (main, Oct  3 2024, 07:27:41) 
+[GCC 11.2.0]
+
+encodings: sys: utf-8, locale: UTF-8, filesystem: utf-8
+byteorder: little
+float info: dig: 15, mant_dig: 15
+
+Package versions: 
+Numpy: 1.25.2
+Scipy: not available
+Matplotlib: not available
+h5py: not available
+Pandas: not available
+PyERFA: 2.0.0.3
+Cython: not available
+Scikit-image: not available
+asdf: not available
+pyarrow: not available
+
+Using Astropy options: remote_data: none.
+
+ARCH_ON_CI: undefined
+IS_CRON: undefined
+
+rootdir: /testbed
+configfile: setup.cfg
+plugins: hypothesis-6.82.6, cov-4.1.0, filter-subpackage-0.1.2, doctestplus-1.0.0, astropy-header-0.2.2, xdist-3.3.1, arraydiff-0.5.0, astropy-0.10.0, openfiles-0.5.0, mock-3.11.1, remotedata-0.4.0
+collecting ... collected 11 items                                                             
+
+astropy/modeling/tests/test_separable.py::test_coord_matrix PASSED       [  9%]
+astropy/modeling/tests/test_separable.py::test_cdot PASSED               [ 18%]
+astropy/modeling/tests/test_separable.py::test_cstack PASSED             [ 27%]
+astropy/modeling/tests/test_separable.py::test_arith_oper PASSED         [ 36%]
+astropy/modeling/tests/test_separable.py::test_separable[compound_model0-result0] PASSED [ 45%]
+astropy/modeling/tests/test_separable.py::test_separable[compound_model1-result1] PASSED [ 54%]
+astropy/modeling/tests/test_separable.py::test_separable[compound_model2-result2] PASSED [ 63%]
+astropy/modeling/tests/test_separable.py::test_separable[compound_model3-result3] PASSED [ 72%]
+astropy/modeling/tests/test_separable.py::test_separable[compound_model4-result4] PASSED [ 81%]
+astropy/modeling/tests/test_separable.py::test_separable[compound_model5-result5] PASSED [ 90%]
+astropy/modeling/tests/test_separable.py::test_custom_model_separable PASSED [100%]
+
+============================== 11 passed in 0.18s ==============================
+
+2026-04-18 10:37:48,258 - INFO - swea-agent - ========================= STEP 41 =========================
+2026-04-18 10:37:50,744 - INFO - swea-agent - 💭 THOUGHT
+
+
+🎬 ACTION
+str_replace_editor view /testbed/astropy/modeling/separable.py  --view_range 236 248
+2026-04-18 10:37:51,438 - INFO - swea-agent - 🤖 MODEL INPUT
+OBSERVATION:
+Here's the result of running `cat -n` on /testbed/astropy/modeling/separable.py:
+   236	    if isinstance(left, Model):
+   237	        cleft = _coord_matrix(left, 'left', noutp)
+   238	    else:
+   239	        cleft = np.zeros((noutp, left.shape[1]))
+   240	        cleft[: left.shape[0], : left.shape[1]] = left
+   241	    if isinstance(right, Model):
+   242	        cright = _coord_matrix(right, 'right', noutp)
+   243	    else:
+   244	        cright = np.zeros((noutp, right.shape[1]))
+   245	        cright[-right.shape[0]:, -right.shape[1]:] = right
+   246	
+   247	    return np.hstack([cleft, cright])
+   248	
+
+
+2026-04-18 10:37:51,470 - INFO - swea-agent - ========================= STEP 42 =========================
+2026-04-18 10:38:20,101 - INFO - swea-agent - 💭 THOUGHT
+The fix is complete. Let me provide a summary of the change:
+
+## Summary
+
+The bug was in the `_cstack` function in `/testbed/astropy/modeling/separable.py`. This function handles the `&` (parallel) operator for combining models.
+
+When computing the separability matrix for a compound model like `m.Pix2Sky_TAN() & cm` where `cm` is itself a compound model (`m.Linear1D(10) & m.Linear1D(5)`), the function receives the separability matrix of `cm` as a numpy array (not as a Model).
+
+The bug was on line 245:
+- **Before**: `cright[-right.shape[0]:, -right.shape[1]:] = 1`
+- **After**: `cright[-right.shape[0]:, -right.shape[1]:] = right`
+
+The original code was filling the right portion of the matrix with 1s regardless of the actual separability information in the input array. The fix correctly copies the actual separability values from the input array.
+
+This ensures that nested CompoundModels correctly preserve their separability information when used in larger compound models.
+
+
+🎬 ACTION
+submit
+2026-04-18 10:38:20,922 - INFO - swea-agent - 🤖 MODEL INPUT
+OBSERVATION:
+Thank you for your work on this issue. Please carefully follow the steps below to help review your changes.
+
+1. If you made any changes to your code after running the reproduction script, please run the reproduction script again.
+  If the reproduction script is failing, please revisit your changes and make sure they are correct.
+  If you have already removed your reproduction script, please ignore this step.
+2. Remove your reproduction script (if you haven't done so already).
+3. If you have modified any TEST files, please revert them to the state they had before you started fixing the issue.
+  You can do this with `git checkout -- /path/to/test/file.py`. Use below <diff> to find the files you need to revert.
+4. Run the submit command again to confirm.
+
+Here is a list of all of your changes:
+
+<diff>
+diff --git a/astropy/modeling/separable.py b/astropy/modeling/separable.py
+index a308e2729..45bea3608 100644
+--- a/astropy/modeling/separable.py
++++ b/astropy/modeling/separable.py
+@@ -242,7 +242,7 @@ def _cstack(left, right):
+         cright = _coord_matrix(right, 'right', noutp)
+     else:
+         cright = np.zeros((noutp, right.shape[1]))
+-        cright[-right.shape[0]:, -right.shape[1]:] = 1
++        cright[-right.shape[0]:, -right.shape[1]:] = right
+ 
+     return np.hstack([cleft, cright])
+ 
+
+</diff>
+
+
+2026-04-18 10:38:20,967 - INFO - swea-agent - ========================= STEP 43 =========================
+2026-04-18 10:38:23,222 - INFO - swea-agent - 💭 THOUGHT
+
+
+🎬 ACTION
+cd /testbed && git status
+2026-04-18 10:38:23,810 - INFO - swea-agent - 🤖 MODEL INPUT
+OBSERVATION:
+HEAD detached at d16bfe05a
+Changes to be committed:
+  (use "git restore --staged <file>..." to unstage)
+	modified:   astropy/modeling/separable.py
+
+
+2026-04-18 10:38:23,841 - INFO - swea-agent - ========================= STEP 44 =========================
+2026-04-18 10:38:32,695 - INFO - swea-agent - 💭 THOUGHT
+
+
+🎬 ACTION
+cd /testbed && python -c "
+from astropy.modeling import models as m
+from astropy.modeling.separable import separability_matrix
+import numpy as np
+
+cm = m.Linear1D(10) & m.Linear1D(5)
+
+# Test 1: Simple compound model
+print('Test 1: cm = m.Linear1D(10) & m.Linear1D(5)')
+result1 = separability_matrix(cm)
+print(result1)
+expected1 = np.array([[ True, False], [False,  True]])
+print('Match:', np.array_equal(result1, expected1))
+print()
+
+# Test 2: More complex compound model
+print('Test 2: m.Pix2Sky_TAN() & m.Linear1D(10) & m.Linear1D(5)')
+result2 = separability_matrix(m.Pix2Sky_TAN() & m.Linear1D(10) & m.Linear1D(5))
+print(result2)
+expected2 = np.array([[ True,  True, False, False],
+                      [ True,  True, False, False],
+                      [False, False,  True, False],
+                      [False, False, False,  True]])
+print('Match:', np.array_equal(result2, expected2))
+print()
+
+# Test 3: Nested compound model (the bug)
+print('Test 3: m.Pix2Sky_TAN() & cm (the bug)')
+result3 = separability_matrix(m.Pix2Sky_TAN() & cm)
+print(result3)
+expected3 = np.array([[ True,  True, False, False],
+                      [ True,  True, False, False],
+                      [False, False,  True, False],
+                      [False, False, False,  True]])
+print('Match:', np.array_equal(result3, expected3))
+print()
+
+print('All tests passed!' if all([np.array_equal(result1, expected1), 
+                                   np.array_equal(result2, expected2), 
+                                   np.array_equal(result3, expected3)]) else 'Some tests failed!')
+"
+2026-04-18 10:38:33,988 - INFO - swea-agent - 🤖 MODEL INPUT
+OBSERVATION:
+Test 1: cm = m.Linear1D(10) & m.Linear1D(5)
+[[ True False]
+ [False  True]]
+Match: True
+
+Test 2: m.Pix2Sky_TAN() & m.Linear1D(10) & m.Linear1D(5)
+[[ True  True False False]
+ [ True  True False False]
+ [False False  True False]
+ [False False False  True]]
+Match: True
+
+Test 3: m.Pix2Sky_TAN() & cm (the bug)
+[[ True  True False False]
+ [ True  True False False]
+ [False False  True False]
+ [False False False  True]]
+Match: True
+
+All tests passed!
+
+2026-04-18 10:38:34,030 - INFO - swea-agent - ========================= STEP 45 =========================
+2026-04-18 10:38:35,072 - INFO - swea-agent - 💭 THOUGHT
+
+
+🎬 ACTION
+cd /testbed && git diff --name-only
+2026-04-18 10:38:35,641 - INFO - swea-agent - 🤖 MODEL INPUT
+Your command ran successfully and did not produce any output.
+2026-04-18 10:38:35,684 - INFO - swea-agent - ========================= STEP 46 =========================
+2026-04-18 10:38:36,910 - INFO - swea-agent - 💭 THOUGHT
+
+
+🎬 ACTION
+cd /testbed && git diff --cached
+2026-04-18 10:38:37,457 - INFO - swea-agent - 🤖 MODEL INPUT
+OBSERVATION:
+diff --git a/astropy/modeling/separable.py b/astropy/modeling/separable.py
+index a308e2729..45bea3608 100644
+--- a/astropy/modeling/separable.py
++++ b/astropy/modeling/separable.py
+@@ -242,7 +242,7 @@ def _cstack(left, right):
+         cright = _coord_matrix(right, 'right', noutp)
+     else:
+         cright = np.zeros((noutp, right.shape[1]))
+-        cright[-right.shape[0]:, -right.shape[1]:] = 1
++        cright[-right.shape[0]:, -right.shape[1]:] = right
+ 
+     return np.hstack([cleft, cright])
+ 
+
+2026-04-18 10:38:37,508 - INFO - swea-agent - ========================= STEP 47 =========================
+2026-04-18 10:38:39,213 - INFO - swea-agent - 💭 THOUGHT
+
+
+🎬 ACTION
+cd /testbed && python -m pytest astropy/modeling/tests/test_separable.py -v
+2026-04-18 10:38:40,887 - INFO - swea-agent - 🤖 MODEL INPUT
+OBSERVATION:
+<frozen importlib._bootstrap>:228: RuntimeWarning: numpy.ndarray size changed, may indicate binary incompatibility. Expected 80 from C header, got 96 from PyObject
+Internet access disabled
+============================= test session starts ==============================
+platform linux -- Python 3.9.20, pytest-7.4.0, pluggy-1.3.0 -- /opt/miniconda3/envs/testbed/bin/python
+cachedir: .pytest_cache
+hypothesis profile 'ci' -> database=None, deadline=None, print_blob=True, derandomize=True
+
+Running tests with Astropy version 5.1.dev623+gd16bfe05a.d20250910.
+Running tests in astropy/modeling/tests/test_separable.py.
+
+Date: 2026-04-18T08:38:40
+
+Platform: Linux-6.12.76-linuxkit-x86_64-with-glibc2.35
+
+Executable: /opt/miniconda3/envs/testbed/bin/python
+
+Full Python Version: 
+3.9.20 (main, Oct  3 2024, 07:27:41) 
+[GCC 11.2.0]
+
+encodings: sys: utf-8, locale: UTF-8, filesystem: utf-8
+byteorder: little
+float info: dig: 15, mant_dig: 15
+
+Package versions: 
+Numpy: 1.25.2
+Scipy: not available
+Matplotlib: not available
+h5py: not available
+Pandas: not available
+PyERFA: 2.0.0.3
+Cython: not available
+Scikit-image: not available
+asdf: not available
+pyarrow: not available
+
+Using Astropy options: remote_data: none.
+
+ARCH_ON_CI: undefined
+IS_CRON: undefined
+
+rootdir: /testbed
+configfile: setup.cfg
+plugins: hypothesis-6.82.6, cov-4.1.0, filter-subpackage-0.1.2, doctestplus-1.0.0, astropy-header-0.2.2, xdist-3.3.1, arraydiff-0.5.0, astropy-0.10.0, openfiles-0.5.0, mock-3.11.1, remotedata-0.4.0
+collecting ... collected 11 items                                                             
+
+astropy/modeling/tests/test_separable.py::test_coord_matrix PASSED       [  9%]
+astropy/modeling/tests/test_separable.py::test_cdot PASSED               [ 18%]
+astropy/modeling/tests/test_separable.py::test_cstack PASSED             [ 27%]
+astropy/modeling/tests/test_separable.py::test_arith_oper PASSED         [ 36%]
+astropy/modeling/tests/test_separable.py::test_separable[compound_model0-result0] PASSED [ 45%]
+astropy/modeling/tests/test_separable.py::test_separable[compound_model1-result1] PASSED [ 54%]
+astropy/modeling/tests/test_separable.py::test_separable[compound_model2-result2] PASSED [ 63%]
+astropy/modeling/tests/test_separable.py::test_separable[compound_model3-result3] PASSED [ 72%]
+astropy/modeling/tests/test_separable.py::test_separable[compound_model4-result4] PASSED [ 81%]
+astropy/modeling/tests/test_separable.py::test_separable[compound_model5-result5] PASSED [ 90%]
+astropy/modeling/tests/test_separable.py::test_custom_model_separable PASSED [100%]
+
+============================== 11 passed in 0.21s ==============================
+
+2026-04-18 10:38:40,932 - INFO - swea-agent - ========================= STEP 48 =========================
+2026-04-18 10:38:42,440 - INFO - swea-agent - 💭 THOUGHT
+
+
+🎬 ACTION
+submit
+2026-04-18 10:38:43,215 - INFO - swea-agent - Found submission: diff --git a/astropy/modeling/separable.py b/astropy/modeling/separable.py
+index a308e2729..45bea3608 100644
+--- a/astropy/modeling/separable.py
++++ b/astropy/modeling/separable.py
+@@ -242,7 +242,7 @@ def _cstack(left, right):
+         cright = _coord_matrix(right, 'right', noutp)
+     else:
+         cright = np.zeros((noutp, right.shape[1]))
+-        cright[-right.shape[0]:, -right.shape[1]:] = 1
++        cright[-right.shape[0]:, -right.shape[1]:] = right
+ 
+     return np.hstack([cleft, cright])
+ 
+
+2026-04-18 10:38:43,220 - INFO - swea-agent - 🤖 MODEL INPUT
+OBSERVATION:
+diff --git a/astropy/modeling/separable.py b/astropy/modeling/separable.py
+index a308e2729..45bea3608 100644
+--- a/astropy/modeling/separable.py
++++ b/astropy/modeling/separable.py
+@@ -242,7 +242,7 @@ def _cstack(left, right):
+         cright = _coord_matrix(right, 'right', noutp)
+     else:
+         cright = np.zeros((noutp, right.shape[1]))
+-        cright[-right.shape[0]:, -right.shape[1]:] = 1
++        cright[-right.shape[0]:, -right.shape[1]:] = right
+ 
+     return np.hstack([cleft, cright])
+ 
+
+2026-04-18 10:38:43,271 - INFO - swea-agent - Trajectory saved to /Users/ziyang/Documents/midas-agent/logs/sweagent_10issues_minimax/astropy__astropy-12907/astropy__astropy-12907.traj
+2026-04-18 10:38:43,288 - INFO - swea-env - Beginning environment shutdown...

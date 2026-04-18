@@ -1,0 +1,124 @@
+Warning: 'midas' is an entry point defined in pyproject.toml, but it's not installed as a script. You may get improper `sys.argv[0]`.
+
+The support to run uninstalled scripts will be removed in a future release.
+
+Run `poetry install` to resolve and get rid of this message.
+
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Training: 10 issues, budget=1000000
+2026-04-18 10:29:37,886 - midas_agent.docker.container_manager - INFO - Started container 3ecda6b60dd1 from swebench/sweb.eval.x86_64.astropy_1776_astropy-12907:latest
+2026-04-18 10:29:37,886 - midas_agent.training - INFO -   ws-0: Docker container 3ecda6b60dd1
+[92m10:29:37 - LiteLLM:INFO[0m: utils.py:4004 - 
+LiteLLM completion() model= openai/gpt-oss-20b; provider = openrouter
+2026-04-18 10:29:37,903 - LiteLLM - INFO - 
+LiteLLM completion() model= openai/gpt-oss-20b; provider = openrouter
+[92m10:29:38 - LiteLLM:INFO[0m: utils.py:1652 - Wrapper: Completed Call, calling success_handler
+2026-04-18 10:29:38,876 - LiteLLM - INFO - Wrapper: Completed Call, calling success_handler
+2026-04-18 10:29:38,878 - midas_agent.stdlib.plan_execute_agent - INFO -   [iter 1] bash(command='ls -R') (2559 tokens)
+2026-04-18 10:29:39,379 - midas_agent.stdlib.plan_execute_agent - INFO -     → .:
+CHANGES.rst
+CITATION
+CODE_OF_CONDUCT.md
+CONTRIBUTING.md
+GOVERNANCE.md
+LICENSE.rst
+MANIFEST.in
+README.rst
+astropy
+astropy.egg-info
+azure-pipelines.yml
+cextern
+codecov.yml
+conftest.py
+docs
+examples
+licenses
+pip-requirements
+pyproject.toml
+setup.cfg
+setup.py
+tox.ini
+
+./astropy:
+CITATION
+__init__.py
+
+[92m10:29:39 - LiteLLM:INFO[0m: utils.py:4004 - 
+LiteLLM completion() model= openai/gpt-oss-20b; provider = openrouter
+2026-04-18 10:29:39,386 - LiteLLM - INFO - 
+LiteLLM completion() model= openai/gpt-oss-20b; provider = openrouter
+[92m10:29:40 - LiteLLM:INFO[0m: utils.py:1652 - Wrapper: Completed Call, calling success_handler
+2026-04-18 10:29:40,532 - LiteLLM - INFO - Wrapper: Completed Call, calling success_handler
+2026-04-18 10:29:40,534 - midas_agent.stdlib.plan_execute_agent - INFO -   [iter 2] search_code(path='astropy/modeling/separable.py', pattern='def separability_matrix') (15217 tokens)
+2026-04-18 10:29:40,707 - midas_agent.stdlib.plan_execute_agent - INFO -     → 66:def separability_matrix(transform):
+[92m10:29:40 - LiteLLM:INFO[0m: utils.py:4004 - 
+LiteLLM completion() model= openai/gpt-oss-20b; provider = openrouter
+2026-04-18 10:29:40,710 - LiteLLM - INFO - 
+LiteLLM completion() model= openai/gpt-oss-20b; provider = openrouter
+[92m10:29:41 - LiteLLM:INFO[0m: utils.py:1652 - Wrapper: Completed Call, calling success_handler
+2026-04-18 10:29:41,449 - LiteLLM - INFO - Wrapper: Completed Call, calling success_handler
+2026-04-18 10:29:41,458 - midas_agent.stdlib.plan_execute_agent - INFO -   [iter 3] read_file(path='astropy/modeling/separable.py', line_start=1, line_end=200) (15257 tokens)
+2026-04-18 10:29:41,621 - midas_agent.stdlib.plan_execute_agent - INFO -     → # Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+"""
+Functions to determine if a model is separable, i.e.
+if the model outputs are independent.
+
+It analyzes ``n_inputs``, ``n_outputs`` and the operators
+in a compound model by stepping through the transforms
+and creating a ``coord_mat
+[92m10:29:41 - LiteLLM:INFO[0m: utils.py:4004 - 
+LiteLLM completion() model= openai/gpt-oss-20b; provider = openrouter
+2026-04-18 10:29:41,624 - LiteLLM - INFO - 
+LiteLLM completion() model= openai/gpt-oss-20b; provider = openrouter
+[92m10:29:42 - LiteLLM:INFO[0m: utils.py:1652 - Wrapper: Completed Call, calling success_handler
+2026-04-18 10:29:42,684 - LiteLLM - INFO - Wrapper: Completed Call, calling success_handler
+2026-04-18 10:29:42,687 - midas_agent.stdlib.plan_execute_agent - WARNING -   [iter 4] Unknown tool: bash<|channel|>commentary
+[92m10:29:42 - LiteLLM:INFO[0m: utils.py:4004 - 
+LiteLLM completion() model= openai/gpt-oss-20b; provider = openrouter
+2026-04-18 10:29:42,689 - LiteLLM - INFO - 
+LiteLLM completion() model= openai/gpt-oss-20b; provider = openrouter
+[92m10:29:43 - LiteLLM:INFO[0m: utils.py:1652 - Wrapper: Completed Call, calling success_handler
+2026-04-18 10:29:43,911 - LiteLLM - INFO - Wrapper: Completed Call, calling success_handler
+2026-04-18 10:29:43,914 - midas_agent.stdlib.plan_execute_agent - INFO -   [iter 5] bash(command="python - <<'PY'\nfrom astropy.modeling import models as m\nfrom astropy.modelin) (18039 tokens)
+2026-04-18 10:29:45,600 - midas_agent.stdlib.plan_execute_agent - INFO -     → cm: [[ True False]
+ [False  True]]
+complex: [[ True  True False False]
+ [ True  True False False]
+ [False False  True False]
+ [False False False  True]]
+nested: [[ True  True False False]
+ [ True  True False False]
+ [False False  True  True]
+ [False False  True  True]]
+
+[92m10:29:45 - LiteLLM:INFO[0m: utils.py:4004 - 
+LiteLLM completion() model= openai/gpt-oss-20b; provider = openrouter
+2026-04-18 10:29:45,605 - LiteLLM - INFO - 
+LiteLLM completion() model= openai/gpt-oss-20b; provider = openrouter
+[92m10:29:46 - LiteLLM:INFO[0m: utils.py:1652 - Wrapper: Completed Call, calling success_handler
+2026-04-18 10:29:46,549 - LiteLLM - INFO - Wrapper: Completed Call, calling success_handler
+2026-04-18 10:29:46,551 - midas_agent.stdlib.plan_execute_agent - INFO -   [iter 6] search_code(path='astropy/modeling', query='class Pix2Sky_TAN') (18211 tokens)
+2026-04-18 10:29:46,758 - midas_agent.docker.container_manager - INFO - Removed container 3ecda6b60dd1
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+    import sys; from importlib import import_module; sys.argv = ['midas', 'train', '--config', 'train.yaml', '--issues', '10']; sys.exit(import_module('midas_agent.cli').main())
+                                                                                                                                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/Users/ziyang/Documents/midas-agent/midas_agent/cli.py", line 203, in main
+    _cmd_train(args)
+    ~~~~~~~~~~^^^^^^
+  File "/Users/ziyang/Documents/midas-agent/midas_agent/cli.py", line 151, in _cmd_train
+    run_training(config, issues=issues)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/ziyang/Documents/midas-agent/midas_agent/training.py", line 313, in run_training
+    ws.execute(issue)
+    ~~~~~~~~~~^^^^^^^
+  File "/Users/ziyang/Documents/midas-agent/midas_agent/workspace/graph_emergence/workspace.py", line 124, in execute
+    self._last_result = agent.run(context=context)
+                        ~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/Users/ziyang/Documents/midas-agent/midas_agent/stdlib/plan_execute_agent.py", line 119, in run
+    result = action.execute(**tool_call.arguments)
+  File "/Users/ziyang/Documents/midas-agent/midas_agent/stdlib/actions/docker_actions.py", line 326, in execute
+    pattern = kwargs["pattern"]
+              ~~~~~~^^^^^^^^^^^
+KeyError: 'pattern'
