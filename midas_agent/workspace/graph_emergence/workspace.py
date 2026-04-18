@@ -126,7 +126,7 @@ class GraphEmergenceWorkspace(Workspace):
         test_runner = None
         if issue.fail_to_pass or issue.pass_to_pass:
             from midas_agent.evaluation.test_runner import SWEBenchTestRunner
-            bash_action = ov.get("bash", BashAction(cwd=cwd))
+            bash_action = base_actions[0]  # BashAction with io= already set
             test_runner = SWEBenchTestRunner(
                 bash_action=bash_action,
                 fail_to_pass=issue.fail_to_pass,
