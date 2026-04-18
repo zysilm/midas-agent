@@ -19,7 +19,7 @@ class PlanExecuteAgent(ReactAgent):
         actions: list[Action],
         call_llm: Callable[[LLMRequest], LLMResponse],
         max_iterations: int | None = None,
-        market_info_provider: Callable[[], str] | None = None,
+        env_context_xml: str | None = None,
         balance_provider: Callable[[], int] | None = None,
         max_tool_output_chars: int | None = None,
         max_context_tokens: int | None = None,
@@ -34,7 +34,7 @@ class PlanExecuteAgent(ReactAgent):
             system_llm=system_llm,
             action_log=action_log,
         )
-        self.market_info_provider = market_info_provider
+        self.env_context_xml = env_context_xml
 
     def run(self, context: str | None = None) -> AgentResult:
         from midas_agent.scheduler.resource_meter import BudgetExhaustedError
@@ -46,9 +46,8 @@ class PlanExecuteAgent(ReactAgent):
         # Build user message with budget info and task context
         user_parts: list[str] = []
 
-        if self.market_info_provider is not None:
-            market_info = self.market_info_provider()
-            user_parts.append(market_info)
+        if self.env_context_xml is not None:
+            user_parts.append(self.env_context_xml)
 
         if context is not None:
             user_parts.append(f"\nTask:\n{context}")
@@ -143,17 +142,13 @@ class PlanExecuteAgent(ReactAgent):
                     })
 
                     if tool_call.name == "task_done":
-                        from midas_agent.stdlib.actions.task_done import DONE_SENTINEL
-                        if result.startswith(DONE_SENTINEL):
-                            logger.info("  Task done at iter %d", iterations)
-                            return AgentResult(
-                                output=result,
-                                iterations=iterations,
-                                termination_reason="done",
-                                action_history=action_history,
-                            )
-                        # First call — review prompt returned, continue loop
-                        logger.info("  Review gate triggered at iter %d", iterations)
+                        logger.info("  Task done at iter %d", iterations)
+                        return AgentResult(
+                            output=result,
+                            iterations=iterations,
+                            termination_reason="done",
+                            action_history=action_history,
+                        )
 
                 # Compaction check after processing all tool calls
                 if self.max_context_tokens and self.system_llm:

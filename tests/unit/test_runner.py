@@ -5,7 +5,7 @@ import tempfile
 
 import pytest
 
-from midas_agent.inference.runner import run_inference, _build_market_info
+from midas_agent.inference.runner import run_inference
 from midas_agent.inference.schemas import GraphEmergenceArtifact
 from midas_agent.workspace.graph_emergence.agent import Agent, Soul
 from midas_agent.workspace.graph_emergence.skill import Skill
@@ -154,8 +154,12 @@ class TestRunInference:
 
 
 @pytest.mark.unit
-class TestBuildMarketInfo:
+class TestEnvironmentContextInRunner:
+    """Tests that the runner builds EnvironmentContext correctly from artifacts."""
+
     def test_includes_agent_info(self):
+        from midas_agent.context.environment import EnvironmentContext
+
         artifact = GraphEmergenceArtifact(
             responsible_agent=_make_responsible_agent(),
             free_agents=[
@@ -168,13 +172,29 @@ class TestBuildMarketInfo:
             agent_bankruptcy_rates={"fa-1": 0.05},
             budget_hint=50000,
         )
-        info = _build_market_info(artifact)
+        # Reproduce the logic from the runner
+        agent_lines = []
+        for fa in artifact.free_agents:
+            skill_desc = fa.skill.description if fa.skill else "no skill"
+            price = artifact.agent_prices.get(fa.agent_id, 0)
+            bankruptcy_rate = artifact.agent_bankruptcy_rates.get(fa.agent_id, 0.0)
+            agent_lines.append(
+                f"{fa.agent_id}: {skill_desc} "
+                f"(price={price}, bankruptcy_rate={bankruptcy_rate:.0%})"
+            )
+        env = EnvironmentContext(
+            cwd="/testbed", shell="bash", balance=50000,
+            available_agents=agent_lines,
+        )
+        info = env.serialize_to_xml()
         assert "fa-1" in info
         assert "debugging code" in info
         assert "price=1000" in info
         assert "5%" in info
 
     def test_handles_no_skill(self):
+        from midas_agent.context.environment import EnvironmentContext
+
         artifact = GraphEmergenceArtifact(
             responsible_agent=_make_responsible_agent(),
             free_agents=[
@@ -184,13 +204,28 @@ class TestBuildMarketInfo:
             agent_bankruptcy_rates={"fa-2": 0.0},
             budget_hint=10000,
         )
-        info = _build_market_info(artifact)
+        agent_lines = []
+        for fa in artifact.free_agents:
+            skill_desc = fa.skill.description if fa.skill else "no skill"
+            price = artifact.agent_prices.get(fa.agent_id, 0)
+            bankruptcy_rate = artifact.agent_bankruptcy_rates.get(fa.agent_id, 0.0)
+            agent_lines.append(
+                f"{fa.agent_id}: {skill_desc} "
+                f"(price={price}, bankruptcy_rate={bankruptcy_rate:.0%})"
+            )
+        env = EnvironmentContext(
+            cwd="/testbed", shell="bash", balance=10000,
+            available_agents=agent_lines,
+        )
+        info = env.serialize_to_xml()
         assert "no skill" in info
 
     def test_empty_agents(self):
-        artifact = GraphEmergenceArtifact(
-            responsible_agent=_make_responsible_agent(),
-            budget_hint=10000,
+        from midas_agent.context.environment import EnvironmentContext
+
+        env = EnvironmentContext(
+            cwd="/testbed", shell="bash", balance=10000,
         )
-        info = _build_market_info(artifact)
-        assert "Available agents:" in info
+        info = env.serialize_to_xml()
+        assert "environment_context" in info
+        assert "available_agents" not in info  # no agents = no section

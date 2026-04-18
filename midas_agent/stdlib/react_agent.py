@@ -245,7 +245,7 @@ class ReactAgent:
                     })
 
                     # Check for task_done or report_result action
-                    if tool_call.name == "report_result":
+                    if tool_call.name in ("task_done", "report_result"):
                         logger.info("  Task done.")
                         return AgentResult(
                             output=result,
@@ -253,17 +253,6 @@ class ReactAgent:
                             termination_reason="done",
                             action_history=action_history,
                         )
-                    if tool_call.name == "task_done":
-                        from midas_agent.stdlib.actions.task_done import DONE_SENTINEL
-                        if result.startswith(DONE_SENTINEL):
-                            logger.info("  Task done.")
-                            return AgentResult(
-                                output=result,
-                                iterations=iterations,
-                                termination_reason="done",
-                                action_history=action_history,
-                            )
-                        # Review gate — continue loop
 
                 # Check if agent is stuck
                 stuck_msg = ReactAgent._check_stuck(action_history)

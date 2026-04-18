@@ -40,14 +40,13 @@ class TestReadFileAction:
         result = action.execute(path="/tmp/test.txt")
         assert isinstance(result, str)
 
-    def test_description_includes_cwd(self):
-        """When cwd is set, tool description must include the actual working
-        directory so the LLM knows where files are."""
+    def test_description_does_not_include_cwd(self):
+        """cwd is now provided via EnvironmentContext, not the tool
+        description. ReadFileAction description should be clean."""
         action = ReadFileAction(cwd="/tmp/workspace/repo")
         desc = action.description
-        assert "/tmp/workspace/repo" in desc
-        assert "must be an absolute path" not in desc.lower(), \
-            "Description should not mandate absolute paths — this causes LLM hallucination"
+        assert "/tmp/workspace/repo" not in desc
+        assert "Reads a file" in desc
 
     def test_description_without_cwd_no_path_leak(self):
         """When cwd is None, description must not contain a spurious working
@@ -55,8 +54,7 @@ class TestReadFileAction:
         action = ReadFileAction(cwd=None)
         desc = action.description
         assert "None" not in desc
-        # Still should not mandate absolute paths
-        assert "must be an absolute path" not in desc.lower()
+        assert "Reads a file" in desc
 
     def test_file_not_found_without_cwd_no_crash(self):
         """When cwd is not set, File not found still works without crash."""

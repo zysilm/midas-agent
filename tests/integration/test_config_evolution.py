@@ -694,9 +694,9 @@ class TestReadFilePathHallucination:
         assert "File not found" not in result
         assert "is_separable" in result
 
-    def test_tool_description_sent_to_llm_includes_cwd(self):
-        """The tool description exposed to the LLM via _build_tools() must
-        contain the actual cwd so the model knows where files are."""
+    def test_tool_description_does_not_include_cwd(self):
+        """The cwd is now provided via EnvironmentContext, not the tool
+        description. ReadFileAction description should be clean."""
         cwd = "/var/midas/ws-0/astropy__astropy-12907"
         action = ReadFileAction(cwd=cwd)
 
@@ -711,7 +711,6 @@ class TestReadFilePathHallucination:
         assert len(read_file_tool) == 1
 
         desc = read_file_tool[0]["function"]["description"]
-        assert cwd in desc, \
-            f"Tool description must include cwd '{cwd}': {desc}"
-        assert "must be an absolute path" not in desc.lower(), \
-            f"Tool description should not mandate absolute paths: {desc}"
+        assert cwd not in desc, \
+            f"Tool description should not include cwd (now in env context): {desc}"
+        assert "Reads a file" in desc

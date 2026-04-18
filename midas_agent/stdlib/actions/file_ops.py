@@ -17,8 +17,7 @@ class ReadFileAction(Action):
 
     @property
     def description(self) -> str:
-        cwd_note = f"The current working directory is: {self.cwd}\n" if self.cwd else ""
-        return f"Reads a file and returns contents with line numbers.\n{cwd_note}"
+        return "Reads a file and returns contents with line numbers."
 
     @property
     def parameters(self) -> dict:

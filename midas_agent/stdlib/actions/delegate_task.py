@@ -33,6 +33,8 @@ class DelegateTaskAction(Action):
         calling_agent_id: str | None = None,
         call_llm: Callable | None = None,
         parent_actions: list | None = None,
+        parent_system_prompt: str | None = None,
+        env_context_xml: str | None = None,
     ) -> None:
         self._find_candidates = find_candidates
         self._spawn_callback = spawn_callback
@@ -40,6 +42,8 @@ class DelegateTaskAction(Action):
         self._calling_agent_id = calling_agent_id
         self._call_llm = call_llm
         self._parent_actions = parent_actions or []
+        self._parent_system_prompt = parent_system_prompt
+        self._env_context_xml = env_context_xml
 
     @property
     def name(self) -> str:
@@ -214,7 +218,10 @@ class DelegateTaskAction(Action):
                     def on_report(text, _reported=reported):
                         _reported["result"] = text
 
-                    system_prompt = SUB_AGENT_INSTRUCTIONS + "\nYour assigned role: " + role + "\n"
+                    if self._parent_system_prompt is not None:
+                        system_prompt = self._parent_system_prompt
+                    else:
+                        system_prompt = SUB_AGENT_INSTRUCTIONS + "\nYour assigned role: " + role + "\n"
 
                     sub_agent = ReactAgent(
                         system_prompt=system_prompt,
@@ -224,9 +231,11 @@ class DelegateTaskAction(Action):
                             report_callback=on_report,
                         ),
                         call_llm=self._call_llm,
-                        max_iterations=9999,
+                        max_iterations=20,
                     )
                     sub_context = f"[Spawned agent {aid}] {task_description}"
+                    if self._env_context_xml:
+                        sub_context = self._env_context_xml + "\n\n" + sub_context
                     result = sub_agent.run(context=sub_context)
                     output = reported.get("result") or result.output or "Sub-agent completed with no output."
                     lines.append(f"Spawned agent {aid} result: {output}")
@@ -270,9 +279,12 @@ class DelegateTaskAction(Action):
                         report_callback=on_report,
                     ),
                     call_llm=self._call_llm,
-                    max_iterations=9999,
+                    max_iterations=20,
                 )
-                result = sub_agent.run(context=task_description)
+                hire_context = task_description
+                if self._env_context_xml:
+                    hire_context = self._env_context_xml + "\n\n" + hire_context
+                result = sub_agent.run(context=hire_context)
                 output = reported.get("result") or result.output or "Agent completed with no output."
                 return output
             else:

@@ -4,8 +4,10 @@ from __future__ import annotations
 import os
 import subprocess
 import uuid
+from datetime import date
 from typing import Callable
 
+from midas_agent.context.environment import EnvironmentContext
 from midas_agent.llm.types import LLMRequest, LLMResponse
 from midas_agent.stdlib.actions.bash import BashAction
 from midas_agent.stdlib.actions.delegate_task import DelegateTaskAction
@@ -77,6 +79,23 @@ class GraphEmergenceWorkspace(Workspace):
             ov.get("find_files", FindFilesAction(cwd=cwd)),
         ]
 
+        # Build environment context (replaces _build_market_info)
+        agent_lines = []
+        agents = self._free_agent_manager.free_agents
+        for agent_id, agent in agents.items():
+            price = self._free_agent_manager._pricing_engine.calculate_price(agent)
+            skill_name = agent.skill.name if agent.skill else "general"
+            agent_lines.append(f"{agent_id}: {skill_name} (price={price})")
+
+        env_context = EnvironmentContext(
+            cwd="/testbed",
+            shell="bash",
+            current_date=str(date.today()),
+            balance=self._budget,
+            available_agents=agent_lines,
+        )
+        env_context_xml = env_context.serialize_to_xml()
+
         delegate = DelegateTaskAction(
             find_candidates=lambda desc: self._free_agent_manager.match(desc),
             spawn_callback=lambda desc: self._spawn_agent(desc),
@@ -84,25 +103,18 @@ class GraphEmergenceWorkspace(Workspace):
             calling_agent_id=self._responsible_agent.agent_id,
             call_llm=self._call_llm,
             parent_actions=base_actions,
+            parent_system_prompt=self._responsible_agent.soul.system_prompt,
+            env_context_xml=env_context_xml,
         )
 
-        # Wire up get_diff for the review gate: use the active bash action
-        # (Docker or local) to run git diff inside the working environment.
-        bash_action = ov.get("bash", base_actions[0])
-        def _get_diff() -> str:
-            bash_action.execute(command="git add -A")
-            diff = bash_action.execute(command="git diff --cached")
-            bash_action.execute(command="git reset")
-            return diff
-
-        actions = list(self._extra_actions) + base_actions + [UpdatePlanAction(), TaskDoneAction(get_diff=_get_diff), delegate]
+        actions = list(self._extra_actions) + base_actions + [UpdatePlanAction(), TaskDoneAction(), delegate]
 
         agent = PlanExecuteAgent(
             system_prompt=self._responsible_agent.soul.system_prompt,
             actions=actions,
             call_llm=self._call_llm,
             max_iterations=9999,
-            market_info_provider=lambda: self._build_market_info(),
+            env_context_xml=env_context_xml,
             balance_provider=balance_provider,
             max_tool_output_chars=self._max_tool_output_chars,
             action_log=self._action_log,
@@ -110,24 +122,6 @@ class GraphEmergenceWorkspace(Workspace):
         from midas_agent.prompts import TASK_PROMPT_TEMPLATE
         context = TASK_PROMPT_TEMPLATE.format(issue_description=issue.description)
         self._last_result = agent.run(context=context)
-
-    def _build_market_info(self) -> str:
-        """Build market info for the planning phase. Data only — guidance
-        is in the system prompt."""
-        lines = [f"Your balance: {self._budget}"]
-
-        agents = self._free_agent_manager.free_agents
-        if agents:
-            lines.append("")
-            lines.append("Available agents:")
-            for agent_id, agent in agents.items():
-                price = self._free_agent_manager._pricing_engine.calculate_price(agent)
-                skill_name = agent.skill.name if agent.skill else "general"
-                protected = getattr(agent, "protected_by", None)
-                label = " [幼年agent]" if protected == self._responsible_agent.agent_id else ""
-                lines.append(f"  - {agent_id}: {skill_name} (price={price}){label}")
-
-        return "\n".join(lines)
 
     def _spawn_agent(self, task_description: str) -> Agent:
         """Spawn a new free agent with protection relationship."""
