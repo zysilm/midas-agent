@@ -11,6 +11,8 @@ TEST_GATE_CONTINUE = "Tests failed"
 @dataclass
 class TestResult:
     """Result of running SWE-bench tests."""
+    __test__ = False  # prevent pytest from collecting this dataclass
+
     all_passed: bool
     passed: int
     total: int
