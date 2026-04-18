@@ -119,11 +119,7 @@ class WorkspaceManager:
     ) -> Workspace:
         from midas_agent.stdlib.action import ActionRegistry
         from midas_agent.stdlib.actions.bash import BashAction
-        from midas_agent.stdlib.actions.file_ops import (
-            EditFileAction,
-            ReadFileAction,
-            WriteFileAction,
-        )
+        from midas_agent.stdlib.actions.str_replace_editor import StrReplaceEditorAction
         from midas_agent.stdlib.actions.search import FindFilesAction, SearchCodeAction
         from midas_agent.stdlib.actions.task_done import TaskDoneAction
         from midas_agent.workspace.config_evolution.config_schema import (
@@ -142,9 +138,7 @@ class WorkspaceManager:
 
         all_actions = [
             BashAction(),
-            ReadFileAction(),
-            EditFileAction(),
-            WriteFileAction(),
+            StrReplaceEditorAction(),
             SearchCodeAction(),
             FindFilesAction(),
             TaskDoneAction(),

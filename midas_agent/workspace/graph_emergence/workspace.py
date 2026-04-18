@@ -11,11 +11,7 @@ from midas_agent.context.environment import EnvironmentContext
 from midas_agent.llm.types import LLMRequest, LLMResponse
 from midas_agent.stdlib.actions.bash import BashAction
 from midas_agent.stdlib.actions.delegate_task import DelegateTaskAction
-from midas_agent.stdlib.actions.file_ops import (
-    EditFileAction,
-    ReadFileAction,
-    WriteFileAction,
-)
+from midas_agent.stdlib.actions.str_replace_editor import StrReplaceEditorAction
 from midas_agent.stdlib.actions.search import FindFilesAction, SearchCodeAction
 from midas_agent.stdlib.actions.task_done import TaskDoneAction
 from midas_agent.stdlib.actions.update_plan import UpdatePlanAction
@@ -71,7 +67,7 @@ class GraphEmergenceWorkspace(Workspace):
         self.calls.append(("execute", {"issue_id": issue.issue_id}))
 
         # Build responsible agent's action set:
-        # bash, read_file, edit_file, write_file, search_code, find_files,
+        # bash, str_replace_editor, search_code, find_files,
         # task_done, delegate_task
         cwd = self.work_dir or None
         balance_provider = lambda: self._budget
@@ -79,9 +75,7 @@ class GraphEmergenceWorkspace(Workspace):
         ov = self._action_overrides
         base_actions = [
             ov.get("bash", BashAction(cwd=cwd)),
-            ov.get("read_file", ReadFileAction(cwd=cwd)),
-            ov.get("edit_file", EditFileAction(cwd=cwd)),
-            ov.get("write_file", WriteFileAction(cwd=cwd)),
+            ov.get("str_replace_editor", StrReplaceEditorAction(cwd=cwd)),
             ov.get("search_code", SearchCodeAction(cwd=cwd)),
             ov.get("find_files", FindFilesAction(cwd=cwd)),
         ]

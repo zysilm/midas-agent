@@ -13,7 +13,7 @@ from unittest.mock import MagicMock
 from midas_agent.llm.types import LLMRequest, LLMResponse, TokenUsage, ToolCall
 from midas_agent.stdlib.actions.bash import BashAction
 from midas_agent.stdlib.actions.delegate_task import DelegateTaskAction
-from midas_agent.stdlib.actions.file_ops import ReadFileAction, EditFileAction, WriteFileAction
+from midas_agent.stdlib.actions.str_replace_editor import StrReplaceEditorAction
 from midas_agent.stdlib.actions.report_result import ReportResultAction
 from midas_agent.stdlib.actions.search import SearchCodeAction, FindFilesAction
 from midas_agent.stdlib.actions.task_done import TaskDoneAction
@@ -49,9 +49,7 @@ def _make_parent_actions():
     """The full action set a responsible agent would have."""
     return [
         BashAction(),
-        ReadFileAction(),
-        EditFileAction(),
-        WriteFileAction(),
+        StrReplaceEditorAction(),
         SearchCodeAction(),
         FindFilesAction(),
         TaskDoneAction(),
@@ -70,8 +68,8 @@ class TestProtectedAgentTools:
     but NOT use_agent. Design doc 04-04 §3.2."""
 
     def test_protected_worker_has_basic_actions(self):
-        """Protected worker sub-agent must have all 6 basic actions:
-        bash, read_file, edit_file, write_file, search_code, find_files."""
+        """Protected worker sub-agent must have basic actions:
+        bash, str_replace_editor, search_code, find_files."""
         training_log = _make_log()
         pricing_engine = PricingEngine(training_log=training_log)
         free_agent_manager = FreeAgentManager(pricing_engine=pricing_engine)
@@ -107,8 +105,7 @@ class TestProtectedAgentTools:
             spawn=["worker: analyzer"],
         )
 
-        basic_tools = {"bash", "read_file", "edit_file", "write_file",
-                       "search_code", "find_files"}
+        basic_tools = {"bash", "str_replace_editor", "search_code", "find_files"}
         for tool in basic_tools:
             assert tool in captured_tools, (
                 f"Protected sub-agent must have '{tool}' tool. "
@@ -304,8 +301,8 @@ class TestSubAgentUsesTools:
             f"Sub-agent's search findings should be in result. Got: {result}"
         )
 
-    def test_sub_agent_calls_read_file(self, tmp_path):
-        """Sub-agent can call read_file on actual files."""
+    def test_sub_agent_calls_view_file(self, tmp_path):
+        """Sub-agent can call str_replace_editor view on actual files."""
         (tmp_path / "target.py").write_text("def bug():\n    return None\n")
 
         training_log = _make_log()
@@ -332,8 +329,8 @@ class TestSubAgentUsesTools:
                 return _make_response(
                     tool_calls=[ToolCall(
                         id="rf1",
-                        name="read_file",
-                        arguments={"path": str(tmp_path / "target.py")},
+                        name="str_replace_editor",
+                        arguments={"command": "view", "path": str(tmp_path / "target.py")},
                     )],
                 )
             else:
@@ -342,9 +339,7 @@ class TestSubAgentUsesTools:
         # Parent actions with cwd set
         parent_actions = [
             BashAction(cwd=str(tmp_path)),
-            ReadFileAction(cwd=str(tmp_path)),
-            EditFileAction(cwd=str(tmp_path)),
-            WriteFileAction(cwd=str(tmp_path)),
+            StrReplaceEditorAction(cwd=str(tmp_path)),
             SearchCodeAction(cwd=str(tmp_path)),
             FindFilesAction(cwd=str(tmp_path)),
             TaskDoneAction(),

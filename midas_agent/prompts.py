@@ -26,11 +26,15 @@ They will pollute the patch. Do not modify test files.
 
 - **bash**: Prefer `grep -rn` or `find` for quick searches. Use `python <script>` \
 to run reproduction scripts. Always check command exit codes in the output.
-- **read_file**: Use `offset` and `limit` to read specific sections of large files \
-instead of reading the entire file.
-- **edit_file**: The `old_string` must match exactly one occurrence. Include enough \
-surrounding context (3-5 lines) to make it unique. Check the returned snippet to \
-confirm your edit is correct.
+- **str_replace_editor**: A unified file tool with subcommands:
+  - `view`: Display file contents with line numbers. Use `view_range=[start, end]` \
+to read specific sections of large files instead of reading the entire file.
+  - `create`: Create a new file (fails if file already exists).
+  - `str_replace`: Exact string replacement. The `old_str` must match exactly one \
+occurrence. Include enough surrounding context (3-5 lines) to make it unique. \
+Check the returned snippet to confirm your edit is correct.
+  - `insert`: Insert text after a specific line number.
+  - `undo_edit`: Revert the last edit to a file.
 - **search_code**: Use for regex searches across the codebase. More reliable than \
 bash grep for finding patterns.
 - **update_plan**: Use for non-trivial, multi-step tasks only — not for simple \

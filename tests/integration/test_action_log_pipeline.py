@@ -267,7 +267,7 @@ class TestActionLogInRealPipeline:
             LLMResponse(
                 content=None,
                 tool_calls=[
-                    ToolCall(id="c2", name="edit_file", arguments={"path": "foo.py", "old_string": "bug", "new_string": "fix"})
+                    ToolCall(id="c2", name="str_replace_editor", arguments={"command": "str_replace", "path": "/testbed/foo.py", "old_str": "bug", "new_str": "fix"})
                 ],
                 usage=TokenUsage(150, 50),
             ),
@@ -446,7 +446,7 @@ class TestActionLogInRealPipeline:
             LLMResponse(
                 content=None,
                 tool_calls=[
-                    ToolCall(id="c2", name="edit_file", arguments={"path": "foo.py", "old_string": "bug", "new_string": "fix"})
+                    ToolCall(id="c2", name="str_replace_editor", arguments={"command": "str_replace", "path": "/testbed/foo.py", "old_str": "bug", "new_str": "fix"})
                 ],
                 usage=TokenUsage(150, 50),
             ),

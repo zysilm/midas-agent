@@ -278,9 +278,7 @@ def run_training(
                         from midas_agent.docker.container_manager import ContainerManager
                         from midas_agent.stdlib.actions.docker_actions import (
                             DockerBashAction,
-                            DockerReadFileAction,
-                            DockerEditFileAction,
-                            DockerWriteFileAction,
+                            DockerStrReplaceEditorAction,
                             DockerSearchCodeAction,
                             DockerFindFilesAction,
                         )
@@ -297,9 +295,7 @@ def run_training(
                         if hasattr(ws, "_action_overrides"):
                             ws._action_overrides = {
                                 "bash": DockerBashAction(container_id=cid),
-                                "read_file": DockerReadFileAction(container_id=cid),
-                                "edit_file": DockerEditFileAction(container_id=cid),
-                                "write_file": DockerWriteFileAction(container_id=cid),
+                                "str_replace_editor": DockerStrReplaceEditorAction(container_id=cid),
                                 "search_code": DockerSearchCodeAction(container_id=cid),
                                 "find_files": DockerFindFilesAction(container_id=cid),
                             }

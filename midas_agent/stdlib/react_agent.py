@@ -39,7 +39,13 @@ class ReactAgent:
         from collections import Counter
         edit_counts: Counter[str] = Counter()
         for rec in action_history:
-            if rec.action_name == "edit_file":
+            is_edit = False
+            if rec.action_name == "str_replace_editor":
+                cmd = rec.arguments.get("command", "")
+                is_edit = cmd in ("str_replace", "insert", "create")
+            elif rec.action_name == "edit_file":
+                is_edit = True
+            if is_edit:
                 path = rec.arguments.get("path", "")
                 if path:
                     edit_counts[path] += 1

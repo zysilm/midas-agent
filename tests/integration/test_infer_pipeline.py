@@ -367,14 +367,12 @@ class TestActionInjection:
         assert "bash" in names
 
     def test_infer_local_has_file_actions(self, tmp_path):
-        """Local inference provides read/edit/write file actions."""
+        """Local inference provides the unified str_replace_editor action."""
         from midas_agent.cli import build_action_set
 
         actions = build_action_set(cwd=str(tmp_path), env="local")
         names = {a.name for a in actions}
-        assert "read_file" in names
-        assert "edit_file" in names
-        assert "write_file" in names
+        assert "str_replace_editor" in names
 
     def test_infer_local_has_search_actions(self, tmp_path):
         """Local inference provides search_code and find_files."""
@@ -397,15 +395,15 @@ class TestActionInjection:
         result = bash.execute(command="cat marker.txt")
         assert "hello" in result
 
-    def test_agent_can_read_file_in_cwd(self, tmp_path):
-        """ReadFileAction reads files relative to cwd."""
+    def test_agent_can_view_file_in_cwd(self, tmp_path):
+        """StrReplaceEditorAction views files relative to cwd."""
         from midas_agent.cli import build_action_set
 
         (tmp_path / "test.py").write_text("print('hi')")
 
         actions = build_action_set(cwd=str(tmp_path), env="local")
-        read = next(a for a in actions if a.name == "read_file")
-        result = read.execute(path="test.py")
+        editor = next(a for a in actions if a.name == "str_replace_editor")
+        result = editor.execute(command="view", path=str(tmp_path / "test.py"))
         assert "print" in result
 
     def test_full_infer_agent_has_all_tools(self, tmp_path):
@@ -426,8 +424,7 @@ class TestActionInjection:
         tools = agent._build_tools()
         tool_names = {t["function"]["name"] for t in tools}
         assert "bash" in tool_names
-        assert "read_file" in tool_names
-        assert "edit_file" in tool_names
+        assert "str_replace_editor" in tool_names
         assert "task_done" in tool_names
 
 

@@ -13,9 +13,7 @@ from unittest.mock import MagicMock
 from midas_agent.llm.types import LLMRequest, LLMResponse, TokenUsage, ToolCall
 from midas_agent.stdlib.actions.bash import BashAction
 from midas_agent.stdlib.actions.delegate_task import DelegateTaskAction
-from midas_agent.stdlib.actions.file_ops import (
-    ReadFileAction, EditFileAction, WriteFileAction,
-)
+from midas_agent.stdlib.actions.str_replace_editor import StrReplaceEditorAction
 from midas_agent.stdlib.actions.search import SearchCodeAction, FindFilesAction
 from midas_agent.stdlib.actions.task_done import TaskDoneAction
 from midas_agent.workspace.graph_emergence.agent import Agent, Soul
@@ -47,9 +45,7 @@ def _log():
 def _parent_actions():
     return [
         BashAction(),
-        ReadFileAction(),
-        EditFileAction(),
-        WriteFileAction(),
+        StrReplaceEditorAction(),
         SearchCodeAction(),
         FindFilesAction(),
         TaskDoneAction(),
@@ -92,8 +88,8 @@ def _make_delegate(**kwargs):
 class TestRoleSystem:
     """Explorer role = read-only. Worker role = full tools."""
 
-    def test_explorer_has_search_read_bash(self):
-        """Explorer sub-agent has search_code, find_files, read_file, bash."""
+    def test_explorer_has_search_editor_bash(self):
+        """Explorer sub-agent has search_code, find_files, str_replace_editor, bash."""
         captured_tools = []
         def llm(req):
             if req.tools:
@@ -106,31 +102,10 @@ class TestRoleSystem:
             spawn=["explorer: code searcher"],
         )
 
-        for tool in ["search_code", "find_files", "read_file", "bash"]:
+        for tool in ["search_code", "find_files", "str_replace_editor", "bash"]:
             assert tool in captured_tools, (
                 f"Explorer must have '{tool}'. Got: {captured_tools}"
             )
-
-    def test_explorer_no_edit_write(self):
-        """Explorer sub-agent does NOT have edit_file or write_file."""
-        captured_tools = []
-        def llm(req):
-            if req.tools:
-                captured_tools.extend([t["function"]["name"] for t in req.tools])
-            return _r(content="Done.")
-
-        action, _, _ = _make_delegate(call_llm=llm)
-        action.execute(
-            task_description="Analyze the code",
-            spawn=["explorer: analyzer"],
-        )
-
-        assert "edit_file" not in captured_tools, (
-            "Explorer must NOT have edit_file"
-        )
-        assert "write_file" not in captured_tools, (
-            "Explorer must NOT have write_file"
-        )
 
     def test_explorer_no_use_agent(self):
         """Explorer cannot spawn sub-agents."""
@@ -148,8 +123,8 @@ class TestRoleSystem:
 
         assert "use_agent" not in captured_tools
 
-    def test_worker_has_edit_write(self):
-        """Worker sub-agent has edit_file and write_file."""
+    def test_worker_has_str_replace_editor(self):
+        """Worker sub-agent has str_replace_editor."""
         captured_tools = []
         def llm(req):
             if req.tools:
@@ -162,13 +137,12 @@ class TestRoleSystem:
             spawn=["worker: bug fixer"],
         )
 
-        assert "edit_file" in captured_tools, (
-            f"Worker must have edit_file. Got: {captured_tools}"
+        assert "str_replace_editor" in captured_tools, (
+            f"Worker must have str_replace_editor. Got: {captured_tools}"
         )
-        assert "write_file" in captured_tools
 
-    def test_worker_has_search_read(self):
-        """Worker also has search/read tools."""
+    def test_worker_has_search_bash(self):
+        """Worker also has search and bash tools."""
         captured_tools = []
         def llm(req):
             if req.tools:
@@ -181,7 +155,7 @@ class TestRoleSystem:
             spawn=["worker: fixer"],
         )
 
-        for tool in ["search_code", "read_file", "bash"]:
+        for tool in ["search_code", "str_replace_editor", "bash"]:
             assert tool in captured_tools
 
     def test_default_role_is_explorer(self):
@@ -198,11 +172,8 @@ class TestRoleSystem:
             spawn=["code analyzer"],  # no "explorer:" or "worker:" prefix
         )
 
-        # Default = explorer = no edit_file
-        assert "edit_file" not in captured_tools, (
-            "Default role should be explorer (no edit). Got: {captured_tools}"
-        )
-        assert "read_file" in captured_tools
+        # Default = explorer; both explorer and worker have str_replace_editor
+        assert "str_replace_editor" in captured_tools
 
 
 # ===========================================================================

@@ -62,11 +62,9 @@ def build_action_set(cwd: str, env: str = "local") -> list[Action]:
     if env == "docker":
         from midas_agent.stdlib.actions.docker_actions import (
             DockerBashAction,
-            DockerEditFileAction,
             DockerFindFilesAction,
-            DockerReadFileAction,
             DockerSearchCodeAction,
-            DockerWriteFileAction,
+            DockerStrReplaceEditorAction,
         )
         from midas_agent.stdlib.actions.task_done import TaskDoneAction
         from midas_agent.stdlib.actions.update_plan import UpdatePlanAction
@@ -76,9 +74,7 @@ def build_action_set(cwd: str, env: str = "local") -> list[Action]:
         container_id = ""
         return [
             DockerBashAction(container_id=container_id, cwd=cwd),
-            DockerReadFileAction(container_id=container_id, cwd=cwd),
-            DockerEditFileAction(container_id=container_id, cwd=cwd),
-            DockerWriteFileAction(container_id=container_id, cwd=cwd),
+            DockerStrReplaceEditorAction(container_id=container_id, cwd=cwd),
             DockerSearchCodeAction(container_id=container_id, cwd=cwd),
             DockerFindFilesAction(container_id=container_id, cwd=cwd),
             UpdatePlanAction(),
@@ -87,20 +83,14 @@ def build_action_set(cwd: str, env: str = "local") -> list[Action]:
 
     # Default: local environment
     from midas_agent.stdlib.actions.bash import BashAction
-    from midas_agent.stdlib.actions.file_ops import (
-        EditFileAction,
-        ReadFileAction,
-        WriteFileAction,
-    )
+    from midas_agent.stdlib.actions.str_replace_editor import StrReplaceEditorAction
     from midas_agent.stdlib.actions.search import FindFilesAction, SearchCodeAction
     from midas_agent.stdlib.actions.task_done import TaskDoneAction
     from midas_agent.stdlib.actions.update_plan import UpdatePlanAction
 
     return [
         BashAction(cwd=cwd),
-        ReadFileAction(cwd=cwd),
-        EditFileAction(cwd=cwd),
-        WriteFileAction(cwd=cwd),
+        StrReplaceEditorAction(cwd=cwd),
         SearchCodeAction(cwd=cwd),
         FindFilesAction(cwd=cwd),
         UpdatePlanAction(),
