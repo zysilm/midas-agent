@@ -62,11 +62,9 @@ def build_action_set(cwd: str, env: str = "local") -> list[Action]:
     if env == "docker":
         from midas_agent.stdlib.actions.docker_actions import (
             DockerBashAction,
-            DockerEditFileAction,
             DockerFindFilesAction,
-            DockerReadFileAction,
             DockerSearchCodeAction,
-            DockerWriteFileAction,
+            DockerStrReplaceEditorAction,
         )
         from midas_agent.stdlib.actions.task_done import TaskDoneAction
         from midas_agent.stdlib.actions.update_plan import UpdatePlanAction
@@ -76,9 +74,7 @@ def build_action_set(cwd: str, env: str = "local") -> list[Action]:
         container_id = ""
         return [
             DockerBashAction(container_id=container_id, cwd=cwd),
-            DockerReadFileAction(container_id=container_id, cwd=cwd),
-            DockerEditFileAction(container_id=container_id, cwd=cwd),
-            DockerWriteFileAction(container_id=container_id, cwd=cwd),
+            DockerStrReplaceEditorAction(container_id=container_id, cwd=cwd),
             DockerSearchCodeAction(container_id=container_id, cwd=cwd),
             DockerFindFilesAction(container_id=container_id, cwd=cwd),
             UpdatePlanAction(),

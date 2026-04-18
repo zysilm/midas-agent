@@ -7,11 +7,12 @@ so the LLM sees the exact same tool interface.
 Usage:
     container_id = container_manager.start(image, ...)
     bash = DockerBashAction(container_id=cid)
-    read = DockerReadFileAction(container_id=cid)
+    editor = DockerStrReplaceEditorAction(container_id=cid)
     ...
 """
 from __future__ import annotations
 
+import ast
 import json
 import subprocess
 import shlex
@@ -21,6 +22,11 @@ from midas_agent.stdlib.actions.file_ops import (
     EditFileAction,
     ReadFileAction,
     WriteFileAction,
+)
+from midas_agent.stdlib.actions.str_replace_editor import (
+    SNIPPET_LINES,
+    StrReplaceEditorAction,
+    _make_output,
 )
 from midas_agent.stdlib.actions.search import FindFilesAction, SearchCodeAction
 
@@ -302,6 +308,277 @@ class DockerWriteFileAction(WriteFileAction):
             return f"Written {len(content)} bytes to {path}"
         except Exception as e:
             return f"Error writing file: {e}"
+
+
+# ---------------------------------------------------------------------------
+# DockerStrReplaceEditorAction
+# ---------------------------------------------------------------------------
+
+
+class DockerStrReplaceEditorAction(StrReplaceEditorAction):
+    """StrReplaceEditorAction that routes all file operations through Docker."""
+
+    def __init__(
+        self,
+        container_id: str,
+        cwd: str | None = None,
+        workdir: str = "/testbed",
+    ) -> None:
+        super().__init__(cwd=cwd)
+        self._container_id = container_id
+        self._workdir = workdir
+
+    def _resolve(self, path: str) -> str:
+        """Resolve path inside the container."""
+        if path.startswith("/"):
+            return path
+        return f"{self._workdir}/{path}"
+
+    def _docker_read(self, path: str) -> str:
+        """Read a file from inside the container."""
+        result = _docker_exec(
+            self._container_id,
+            f"cat {shlex.quote(path)}",
+            workdir=self._workdir,
+            conda_env=None,
+            timeout=30,
+        )
+        if result.returncode != 0:
+            stderr = result.stderr.strip()
+            if "No such file" in stderr:
+                raise FileNotFoundError(path)
+            raise RuntimeError(stderr)
+        return result.stdout
+
+    def _docker_write(self, path: str, content: str) -> None:
+        """Write content to a file inside the container."""
+        escaped = content.replace("\\", "\\\\").replace("'", "'\\''")
+        write_cmd = f"printf '%s' '{escaped}' > {shlex.quote(path)}"
+        result = _docker_exec(
+            self._container_id, write_cmd,
+            workdir=self._workdir,
+            conda_env=None,
+            timeout=30,
+        )
+        if result.returncode != 0:
+            raise RuntimeError(result.stderr)
+
+    def _docker_exists(self, path: str) -> bool:
+        """Check if a path exists inside the container."""
+        result = _docker_exec(
+            self._container_id,
+            f"test -e {shlex.quote(path)} && echo yes || echo no",
+            workdir=self._workdir,
+            conda_env=None,
+            timeout=10,
+        )
+        return result.stdout.strip() == "yes"
+
+    def _docker_isdir(self, path: str) -> bool:
+        """Check if a path is a directory inside the container."""
+        result = _docker_exec(
+            self._container_id,
+            f"test -d {shlex.quote(path)} && echo yes || echo no",
+            workdir=self._workdir,
+            conda_env=None,
+            timeout=10,
+        )
+        return result.stdout.strip() == "yes"
+
+    def _view(self, path: str, view_range: list[int] | None) -> str:
+        if not self._docker_exists(path):
+            return f"Error: the path {path} does not exist. Please provide a valid path."
+
+        if self._docker_isdir(path):
+            if view_range:
+                return "Error: the `view_range` parameter is not allowed when `path` points to a directory."
+            # List directory inside container
+            result = _docker_exec(
+                self._container_id,
+                f"find {shlex.quote(path)} -maxdepth 2 -not -path '*/.*' | sort",
+                workdir=self._workdir,
+                conda_env=None,
+                timeout=30,
+            )
+            listing = result.stdout.strip()
+            return (
+                f"Here's the files and directories up to 2 levels deep in {path}, "
+                f"excluding hidden items:\n{listing}\n"
+            )
+
+        try:
+            content = self._docker_read(path)
+        except Exception as e:
+            return f"Error reading file: {e}"
+
+        if view_range:
+            if len(view_range) != 2 or not all(isinstance(i, int) for i in view_range):
+                return "Error: invalid `view_range`. It should be a list of two integers."
+            file_lines = content.split("\n")
+            n_lines = len(file_lines)
+            init_line, final_line = view_range
+            if init_line < 1 or init_line > n_lines:
+                return (
+                    f"Error: invalid `view_range`: {view_range}. "
+                    f"First element `{init_line}` should be within [1, {n_lines}]."
+                )
+            if final_line != -1 and final_line > n_lines:
+                return (
+                    f"Error: invalid `view_range`: {view_range}. "
+                    f"Second element `{final_line}` should be <= {n_lines}."
+                )
+            if final_line != -1 and final_line < init_line:
+                return (
+                    f"Error: invalid `view_range`: {view_range}. "
+                    f"Second element `{final_line}` should be >= first element `{init_line}`."
+                )
+            if final_line == -1:
+                final_line = n_lines
+            content = "\n".join(file_lines[init_line - 1 : final_line])
+            return _make_output(content, str(path), init_line=init_line)
+
+        return _make_output(content, str(path), init_line=1)
+
+    def _create(self, path: str, file_text: str) -> str:
+        if self._docker_exists(path):
+            return f"Error: file already exists at: {path}. Cannot overwrite files using command `create`."
+
+        # Check parent directory exists
+        parent = "/".join(path.rsplit("/", 1)[:-1])
+        if parent and not self._docker_exists(parent):
+            return f"Error: the parent directory {parent} does not exist. Please create it first."
+
+        try:
+            self._docker_write(path, file_text)
+        except Exception as e:
+            return f"Error writing file: {e}"
+
+        self._undo_history.setdefault(path, []).append(file_text)
+        return f"File created successfully at: {path}"
+
+    def _str_replace(self, path: str, old_str: str, new_str: str | None) -> str:
+        try:
+            content = self._docker_read(path)
+        except FileNotFoundError:
+            return f"Error: file not found: {path}"
+        except Exception as e:
+            return f"Error reading file: {e}"
+
+        if new_str is None:
+            new_str = ""
+
+        count = content.count(old_str)
+        if count == 0:
+            return (
+                f"No replacement was performed, old_str `{old_str}` did not appear "
+                f"verbatim in {path}."
+            )
+        if count > 1:
+            return (
+                f"No replacement was performed. Multiple occurrences of old_str "
+                f"`{old_str}` in {path} (found {count} occurrences). "
+                f"Please ensure it is unique."
+            )
+
+        new_content = content.replace(old_str, new_str, 1)
+
+        if path.endswith(".py"):
+            try:
+                ast.parse(new_content)
+            except SyntaxError as e:
+                return (
+                    "<SYNTAX_ERROR>\n"
+                    "Your edit introduced a syntax error. "
+                    "Edit rejected; file unchanged:\n"
+                    f"{e}\n"
+                    "</SYNTAX_ERROR>"
+                )
+
+        self._undo_history.setdefault(path, []).append(content)
+
+        try:
+            self._docker_write(path, new_content)
+        except Exception as e:
+            return f"Error writing file: {e}"
+
+        replacement_line = content.split(old_str)[0].count("\n")
+        start_line = max(1, replacement_line - SNIPPET_LINES + 1)
+        end_line = min(
+            replacement_line + SNIPPET_LINES + new_str.count("\n") + 1,
+            len(new_content.splitlines()),
+        )
+        snippet = "\n".join(new_content.splitlines()[start_line - 1 : end_line])
+
+        success_msg = f"The file {path} has been edited. "
+        success_msg += _make_output(snippet, f"a snippet of {path}", start_line)
+        success_msg += "Review the changes and make sure they are as expected. Edit the file again if necessary."
+        return success_msg
+
+    def _insert(self, path: str, insert_line: int, new_str: str) -> str:
+        try:
+            content = self._docker_read(path)
+        except FileNotFoundError:
+            return f"Error: file not found: {path}"
+        except Exception as e:
+            return f"Error reading file: {e}"
+
+        file_lines = content.split("\n")
+        n_lines = len(file_lines)
+
+        if insert_line < 0 or insert_line > n_lines:
+            return (
+                f"Error: invalid `insert_line` parameter: {insert_line}. "
+                f"It should be within [0, {n_lines}]."
+            )
+
+        new_str_lines = new_str.split("\n")
+        new_file_lines = (
+            file_lines[:insert_line] + new_str_lines + file_lines[insert_line:]
+        )
+        new_content = "\n".join(new_file_lines)
+
+        self._undo_history.setdefault(path, []).append(content)
+
+        try:
+            self._docker_write(path, new_content)
+        except Exception as e:
+            return f"Error writing file: {e}"
+
+        snippet_lines = (
+            file_lines[max(0, insert_line - SNIPPET_LINES) : insert_line]
+            + new_str_lines
+            + file_lines[insert_line : insert_line + SNIPPET_LINES]
+        )
+        snippet = "\n".join(snippet_lines)
+
+        success_msg = f"The file {path} has been edited. "
+        success_msg += _make_output(
+            snippet,
+            "a snippet of the edited file",
+            max(1, insert_line - SNIPPET_LINES + 1),
+        )
+        success_msg += (
+            "Review the changes and make sure they are as expected "
+            "(correct indentation, no duplicate lines, etc). "
+            "Edit the file again if necessary."
+        )
+        return success_msg
+
+    def _undo_edit(self, path: str) -> str:
+        history = self._undo_history.get(path, [])
+        if not history:
+            return f"Error: no edit history found for {path}."
+
+        old_text = history.pop()
+        try:
+            self._docker_write(path, old_text)
+        except Exception as e:
+            return f"Error reverting file: {e}"
+
+        return (
+            f"Last edit to {path} undone successfully. "
+            + _make_output(old_text, str(path))
+        )
 
 
 # ---------------------------------------------------------------------------

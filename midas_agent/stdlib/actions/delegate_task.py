@@ -122,8 +122,8 @@ class DelegateTaskAction(Action):
         """Build action set for a sub-agent based on protection status and role.
 
         When *role* is provided (from spawn path role parsing):
-        - explorer: bash, read_file, search_code, find_files, report_result
-        - worker: bash, read_file, edit_file, write_file, search_code, find_files, report_result
+        - explorer: bash, str_replace_editor, search_code, find_files, report_result
+        - worker: bash, str_replace_editor, search_code, find_files, report_result
 
         When *role* is None (backward compat / hire path):
         - No role-based filtering; only protection-based filtering applies.
@@ -237,6 +237,7 @@ class DelegateTaskAction(Action):
                     if self._env_context_xml:
                         sub_context = self._env_context_xml + "\n\n" + sub_context
                     result = sub_agent.run(context=sub_context)
+                    agent._last_action_history = result.action_history
                     output = reported.get("result") or result.output or "Sub-agent completed with no output."
                     lines.append(f"Spawned agent {aid} result: {output}")
                 else:
@@ -285,6 +286,7 @@ class DelegateTaskAction(Action):
                 if self._env_context_xml:
                     hire_context = self._env_context_xml + "\n\n" + hire_context
                 result = sub_agent.run(context=hire_context)
+                target._last_action_history = result.action_history
                 output = reported.get("result") or result.output or "Agent completed with no output."
                 return output
             else:

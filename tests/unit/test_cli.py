@@ -142,7 +142,7 @@ class TestBuildActionSet:
         names = {a.name for a in actions}
         # Docker actions use the same names but are Docker implementations
         assert "bash" in names
-        assert "read_file" in names  # Docker mode still uses old file ops
+        assert "str_replace_editor" in names
 
     def test_actions_have_correct_cwd(self, tmp_path):
         """All file-aware actions receive the correct cwd."""
