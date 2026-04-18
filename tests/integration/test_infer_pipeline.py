@@ -340,12 +340,12 @@ class TestLLMConfigInPipeline:
         config_dir = tmp_path / ".midas"
         config_dir.mkdir()
         (config_dir / "config.yaml").write_text(
-            "model: claude-sonnet-4-20250514\napi_key: sk-ant-test\napi_base: https://api.anthropic.com\n"
+            "model: claude-sonnet-4-20250514\napi_key: test-fake-key-not-real\napi_base: https://api.anthropic.com\n"
         )
 
         config = resolve_llm_config(cwd=str(tmp_path))
         assert config.model == "claude-sonnet-4-20250514"
-        assert config.api_key == "sk-ant-test"
+        assert config.api_key == "test-fake-key-not-real"
         assert config.api_base == "https://api.anthropic.com"
 
 
