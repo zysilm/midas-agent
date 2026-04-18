@@ -150,18 +150,13 @@ class PlanExecuteAgent(ReactAgent):
                     })
 
                     if tool_call.name == "task_done":
-                        from midas_agent.evaluation.test_runner import TEST_GATE_CONTINUE
-                        if result.startswith(TEST_GATE_CONTINUE):
-                            # Test gate: tests failed — let agent continue
-                            logger.info("  Test gate: tests failed at iter %d", iterations)
-                        else:
-                            logger.info("  Task done at iter %d", iterations)
-                            return AgentResult(
-                                output=result,
-                                iterations=iterations,
-                                termination_reason="done",
-                                action_history=action_history,
-                            )
+                        logger.info("  Task done at iter %d", iterations)
+                        return AgentResult(
+                            output=result,
+                            iterations=iterations,
+                            termination_reason="done",
+                            action_history=action_history,
+                        )
 
                 # Compaction check after processing all tool calls
                 if self.max_context_tokens and self.system_llm:

@@ -252,18 +252,13 @@ class ReactAgent:
 
                     # Check for task_done or report_result action
                     if tool_call.name in ("task_done", "report_result"):
-                        from midas_agent.evaluation.test_runner import TEST_GATE_CONTINUE
-                        if result.startswith(TEST_GATE_CONTINUE):
-                            # Test gate: tests failed — let agent continue
-                            logger.info("  Test gate: tests failed at iter %d", iterations)
-                        else:
-                            logger.info("  Task done.")
-                            return AgentResult(
-                                output=result,
-                                iterations=iterations,
-                                termination_reason="done",
-                                action_history=action_history,
-                            )
+                        logger.info("  Task done.")
+                        return AgentResult(
+                            output=result,
+                            iterations=iterations,
+                            termination_reason="done",
+                            action_history=action_history,
+                        )
 
                 # Check if agent is stuck
                 stuck_msg = ReactAgent._check_stuck(action_history)

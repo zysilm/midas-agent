@@ -117,20 +117,7 @@ class GraphEmergenceWorkspace(Workspace):
             env_context_xml=env_context_xml,
         )
 
-        # Build test runner for the test gate (training mode).
-        # If the issue has fail_to_pass tests, create a SWEBenchTestRunner
-        # so task_done runs them before confirming submission.
-        test_runner = None
-        if issue.fail_to_pass or issue.pass_to_pass:
-            from midas_agent.evaluation.test_runner import SWEBenchTestRunner
-            bash_action = base_actions[0]  # BashAction with io= already set
-            test_runner = SWEBenchTestRunner(
-                bash_action=bash_action,
-                fail_to_pass=issue.fail_to_pass,
-                pass_to_pass=issue.pass_to_pass,
-            )
-
-        actions = list(self._extra_actions) + base_actions + [UpdatePlanAction(), TaskDoneAction(test_runner=test_runner), delegate]
+        actions = list(self._extra_actions) + base_actions + [UpdatePlanAction(), TaskDoneAction(), delegate]
 
         agent = PlanExecuteAgent(
             system_prompt=self._responsible_agent.soul.system_prompt,
