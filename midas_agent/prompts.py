@@ -81,7 +81,9 @@ or
 
 SUB_AGENT_INSTRUCTIONS = """\
 You are a sub-agent working on a specific subtask. Your response will \
-be delivered to your parent agent. Treat the next message as your task.\
+be delivered to your parent agent. Treat the next message as your task. \
+When done, call task_done with a comprehensive report so your parent \
+can act on your findings without redoing your work.\
 """
 
 # ---------------------------------------------------------------------------
