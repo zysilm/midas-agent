@@ -110,32 +110,23 @@ class HiringManager:
     def _ask_system_llm(self, task: str, roster: str) -> dict:
         """Make ONE SystemLLM call and parse the JSON response."""
         prompt = (
-            "You are the hiring manager. A parent agent needs to delegate a sub-task.\n\n"
-            f"## Task\n{task}\n\n"
-            f"## Available agents\n{roster}\n\n"
-            "## Glossary\n"
-            "- **Price**: token cost to hire this agent.\n"
-            "- **Bankruptcy rate**: fraction of workspaces this agent served that were "
-            "later evicted for poor performance. 0.00 means never associated with failure.\n\n"
-            "## Instructions\n"
-            "Pick the best option:\n"
-            '1. Hire an existing agent — ONLY if its skill is relevant to the task. '
-            'Do not hire an agent just because it exists.\n'
-            '2. Spawn a new specialist — when no existing agent\'s skill matches the task, '
-            'or when the task requires a different expertise.\n\n'
-            "Choose explorer for read-only tasks (search, investigate, run scripts). "
-            "Choose worker for tasks that require editing files.\n\n"
-            'Reply as JSON only:\n'
-            '{"action": "hire", "agent_id": "<id>"}\n'
-            'or\n'
-            '{"action": "spawn", "role": "explorer"}\n'
-            'or\n'
-            '{"action": "spawn", "role": "worker"}'
+            f"Task: {task}\n\n"
+            f"Agents:\n{roster}\n\n"
+            "Pick one:\n"
+            'A) Hire agent if its skill matches the task. Reply: {"action":"hire","agent_id":"<id>"}\n'
+            'B) Spawn new explorer (read-only: search, run scripts, investigate). Reply: {"action":"spawn","role":"explorer"}\n'
+            'C) Spawn new worker (can edit files). Reply: {"action":"spawn","role":"worker"}\n\n'
+            "Examples:\n"
+            '- Task: "Find where function X is defined" + Agent: code_explorer → hire (skill matches)\n'
+            '- Task: "Run test_foo.py" + Agent: code_explorer → spawn explorer (running tests is not code exploration)\n'
+            '- Task: "Edit line 50 of foo.py" + Agent: code_explorer → spawn worker (editing needs worker, not explorer)\n\n'
+            "JSON only:"
         )
 
         request = LLMRequest(
             messages=[{"role": "user", "content": prompt}],
             model="default",
+            max_tokens=500,
         )
 
         try:
