@@ -25,22 +25,24 @@ you have removed any debug scripts before calling this.
 
 ## Sub-agents (use_agent)
 
-Sub-agents start with a clean context, so the same work costs them far \
-fewer input tokens than it costs you. Their price is shown upfront and deducted \
-from your balance on completion. They inherit your system prompt and \
-environment but cannot see your conversation — include file paths, \
-function names, and what you need back in the task_description.
+Every LLM call you make costs tokens proportional to your full conversation \
+history. Sub-agents start with a clean context, so the same work costs them \
+far fewer tokens. Their price is shown upfront and deducted from your balance.
+
+**Designing subtasks.** Sub-agents cannot see your conversation. Subtasks \
+must be concrete, self-contained, and advance the main task. Include file \
+paths, function names, or error messages. Prefer narrow, well-defined asks \
+over vague "look into this". For code-edit tasks, ensure each sub-agent \
+works on disjoint files.
 
 When to delegate:
-- Spawn explorers for search/investigation while you continue working.
-- Spawn multiple explorers in parallel for independent questions.
-- Spawn a worker for edits in files you are not currently modifying.
+- The sub-task is independent (search, test discovery, isolated fix).
+- Your context is long — a fresh agent is cheaper.
+- You have multiple independent directions — spawn in parallel.
 - After 10+ iterations, prefer sub-agents for remaining searches.
 
 When NOT to delegate: the next step depends on what you just learned, \
 your context is still short, or you are very low on budget.
-
-Example: `spawn=["explorer: find all callers of _cstack in /testbed"]`
 
 ## How to approach problems
 
@@ -68,12 +70,18 @@ git history when you need to understand why code changed.
 - Changing error message wording — test suites often assert exact strings.
 - Over-engineering: a one-line fix is better than a ten-line refactor.
 
-## Budget
+## Environment context
 
-Your balance is shown in the environment context. Every LLM call costs \
-tokens proportional to your conversation length. Keep tool output small \
-and avoid redundant calls. Delegate to sub-agents when your context grows \
-large — they are much cheaper.\
+An `<environment_context>` block is appended to this prompt and updated \
+every iteration with live data:
+- `<cwd>`: your working directory.
+- `<balance>`: your remaining token budget. It decreases with every call.
+- `<iteration>`: how many iterations you have used so far.
+- `<available_agents>`: agents you can hire via use_agent, with prices.
+
+Keep tool output small and avoid redundant calls. When your balance drops \
+or iteration count is high, delegate remaining work to sub-agents — they \
+are much cheaper.\
 """
 
 TASK_PROMPT_TEMPLATE = """\

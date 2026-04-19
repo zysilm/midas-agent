@@ -16,20 +16,6 @@ if TYPE_CHECKING:
     from midas_agent.runtime.io_backend import IOBackend
 
 SNIPPET_LINES: int = 4
-TRUNCATED_MESSAGE: str = (
-    "<response clipped><NOTE>To save on context only part of this file has been "
-    "shown to you. You should retry this tool after you have searched inside the "
-    "file with `grep -n` in order to find the line numbers of what you are "
-    "looking for.</NOTE>"
-)
-MAX_RESPONSE_LEN: int = 16000
-
-
-def _maybe_truncate(content: str, max_len: int = MAX_RESPONSE_LEN) -> str:
-    if len(content) <= max_len:
-        return content
-    return content[:max_len] + TRUNCATED_MESSAGE
-
 
 def _make_output(
     file_content: str,
@@ -37,7 +23,6 @@ def _make_output(
     init_line: int = 1,
 ) -> str:
     """Generate cat -n style output."""
-    file_content = _maybe_truncate(file_content)
     file_content = file_content.expandtabs()
     numbered = "\n".join(
         f"{i + init_line:6}\t{line}"

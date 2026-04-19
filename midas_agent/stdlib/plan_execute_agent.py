@@ -25,6 +25,8 @@ class PlanExecuteAgent(ReactAgent):
         max_context_tokens: int | None = None,
         system_llm: Callable[[LLMRequest], LLMResponse] | None = None,
         action_log: "IO | None" = None,
+        env_cwd: str | None = None,
+        env_agents: list[str] | None = None,
     ) -> None:
         super().__init__(
             system_prompt, actions, call_llm, max_iterations,
@@ -34,25 +36,34 @@ class PlanExecuteAgent(ReactAgent):
             system_llm=system_llm,
             action_log=action_log,
         )
-        self.env_context_xml = env_context_xml
+        self.env_context_xml = env_context_xml  # kept for backward compat
+        self._env_cwd = env_cwd
+        self._env_agents = env_agents or []
+
+    def _build_system_prompt(self, iteration: int) -> str:
+        """Build system prompt with live environment context."""
+        from midas_agent.context.environment import EnvironmentContext
+
+        balance = self.balance_provider() if self.balance_provider else None
+        env = EnvironmentContext(
+            cwd=self._env_cwd,
+            shell="bash",
+            balance=balance,
+            iteration=iteration,
+            available_agents=self._env_agents,
+        )
+        return self.system_prompt + "\n\n" + env.serialize_to_xml()
 
     def run(self, context: str | None = None) -> AgentResult:
         from midas_agent.scheduler.resource_meter import BudgetExhaustedError
 
         iterations = 0
         action_history: list[ActionRecord] = []
-        messages: list[dict] = [{"role": "system", "content": self.system_prompt}]
+        messages: list[dict] = [{"role": "system", "content": self._build_system_prompt(0)}]
 
-        # Build user message with budget info and task context
-        user_parts: list[str] = []
-
-        if self.env_context_xml is not None:
-            user_parts.append(self.env_context_xml)
-
+        # User message is just the task (env context is now in system prompt)
         if context is not None:
-            user_parts.append(f"\nTask:\n{context}")
-
-        messages.append({"role": "user", "content": "\n".join(user_parts)})
+            messages.append({"role": "user", "content": context})
 
         # ReAct loop (tools available from the start)
         plan_received = False
@@ -65,6 +76,9 @@ class PlanExecuteAgent(ReactAgent):
                     termination_reason="max_iterations",
                     action_history=action_history,
                 )
+
+            # Update system prompt with current balance and iteration
+            messages[0]["content"] = self._build_system_prompt(iterations)
 
             try:
                 request = LLMRequest(messages=messages, model="default", tools=self._build_tools())

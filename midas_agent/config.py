@@ -30,7 +30,7 @@ class MidasConfig:
     # "docker" = bash commands run inside SWE-bench Docker container
     execution_env: str = "local"
     # Context management
-    max_tool_output_chars: int = 100000
+    max_tool_output_chars: int = 16000
     max_context_tokens: int = 32000
     temperature: float = 0.0
     top_p: float = 1.0

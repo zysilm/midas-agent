@@ -13,8 +13,8 @@ class EnvironmentContext:
     """
     cwd: str | None = None
     shell: str | None = None
-    current_date: str | None = None
     balance: int | None = None
+    iteration: int | None = None
     available_agents: list[str] = field(default_factory=list)
 
     def serialize_to_xml(self) -> str:
@@ -23,10 +23,10 @@ class EnvironmentContext:
             lines.append(f"  <cwd>{self.cwd}</cwd>")
         if self.shell is not None:
             lines.append(f"  <shell>{self.shell}</shell>")
-        if self.current_date is not None:
-            lines.append(f"  <current_date>{self.current_date}</current_date>")
         if self.balance is not None:
             lines.append(f"  <balance>{self.balance}</balance>")
+        if self.iteration is not None:
+            lines.append(f"  <iteration>{self.iteration}</iteration>")
         if self.available_agents:
             lines.append("  <available_agents>")
             for agent_line in self.available_agents:

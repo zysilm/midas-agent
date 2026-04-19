@@ -4,10 +4,8 @@ from __future__ import annotations
 import os
 import subprocess
 import uuid
-from datetime import date
 from typing import Callable
 
-from midas_agent.context.environment import EnvironmentContext
 from midas_agent.llm.types import LLMRequest, LLMResponse
 from midas_agent.stdlib.actions.bash import BashAction
 from midas_agent.stdlib.actions.delegate_task import DelegateTaskAction
@@ -97,24 +95,10 @@ class GraphEmergenceWorkspace(Workspace):
                 f"{agent_id}: {skill_name} (price={price}, bankruptcy={br:.2f})"
             )
 
-        env_context = EnvironmentContext(
-            cwd="/testbed",
-            shell="bash",
-            current_date=str(date.today()),
-            balance=self._budget,
-            available_agents=agent_lines,
-        )
-        env_context_xml = env_context.serialize_to_xml()
-
         delegate = DelegateTaskAction(
-            find_candidates=lambda desc: self._free_agent_manager.match(desc),
-            spawn_callback=lambda desc: self._spawn_agent(desc),
-            balance_provider=balance_provider,
-            calling_agent_id=self._responsible_agent.agent_id,
             call_llm=self._call_llm,
             parent_actions=base_actions,
             parent_system_prompt=self._responsible_agent.soul.system_prompt,
-            env_context_xml=env_context_xml,
         )
 
         actions = list(self._extra_actions) + base_actions + [UpdatePlanAction(), TaskDoneAction(), delegate]
@@ -124,10 +108,11 @@ class GraphEmergenceWorkspace(Workspace):
             actions=actions,
             call_llm=self._call_llm,
             max_iterations=9999,
-            env_context_xml=env_context_xml,
             balance_provider=balance_provider,
             max_tool_output_chars=self._max_tool_output_chars,
             action_log=self._action_log,
+            env_cwd="/testbed",
+            env_agents=agent_lines,
         )
         from midas_agent.prompts import TASK_PROMPT_TEMPLATE
         context = TASK_PROMPT_TEMPLATE.format(issue_description=issue.description)
