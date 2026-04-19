@@ -165,10 +165,12 @@ class HiringManager:
         skill_name = agent.skill.name if agent.skill else "none"
         logger.info("  HiringManager: hiring %s (skill=%s, protected_by=%s)", agent_id, skill_name, agent.protected_by)
 
-        # Build system prompt with skill content
+        # Build system prompt with skill content + sub-agent instructions
+        from midas_agent.prompts import SUB_AGENT_INSTRUCTIONS
         system_prompt = agent.soul.system_prompt
         if agent.skill is not None:
             system_prompt += "\n\n## Skill Instructions\n" + agent.skill.content
+        system_prompt += "\n\n" + SUB_AGENT_INSTRUCTIONS
 
         reported: dict = {}
         def on_report(text, _reported=reported):
@@ -241,8 +243,11 @@ class HiringManager:
         def on_report(text, _reported=reported):
             _reported["result"] = text
 
+        from midas_agent.prompts import SUB_AGENT_INSTRUCTIONS
+        sub_prompt = agent.soul.system_prompt + "\n\n" + SUB_AGENT_INSTRUCTIONS
+
         sub_agent = ReactAgent(
-            system_prompt=agent.soul.system_prompt,
+            system_prompt=sub_prompt,
             actions=self._build_sub_agent_actions(
                 agent.protected_by,
                 role=role,
