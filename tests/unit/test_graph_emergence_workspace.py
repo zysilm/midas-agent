@@ -12,6 +12,7 @@ from midas_agent.workspace.graph_emergence.skill import Skill, SkillReviewer
 from midas_agent.scheduler.serial_queue import SerialQueue
 from midas_agent.scheduler.training_log import HookSet, TrainingLog
 from midas_agent.stdlib.plan_execute_agent import PlanExecuteAgent
+from midas_agent.scheduler.hiring_manager import HiringManager
 from midas_agent.stdlib.actions.delegate_task import DelegateTaskAction
 from midas_agent.types import Issue
 from midas_agent.llm.types import LLMRequest, LLMResponse, TokenUsage
@@ -183,9 +184,8 @@ class TestGraphEmergenceWorkspace:
         assert captured_kwargs["balance_provider"] is not None
         assert callable(captured_kwargs["balance_provider"])
 
-    def test_execute_passes_balance_provider_to_delegate_task(self):
-        """execute() must pass a balance_provider to DelegateTaskAction so the
-        agent sees its balance when comparing candidate prices."""
+    def test_execute_passes_hiring_manager_to_delegate_task(self):
+        """execute() must pass a HiringManager to DelegateTaskAction."""
         ws = self._make_workspace()
         ws.receive_budget(6000)
 
@@ -205,10 +205,9 @@ class TestGraphEmergenceWorkspace:
         with patch.object(DelegateTaskAction, "__init__", spy_init):
             ws.execute(issue)
 
-        assert "balance_provider" in captured_kwargs, \
-            "DelegateTaskAction must receive balance_provider"
-        assert captured_kwargs["balance_provider"] is not None
-        assert callable(captured_kwargs["balance_provider"])
+        assert "hiring_manager" in captured_kwargs, \
+            "DelegateTaskAction must receive hiring_manager"
+        assert isinstance(captured_kwargs["hiring_manager"], HiringManager)
 
     def test_balance_provider_returns_current_budget(self):
         """The balance_provider callback must return the workspace's current budget."""
@@ -262,9 +261,9 @@ class TestGraphEmergenceWorkspace:
         assert isinstance(captured_xml, str)
         assert "environment_context" in captured_xml
 
-    def test_execute_passes_calling_agent_id_to_delegate(self):
-        """execute() must pass calling_agent_id (the responsible agent's id)
-        to DelegateTaskAction so it can label 幼年agent in candidate output."""
+    def test_execute_hiring_manager_has_correct_config(self):
+        """execute() must create a HiringManager with the responsible agent's
+        system_llm and parent_system_prompt."""
         ws = self._make_workspace()
 
         issue = Issue(
@@ -283,9 +282,10 @@ class TestGraphEmergenceWorkspace:
         with patch.object(DelegateTaskAction, "__init__", spy_init):
             ws.execute(issue)
 
-        assert "calling_agent_id" in captured_kwargs, \
-            "DelegateTaskAction must receive calling_agent_id"
-        assert captured_kwargs["calling_agent_id"] == "lead-1"
+        assert "hiring_manager" in captured_kwargs, \
+            "DelegateTaskAction must receive hiring_manager"
+        hm = captured_kwargs["hiring_manager"]
+        assert hm._parent_system_prompt == "You are the workspace lead."
 
     def test_env_context_lists_agents_with_prices(self):
         """env_context_xml must list available free agents with their

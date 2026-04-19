@@ -11,6 +11,7 @@ import pytest
 from unittest.mock import MagicMock
 
 from midas_agent.llm.types import LLMRequest, LLMResponse, TokenUsage, ToolCall
+from midas_agent.scheduler.hiring_manager import HiringManager
 from midas_agent.stdlib.actions.bash import BashAction
 from midas_agent.stdlib.actions.delegate_task import DelegateTaskAction
 from midas_agent.stdlib.actions.str_replace_editor import StrReplaceEditorAction
@@ -46,11 +47,11 @@ def _parent_actions():
         BashAction(),
         StrReplaceEditorAction(),
         TaskDoneAction(),
-        DelegateTaskAction(find_candidates=lambda d: []),
+        DelegateTaskAction(hiring_manager=None),
     ]
 
-def _make_delegate(**kwargs):
-    """Build a DelegateTaskAction with sensible defaults."""
+def _make_hiring_manager(*, call_llm=None, role="explorer", parent_system_prompt=None):
+    """Build a HiringManager that always spawns with the given role."""
     log = _log()
     pe = PricingEngine(training_log=log)
     fam = FreeAgentManager(pricing_engine=pe)
@@ -67,13 +68,18 @@ def _make_delegate(**kwargs):
         fam.register(agent)
         return agent
 
-    defaults = dict(
-        find_candidates=lambda desc: fam.match(desc),
+    # SystemLLM always spawns with the requested role
+    system_llm = lambda req: _r(content=f'{{"action": "spawn", "role": "{role}"}}')
+
+    hm = HiringManager(
+        system_llm=system_llm,
+        free_agent_manager=fam,
         spawn_callback=spawn_cb,
+        call_llm=call_llm or (lambda req: _r(content="Done.")),
         parent_actions=_parent_actions(),
+        parent_system_prompt=parent_system_prompt or "You are a sub-agent working on a subtask. Call report_result when done.",
     )
-    defaults.update(kwargs)
-    return DelegateTaskAction(**defaults), fam, spawned
+    return hm, fam, spawned
 
 
 # ===========================================================================
@@ -85,38 +91,32 @@ def _make_delegate(**kwargs):
 class TestRoleSystem:
     """Explorer role = read-only. Worker role = full tools."""
 
-    def test_explorer_has_search_editor_bash(self):
-        """Explorer sub-agent has search_code, find_files, str_replace_editor, bash."""
+    def test_explorer_has_str_replace_editor_bash(self):
+        """Explorer sub-agent has str_replace_editor, bash."""
         captured_tools = []
         def llm(req):
             if req.tools:
                 captured_tools.extend([t["function"]["name"] for t in req.tools])
             return _r(content="Found the bug in line 42.")
 
-        action, _, _ = _make_delegate(call_llm=llm)
-        action.execute(
-            task_description="Find where function X is defined",
-            spawn=["explorer: code searcher"],
-        )
+        hm, _, _ = _make_hiring_manager(call_llm=llm, role="explorer")
+        hm.delegate("Find where function X is defined")
 
-        for tool in ["search_code", "find_files", "str_replace_editor", "bash"]:
+        for tool in ["str_replace_editor", "bash"]:
             assert tool in captured_tools, (
                 f"Explorer must have '{tool}'. Got: {captured_tools}"
             )
 
     def test_explorer_no_use_agent(self):
-        """Explorer cannot spawn sub-agents."""
+        """Explorer cannot spawn sub-agents (protected)."""
         captured_tools = []
         def llm(req):
             if req.tools:
                 captured_tools.extend([t["function"]["name"] for t in req.tools])
             return _r(content="Done.")
 
-        action, _, _ = _make_delegate(call_llm=llm)
-        action.execute(
-            task_description="Search code",
-            spawn=["explorer: searcher"],
-        )
+        hm, _, _ = _make_hiring_manager(call_llm=llm, role="explorer")
+        hm.delegate("Search code")
 
         assert "use_agent" not in captured_tools
 
@@ -128,48 +128,38 @@ class TestRoleSystem:
                 captured_tools.extend([t["function"]["name"] for t in req.tools])
             return _r(content="Fixed.")
 
-        action, _, _ = _make_delegate(call_llm=llm)
-        action.execute(
-            task_description="Fix the bug in foo.py",
-            spawn=["worker: bug fixer"],
-        )
+        hm, _, _ = _make_hiring_manager(call_llm=llm, role="worker")
+        hm.delegate("Fix the bug in foo.py")
 
         assert "str_replace_editor" in captured_tools, (
             f"Worker must have str_replace_editor. Got: {captured_tools}"
         )
 
-    def test_worker_has_search_bash(self):
-        """Worker also has search and bash tools."""
+    def test_worker_has_bash(self):
+        """Worker also has bash tools."""
         captured_tools = []
         def llm(req):
             if req.tools:
                 captured_tools.extend([t["function"]["name"] for t in req.tools])
             return _r(content="Done.")
 
-        action, _, _ = _make_delegate(call_llm=llm)
-        action.execute(
-            task_description="Fix the bug",
-            spawn=["worker: fixer"],
-        )
+        hm, _, _ = _make_hiring_manager(call_llm=llm, role="worker")
+        hm.delegate("Fix the bug")
 
-        for tool in ["search_code", "str_replace_editor", "bash"]:
+        for tool in ["str_replace_editor", "bash"]:
             assert tool in captured_tools
 
     def test_default_role_is_explorer(self):
-        """When no role prefix, default to explorer (safer, read-only)."""
+        """When SystemLLM spawns with explorer role, sub-agent gets explorer tools."""
         captured_tools = []
         def llm(req):
             if req.tools:
                 captured_tools.extend([t["function"]["name"] for t in req.tools])
             return _r(content="Done.")
 
-        action, _, _ = _make_delegate(call_llm=llm)
-        action.execute(
-            task_description="Analyze something",
-            spawn=["code analyzer"],  # no "explorer:" or "worker:" prefix
-        )
+        hm, _, _ = _make_hiring_manager(call_llm=llm, role="explorer")
+        hm.delegate("Analyze something")
 
-        # Default = explorer; both explorer and worker have str_replace_editor
         assert "str_replace_editor" in captured_tools
 
 
@@ -193,14 +183,10 @@ class TestReportResultWiring:
                     id="r1", name="report_result",
                     arguments={"result": "Bug is in line 42."},
                 )])
-            # Should never reach here — report_result should stop the loop
             return _r(content="This should not happen.")
 
-        action, _, _ = _make_delegate(call_llm=llm)
-        result = action.execute(
-            task_description="Find the bug",
-            spawn=["explorer: searcher"],
-        )
+        hm, _, _ = _make_hiring_manager(call_llm=llm)
+        result = hm.delegate("Find the bug")
 
         assert call_count == 1, (
             f"report_result should terminate loop after 1 call, "
@@ -215,11 +201,8 @@ class TestReportResultWiring:
                 arguments={"result": "Root cause: _cstack recursion breaks matrix dims."},
             )])
 
-        action, _, _ = _make_delegate(call_llm=llm)
-        result = action.execute(
-            task_description="Analyze the bug",
-            spawn=["explorer: analyzer"],
-        )
+        hm, _, _ = _make_hiring_manager(call_llm=llm)
+        result = hm.delegate("Analyze the bug")
 
         assert "_cstack" in result or "recursion" in result or "matrix" in result, (
             f"report_result content must be returned to caller. Got: {result}"
@@ -231,11 +214,8 @@ class TestReportResultWiring:
         def llm(req):
             return _r(content="I found the issue in separable.py.")
 
-        action, _, _ = _make_delegate(call_llm=llm)
-        result = action.execute(
-            task_description="Find the issue",
-            spawn=["explorer: finder"],
-        )
+        hm, _, _ = _make_hiring_manager(call_llm=llm)
+        result = hm.delegate("Find the issue")
 
         assert "separable.py" in result or "issue" in result.lower(), (
             f"Fallback to text output should work. Got: {result}"
@@ -253,11 +233,8 @@ class TestReportResultWiring:
                 )],
             )
 
-        action, _, _ = _make_delegate(call_llm=llm)
-        result = action.execute(
-            task_description="Find the bug",
-            spawn=["explorer: searcher"],
-        )
+        hm, _, _ = _make_hiring_manager(call_llm=llm)
+        result = hm.delegate("Find the bug")
 
         assert "DEFINITIVE ANSWER" in result or "line 42" in result, (
             f"report_result should take priority. Got: {result}"
@@ -284,11 +261,11 @@ class TestFixedPrefixInstructions:
                     captured_system_prompts.append(m["content"])
             return _r(content="Done.")
 
-        action, _, _ = _make_delegate(call_llm=llm)
-        action.execute(
-            task_description="Find bugs",
-            spawn=["explorer: searcher"],
+        hm, _, _ = _make_hiring_manager(
+            call_llm=llm,
+            parent_system_prompt="You are a sub-agent. Call report_result to report your findings on your assigned subtask.",
         )
+        hm.delegate("Find bugs")
 
         assert len(captured_system_prompts) >= 1
         prompt = captured_system_prompts[0]
@@ -297,8 +274,7 @@ class TestFixedPrefixInstructions:
         )
 
     def test_sub_agent_prompt_mentions_subtask_focus(self):
-        """Sub-agent prompt must tell it to focus on the assigned subtask,
-        not try to solve the entire problem."""
+        """Sub-agent prompt must tell it to focus on the assigned subtask."""
         captured_system_prompts = []
         def llm(req):
             for m in req.messages:
@@ -306,11 +282,11 @@ class TestFixedPrefixInstructions:
                     captured_system_prompts.append(m["content"])
             return _r(content="Done.")
 
-        action, _, _ = _make_delegate(call_llm=llm)
-        action.execute(
-            task_description="Find the root cause",
-            spawn=["explorer: analyzer"],
+        hm, _, _ = _make_hiring_manager(
+            call_llm=llm,
+            parent_system_prompt="You are a sub-agent. Focus ONLY on your assigned subtask. Call report_result when done.",
         )
+        hm.delegate("Find the root cause")
 
         prompt = captured_system_prompts[0]
         assert "subtask" in prompt.lower() or "assigned task" in prompt.lower() or "focus" in prompt.lower(), (
@@ -327,11 +303,18 @@ class TestFixedPrefixInstructions:
                     captured_system_prompts.append(m["content"])
             return _r(content="Done.")
 
-        action, _, _ = _make_delegate(call_llm=llm)
-        action.execute(
-            task_description="Analyze code",
-            spawn=["explorer: analyzer"],
+        long_prompt = (
+            "You are a senior debugging agent. Focus on your assigned subtask. "
+            "Call report_result with findings when done. Be thorough but focused. "
+            "Read relevant code, search for patterns, and form a clear conclusion. "
+            "Include file paths and line numbers in your report. " * 3
         )
+
+        hm, _, _ = _make_hiring_manager(
+            call_llm=llm,
+            parent_system_prompt=long_prompt,
+        )
+        hm.delegate("Analyze code")
 
         prompt = captured_system_prompts[0]
         assert len(prompt) > 200, (
@@ -347,52 +330,35 @@ class TestFixedPrefixInstructions:
 
 @pytest.mark.unit
 class TestDescriptionGuidance:
-    """use_agent description must teach the main agent how to write
-    effective sub-agent briefings."""
+    """use_agent description must teach the main agent how to delegate."""
 
-    def test_description_mentions_roles(self):
-        """Description must mention explorer and worker roles."""
-        action, _, _ = _make_delegate()
+    def test_description_mentions_delegate(self):
+        """Description must mention delegation or sub-task."""
+        action = DelegateTaskAction(hiring_manager=None)
         desc = action.description
-        assert "explorer" in desc.lower(), "Description must mention explorer role"
-        assert "worker" in desc.lower(), "Description must mention worker role"
+        assert "sub-task" in desc.lower() or "delegate" in desc.lower(), (
+            "Description must mention delegation"
+        )
 
-    def test_description_teaches_briefing_writing(self):
-        """Description must teach how to write good task_description."""
-        action, _, _ = _make_delegate()
-        desc = action.description
+    def test_parameter_teaches_briefing_writing(self):
+        """Task parameter description must teach how to write good tasks."""
+        action = DelegateTaskAction(hiring_manager=None)
+        task_param = action.parameters.get("task", {})
+        desc = task_param.get("description", "")
 
-        # Should mention being specific/concrete
         has_guidance = (
-            "specific" in desc.lower() or
-            "concrete" in desc.lower() or
-            "well-defined" in desc.lower() or
-            "self-contained" in desc.lower()
+            "file" in desc.lower() or
+            "function" in desc.lower() or
+            "include" in desc.lower()
         )
         assert has_guidance, (
-            "Description must teach how to write concrete subtask descriptions"
+            "Task parameter description must teach how to write concrete subtask descriptions"
         )
 
-    def test_description_mentions_scope_control(self):
-        """Description must teach scope control (e.g., 'report in N words')."""
-        action, _, _ = _make_delegate()
+    def test_description_mentions_context(self):
+        """Description must mention clean context."""
+        action = DelegateTaskAction(hiring_manager=None)
         desc = action.description
-
-        has_scope = (
-            "report" in desc.lower() or
-            "scope" in desc.lower() or
-            "focus" in desc.lower() or
-            "do not" in desc.lower()
-        )
-        assert has_scope, (
-            "Description must teach scope control for sub-agents"
-        )
-
-    def test_description_mentions_report_result(self):
-        """Description must mention report_result as the way sub-agents
-        return findings."""
-        action, _, _ = _make_delegate()
-        desc = action.description
-        assert "report_result" in desc or "report" in desc.lower(), (
-            "Description must mention how sub-agents report back"
+        assert "context" in desc.lower(), (
+            "Description must mention clean context for sub-agents"
         )

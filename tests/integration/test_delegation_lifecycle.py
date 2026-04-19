@@ -20,12 +20,15 @@ from unittest.mock import MagicMock
 import pytest
 
 from midas_agent.llm.types import LLMRequest, LLMResponse, TokenUsage, ToolCall
+from midas_agent.scheduler.hiring_manager import HiringManager
 from midas_agent.scheduler.serial_queue import SerialQueue
 from midas_agent.scheduler.storage import LogFilter
 from midas_agent.scheduler.training_log import HookSet, TrainingLog
 from midas_agent.stdlib.actions.delegate_task import DelegateTaskAction
 from midas_agent.stdlib.actions.report_result import ReportResultAction
 from midas_agent.stdlib.actions.task_done import TaskDoneAction
+from midas_agent.stdlib.actions.bash import BashAction
+from midas_agent.stdlib.actions.str_replace_editor import StrReplaceEditorAction
 from midas_agent.stdlib.plan_execute_agent import PlanExecuteAgent
 from midas_agent.stdlib.react_agent import AgentResult
 from midas_agent.types import Issue
@@ -77,6 +80,15 @@ def _make_free_agent(agent_id="free-1", skill=None):
     return _make_agent(agent_id=agent_id, agent_type="free", skill=skill)
 
 
+def _parent_actions():
+    return [
+        BashAction(),
+        StrReplaceEditorAction(),
+        TaskDoneAction(),
+        DelegateTaskAction(hiring_manager=None),
+    ]
+
+
 # ===========================================================================
 # 1. Spawn executes the task (not just registers)
 # ===========================================================================
@@ -107,40 +119,38 @@ class TestSpawnExecutesTask:
             free_agent_manager.register(agent)
             return agent
 
-        # Sub-agent LLM: search_code tool call, then report results
-        sub_call_index = {"i": 0}
         sub_responses = [
             _make_response(
                 content=None,
-                tool_calls=[ToolCall(id="sc1", name="task_done",
-                    arguments={"summary": "Found the bug in foo.py line 42: off-by-one error."})],
+                tool_calls=[ToolCall(id="sc1", name="report_result",
+                    arguments={"result": "Found the bug in foo.py line 42: off-by-one error."})],
             ),
         ]
+        sub_call_index = {"i": 0}
 
         def sub_agent_llm(request):
             idx = sub_call_index["i"]
             sub_call_index["i"] += 1
             return sub_responses[idx] if idx < len(sub_responses) else sub_responses[-1]
 
-        action = DelegateTaskAction(
-            find_candidates=lambda desc: free_agent_manager.match(desc),
+        system_llm = lambda req: _make_response(content='{"action": "spawn", "role": "explorer"}')
+
+        hm = HiringManager(
+            system_llm=system_llm,
+            free_agent_manager=free_agent_manager,
             spawn_callback=spawn_callback,
             call_llm=sub_agent_llm,
+            parent_actions=_parent_actions(),
+            parent_system_prompt="You are a coding agent.",
         )
 
-        result = action.execute(
-            task_description="Find the bug in foo.py",
-            spawn=["code analyzer"],
-        )
+        action = DelegateTaskAction(hiring_manager=hm)
 
-        # Result must contain actual findings, not just "Spawned agent xxx"
+        result = action.execute(task="Find the bug in foo.py")
+
         assert len(spawned_agents) == 1
-        assert "spawned-0" in result or "foo.py" in result.lower() or "bug" in result.lower(), (
+        assert "foo.py" in result.lower() or "bug" in result.lower() or "off-by-one" in result.lower(), (
             f"Spawn result should contain agent findings, got: {result}"
-        )
-        # Must NOT be just the registration message
-        assert result != f"Spawned agent spawned-0 for: code analyzer", (
-            "Spawn must execute the task, not just register"
         )
 
 
@@ -161,43 +171,45 @@ class TestHireExecutesTask:
         pricing_engine = PricingEngine(training_log=training_log)
         free_agent_manager = FreeAgentManager(pricing_engine=pricing_engine)
 
-        # Register an existing agent
         existing_agent = _make_free_agent(
             "expert-1",
             skill=Skill(name="debugging", description="Debug expert", content="debug"),
         )
         free_agent_manager.register(existing_agent)
 
-        # Sub-agent LLM: returns analysis via tool call
-        sub_call_index = {"i": 0}
         sub_responses = [
             _make_response(
                 content=None,
-                tool_calls=[ToolCall(id="sc1", name="task_done",
-                    arguments={"summary": "Analysis: the bug is in _cstack function, line 240."})],
+                tool_calls=[ToolCall(id="sc1", name="report_result",
+                    arguments={"result": "Analysis: the bug is in _cstack function, line 240."})],
             ),
         ]
+        sub_call_index = {"i": 0}
 
         def sub_agent_llm(request):
             idx = sub_call_index["i"]
             sub_call_index["i"] += 1
             return sub_responses[idx] if idx < len(sub_responses) else sub_responses[-1]
 
-        action = DelegateTaskAction(
-            find_candidates=lambda desc: free_agent_manager.match(desc),
+        system_llm = lambda req: _make_response(content='{"action": "hire", "agent_id": "expert-1"}')
+
+        hm = HiringManager(
+            system_llm=system_llm,
+            free_agent_manager=free_agent_manager,
+            spawn_callback=lambda d: None,
             call_llm=sub_agent_llm,
+            parent_actions=_parent_actions(),
+            parent_system_prompt="You are a coding agent.",
         )
 
-        result = action.execute(
-            task_description="Analyze the separability bug",
-            agent_id="expert-1",
-        )
+        action = DelegateTaskAction(hiring_manager=hm)
 
-        # Result must contain the agent's analysis, not a candidate list
+        result = action.execute(task="Analyze the separability bug")
+
         assert "candidate" not in result.lower(), (
             f"Hire should execute, not list candidates. Got: {result}"
         )
-        assert "expert-1" in result or "bug" in result.lower() or "analysis" in result.lower(), (
+        assert "bug" in result.lower() or "analysis" in result.lower() or "_cstack" in result, (
             f"Hire result should contain agent's findings. Got: {result}"
         )
 
@@ -207,14 +219,19 @@ class TestHireExecutesTask:
         pricing_engine = PricingEngine(training_log=training_log)
         free_agent_manager = FreeAgentManager(pricing_engine=pricing_engine)
 
-        action = DelegateTaskAction(
-            find_candidates=lambda desc: free_agent_manager.match(desc),
+        system_llm = lambda req: _make_response(content='{"action": "hire", "agent_id": "nonexistent-agent"}')
+
+        hm = HiringManager(
+            system_llm=system_llm,
+            free_agent_manager=free_agent_manager,
+            spawn_callback=lambda d: None,
+            call_llm=lambda r: _make_response(content="Done."),
+            parent_actions=_parent_actions(),
+            parent_system_prompt="test",
         )
 
-        result = action.execute(
-            task_description="do something",
-            agent_id="nonexistent-agent",
-        )
+        action = DelegateTaskAction(hiring_manager=hm)
+        result = action.execute(task="do something")
 
         assert "not found" in result.lower() or "error" in result.lower(), (
             f"Hiring nonexistent agent should error. Got: {result}"
@@ -228,21 +245,19 @@ class TestHireExecutesTask:
 
 @pytest.mark.integration
 class TestSubAgentCleanContext:
-    """Promise: 'Sub-agents start with a clean context window.'
-    The sub-agent's LLM calls must not include the parent's history."""
+    """Promise: 'Sub-agents start with a clean context window.'"""
 
     def test_sub_agent_context_does_not_contain_parent_history(self):
         """When a sub-agent executes, its first LLM call must have
-        a clean context — only system prompt + task description,
-        not the parent's accumulated tool results."""
+        a clean context — only system prompt + task description."""
         captured_sub_messages = []
 
         def capturing_sub_llm(request: LLMRequest) -> LLMResponse:
             captured_sub_messages.append(list(request.messages))
             return _make_response(
                 content=None,
-                tool_calls=[ToolCall(id="sc1", name="task_done",
-                    arguments={"summary": "Found the issue in line 42."})],
+                tool_calls=[ToolCall(id="sc1", name="report_result",
+                    arguments={"result": "Found the issue in line 42."})],
             )
 
         training_log, _, _ = _make_log()
@@ -250,6 +265,7 @@ class TestSubAgentCleanContext:
         free_agent_manager = FreeAgentManager(pricing_engine=pricing_engine)
 
         spawned = []
+
         def spawn_callback(desc):
             agent = Agent(
                 agent_id="sub-1", soul=Soul(system_prompt="Sub agent"),
@@ -259,18 +275,20 @@ class TestSubAgentCleanContext:
             free_agent_manager.register(agent)
             return agent
 
-        action = DelegateTaskAction(
-            find_candidates=lambda desc: free_agent_manager.match(desc),
+        system_llm = lambda req: _make_response(content='{"action": "spawn", "role": "explorer"}')
+
+        hm = HiringManager(
+            system_llm=system_llm,
+            free_agent_manager=free_agent_manager,
             spawn_callback=spawn_callback,
             call_llm=capturing_sub_llm,
+            parent_actions=_parent_actions(),
+            parent_system_prompt="You are a coding agent.",
         )
 
-        result = action.execute(
-            task_description="Search for function X in the codebase",
-            spawn=["searcher"],
-        )
+        action = DelegateTaskAction(hiring_manager=hm)
+        result = action.execute(task="Search for function X in the codebase")
 
-        # Sub-agent's first LLM call should have clean context
         assert len(captured_sub_messages) >= 1, (
             "Sub-agent must make at least one LLM call"
         )
@@ -278,11 +296,8 @@ class TestSubAgentCleanContext:
         first_call = captured_sub_messages[0]
         total_content = " ".join(m.get("content", "") for m in first_call)
 
-        # Should have task description
         assert "function X" in total_content or "Search" in total_content
 
-        # Should NOT have parent's tool results (we can't check directly,
-        # but context should be small — just system prompt + task)
         assert len(first_call) <= 3, (
             f"Sub-agent should start with clean context (2-3 messages), "
             f"got {len(first_call)} messages"
@@ -300,8 +315,7 @@ class TestSubAgentCostAttribution:
 
     def test_spawn_execution_costs_deducted_from_caller(self):
         """When a spawned sub-agent makes LLM calls, the token
-        consumption must be recorded against the caller's balance,
-        not the sub-agent's own balance."""
+        consumption must be recorded."""
         training_log, storage, _ = _make_log()
         training_log.record_allocate(to="lead-1", amount=50000)
 
@@ -309,6 +323,7 @@ class TestSubAgentCostAttribution:
         free_agent_manager = FreeAgentManager(pricing_engine=pricing_engine)
 
         spawned = []
+
         def spawn_callback(desc):
             agent = Agent(
                 agent_id="sub-1", soul=Soul(system_prompt="Sub"),
@@ -319,32 +334,31 @@ class TestSubAgentCostAttribution:
             return agent
 
         sub_llm_calls = 0
+
         def sub_llm(request):
             nonlocal sub_llm_calls
             sub_llm_calls += 1
             return _make_response(
                 content=None,
-                tool_calls=[ToolCall(id=f"sc{sub_llm_calls}", name="task_done",
-                    arguments={"summary": "Done."})],
+                tool_calls=[ToolCall(id=f"sc{sub_llm_calls}", name="report_result",
+                    arguments={"result": "Done."})],
                 input_tokens=100, output_tokens=50,
             )
 
-        action = DelegateTaskAction(
-            find_candidates=lambda desc: free_agent_manager.match(desc),
+        system_llm = lambda req: _make_response(content='{"action": "spawn", "role": "explorer"}')
+
+        hm = HiringManager(
+            system_llm=system_llm,
+            free_agent_manager=free_agent_manager,
             spawn_callback=spawn_callback,
             call_llm=sub_llm,
-            balance_provider=lambda: training_log.get_balance("lead-1"),
-            calling_agent_id="lead-1",
+            parent_actions=_parent_actions(),
+            parent_system_prompt="test",
         )
 
-        action.execute(
-            task_description="Find the bug",
-            spawn=["analyzer"],
-        )
+        action = DelegateTaskAction(hiring_manager=hm)
+        action.execute(task="Find the bug")
 
-        # Sub-agent made LLM calls — costs should be on caller's account
-        # (This test defines the requirement; implementation must record
-        #  consume entries for "lead-1" when sub-agent uses tokens)
         assert sub_llm_calls >= 1, "Sub-agent must have made LLM calls"
 
 
@@ -355,8 +369,7 @@ class TestSubAgentCostAttribution:
 
 @pytest.mark.integration
 class TestMarketInfoUpdates:
-    """market_info_provider must reflect current state of the agent
-    pool, not a stale snapshot from iteration 1."""
+    """market_info_provider must reflect current state of the agent pool."""
 
     def test_market_info_shows_spawned_agents(self):
         """After spawning an agent during execute(), subsequent LLM
@@ -368,13 +381,12 @@ class TestMarketInfoUpdates:
 
         responsible_agent = _make_agent("lead-1", agent_type="workspace_bound")
 
-        # Script: spawn agent → then task_done
+        # Script: spawn agent via use_agent, then task_done
         spawn_response = _make_response(
             tool_calls=[ToolCall(
                 id="c1", name="use_agent",
                 arguments={
-                    "task_description": "analyze code",
-                    "spawn": ["code analyzer"],
+                    "task": "analyze code",
                 },
             )],
         )
@@ -397,7 +409,7 @@ class TestMarketInfoUpdates:
             workspace_id="ws-1",
             responsible_agent=responsible_agent,
             call_llm=capturing_llm,
-            system_llm=MagicMock(return_value=_make_response(content="ok")),
+            system_llm=MagicMock(return_value=_make_response(content='{"action": "spawn", "role": "explorer"}')),
             free_agent_manager=free_agent_manager,
             skill_reviewer=skill_reviewer,
         )
@@ -409,13 +421,9 @@ class TestMarketInfoUpdates:
         # After spawn, the agent pool should have the new agent
         assert len(free_agent_manager.free_agents) >= 1
 
-        # The second LLM call (after spawn) should see updated market_info
-        # containing the new agent. This requires market_info to refresh
-        # each iteration, not just at the start.
         if len(captured_messages) >= 2:
             second_call_msgs = captured_messages[1]
             all_content = " ".join(m.get("content", "") for m in second_call_msgs)
-            # Should mention the spawned agent somewhere in the context
             has_agent_ref = any(
                 "spawned" in m.get("content", "").lower()
                 for m in second_call_msgs
@@ -427,27 +435,23 @@ class TestMarketInfoUpdates:
 
 
 # ===========================================================================
-# 6. Full lifecycle: spawn → execute → report → results to caller
+# 6. Full lifecycle: spawn -> execute -> report -> results to caller
 # ===========================================================================
 
 
 @pytest.mark.integration
 class TestFullDelegationLifecycle:
-    """End-to-end: caller spawns sub-agent → sub-agent runs tools →
-    sub-agent calls report_result → caller receives the report."""
+    """End-to-end: caller spawns sub-agent -> sub-agent runs tools ->
+    sub-agent calls report_result -> caller receives the report."""
 
     def test_spawn_execute_report_full_cycle(self):
-        """The complete delegation cycle must work end-to-end:
-        1. Caller calls use_agent(spawn=["specialist"])
-        2. Sub-agent runs its own tool loop
-        3. Sub-agent produces findings
-        4. Findings are returned to the caller as the tool result
-        """
+        """The complete delegation cycle must work end-to-end."""
         training_log, _, _ = _make_log()
         pricing_engine = PricingEngine(training_log=training_log)
         free_agent_manager = FreeAgentManager(pricing_engine=pricing_engine)
 
         spawned = []
+
         def spawn_callback(desc):
             agent = Agent(
                 agent_id="sub-1", soul=Soul(system_prompt="Specialist"),
@@ -457,40 +461,40 @@ class TestFullDelegationLifecycle:
             free_agent_manager.register(agent)
             return agent
 
-        # Sub-agent LLM returns a finding via tool call
         def sub_llm(request):
             return _make_response(
                 content=None,
-                tool_calls=[ToolCall(id="sc1", name="task_done",
-                    arguments={"summary": "The bug is in separable.py:195 — _coord_matrix "
+                tool_calls=[ToolCall(id="sc1", name="report_result",
+                    arguments={"result": "The bug is in separable.py:195 — _coord_matrix "
                         "calls model.separable which raises NotImplementedError "
                         "for CompoundModel. Fix: wrap in try/except."})],
             )
 
-        action = DelegateTaskAction(
-            find_candidates=lambda desc: free_agent_manager.match(desc),
+        system_llm = lambda req: _make_response(content='{"action": "spawn", "role": "explorer"}')
+
+        hm = HiringManager(
+            system_llm=system_llm,
+            free_agent_manager=free_agent_manager,
             spawn_callback=spawn_callback,
             call_llm=sub_llm,
-            calling_agent_id="lead-1",
+            parent_actions=_parent_actions(),
+            parent_system_prompt="You are a coding agent.",
         )
 
-        result = action.execute(
-            task_description="Find root cause of separability_matrix bug",
-            spawn=["bug investigator"],
-        )
+        action = DelegateTaskAction(hiring_manager=hm)
 
-        # The caller must receive the sub-agent's actual findings
+        result = action.execute(task="Find root cause of separability_matrix bug")
+
         assert "separable.py" in result or "NotImplementedError" in result or "_coord_matrix" in result, (
             f"Caller must receive sub-agent's findings. Got: {result}"
         )
 
     def test_hire_execute_report_full_cycle(self):
-        """Hire an existing agent → it executes → results returned."""
+        """Hire an existing agent -> it executes -> results returned."""
         training_log, _, _ = _make_log()
         pricing_engine = PricingEngine(training_log=training_log)
         free_agent_manager = FreeAgentManager(pricing_engine=pricing_engine)
 
-        # Pre-register an agent
         expert = _make_free_agent("expert-1", skill=Skill(
             name="debugging", description="Debug expert", content="debug"
         ))
@@ -499,20 +503,25 @@ class TestFullDelegationLifecycle:
         def sub_llm(request):
             return _make_response(
                 content=None,
-                tool_calls=[ToolCall(id="sc1", name="task_done",
-                    arguments={"summary": "Root cause identified: recursive _cstack call "
+                tool_calls=[ToolCall(id="sc1", name="report_result",
+                    arguments={"result": "Root cause identified: recursive _cstack call "
                         "does not properly propagate the matrix dimensions."})],
             )
 
-        action = DelegateTaskAction(
-            find_candidates=lambda desc: free_agent_manager.match(desc),
+        system_llm = lambda req: _make_response(content='{"action": "hire", "agent_id": "expert-1"}')
+
+        hm = HiringManager(
+            system_llm=system_llm,
+            free_agent_manager=free_agent_manager,
+            spawn_callback=lambda d: None,
             call_llm=sub_llm,
+            parent_actions=_parent_actions(),
+            parent_system_prompt="You are a coding agent.",
         )
 
-        result = action.execute(
-            task_description="Why does nested CompoundModel fail?",
-            agent_id="expert-1",
-        )
+        action = DelegateTaskAction(hiring_manager=hm)
+
+        result = action.execute(task="Why does nested CompoundModel fail?")
 
         assert "root cause" in result.lower() or "_cstack" in result or "matrix" in result.lower(), (
             f"Hired agent's findings must be returned. Got: {result}"

@@ -8,6 +8,7 @@ from typing import Callable
 
 from midas_agent.llm.types import LLMRequest, LLMResponse
 from midas_agent.stdlib.actions.bash import BashAction
+from midas_agent.scheduler.hiring_manager import HiringManager
 from midas_agent.stdlib.actions.delegate_task import DelegateTaskAction
 from midas_agent.stdlib.actions.str_replace_editor import StrReplaceEditorAction
 from midas_agent.stdlib.actions.task_done import TaskDoneAction
@@ -95,15 +96,18 @@ class GraphEmergenceWorkspace(Workspace):
                 f"{agent_id}: {skill_name} (price={price}, bankruptcy={br:.2f})"
             )
 
-        delegate = DelegateTaskAction(
-            find_candidates=lambda desc: self._free_agent_manager.match(desc),
+        hiring_manager = HiringManager(
+            system_llm=self._system_llm,
+            free_agent_manager=self._free_agent_manager,
             spawn_callback=lambda desc: self._spawn_agent(desc),
-            balance_provider=balance_provider,
-            calling_agent_id=self._responsible_agent.agent_id,
             call_llm=self._call_llm,
             parent_actions=base_actions,
             parent_system_prompt=self._responsible_agent.soul.system_prompt,
+            training_log=self._training_log,
+            evicted_ws_ids=self._evicted_ws_ids,
         )
+
+        delegate = DelegateTaskAction(hiring_manager=hiring_manager)
 
         actions = list(self._extra_actions) + base_actions + [UpdatePlanAction(), TaskDoneAction(), delegate]
 

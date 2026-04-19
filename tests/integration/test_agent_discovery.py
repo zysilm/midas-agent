@@ -10,6 +10,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from midas_agent.llm.types import LLMRequest, LLMResponse, TokenUsage, ToolCall
+from midas_agent.scheduler.hiring_manager import HiringManager
 from midas_agent.stdlib.actions.bash import BashAction
 from midas_agent.stdlib.actions.delegate_task import DelegateTaskAction
 from midas_agent.stdlib.actions.str_replace_editor import StrReplaceEditorAction
@@ -50,7 +51,7 @@ def _parent_actions():
         BashAction(),
         StrReplaceEditorAction(),
         TaskDoneAction(),
-        DelegateTaskAction(find_candidates=lambda d: []),
+        DelegateTaskAction(hiring_manager=None),
     ]
 
 
@@ -61,8 +62,8 @@ def _parent_actions():
 
 @pytest.mark.integration
 class TestLLMHiresExisting:
-    """Set up marketplace with skilled agent. Mock LLM returns
-    use_agent(agent_id='expert-1'). Verify agent runs with skill.content."""
+    """Set up marketplace with skilled agent. SystemLLM picks hire.
+    Verify agent runs with skill.content."""
 
     def test_hire_existing_agent_with_skill(self):
         log = _log()
@@ -92,16 +93,19 @@ class TestLLMHiresExisting:
                          arguments={"result": "Fixed the bug."}),
             ])
 
-        action = DelegateTaskAction(
-            find_candidates=lambda desc: fam.match(desc),
+        system_llm = lambda req: _r(content='{"action": "hire", "agent_id": "expert-1"}')
+
+        hm = HiringManager(
+            system_llm=system_llm,
+            free_agent_manager=fam,
+            spawn_callback=lambda d: None,
             call_llm=sub_llm,
             parent_actions=_parent_actions(),
+            parent_system_prompt="You are a coding agent.",
         )
 
-        result = action.execute(
-            task_description="Debug the crash in main.py",
-            agent_id="expert-1",
-        )
+        action = DelegateTaskAction(hiring_manager=hm)
+        result = action.execute(task="Debug the crash in main.py")
 
         # The system prompt should contain the skill content
         assert len(captured_system_prompts) >= 1
@@ -116,7 +120,7 @@ class TestLLMHiresExisting:
 
 @pytest.mark.integration
 class TestLLMSpawnsWhenNoMatch:
-    """Marketplace has irrelevant agents. Mock LLM returns spawn.
+    """Marketplace has irrelevant agents. SystemLLM spawns new.
     Verify new agent spawned."""
 
     def test_spawn_new_when_no_relevant_agents(self):
@@ -152,34 +156,34 @@ class TestLLMSpawnsWhenNoMatch:
                          arguments={"result": "Found the bug."}),
             ])
 
-        action = DelegateTaskAction(
-            find_candidates=lambda desc: fam.match(desc),
+        system_llm = lambda req: _r(content='{"action": "spawn", "role": "explorer"}')
+
+        hm = HiringManager(
+            system_llm=system_llm,
+            free_agent_manager=fam,
             spawn_callback=spawn_cb,
             call_llm=sub_llm,
-            calling_agent_id="lead-1",
             parent_actions=_parent_actions(),
+            parent_system_prompt="You are a coding agent.",
         )
 
-        result = action.execute(
-            task_description="Fix the Python import error",
-            spawn=["explorer: investigate imports"],
-        )
+        action = DelegateTaskAction(hiring_manager=hm)
+        result = action.execute(task="Fix the Python import error")
 
         assert len(spawned) == 1
         assert "spawned-0" in fam.free_agents
 
 
 # ===========================================================================
-# 17. Two-step browse then hire
+# 17. Two-step: SystemLLM hire picks agent
 # ===========================================================================
 
 
 @pytest.mark.integration
-class TestBrowseThenHire:
-    """Mock LLM first calls use_agent without agent_id/spawn (browse),
-    then calls use_agent with agent_id. Verify two separate interactions."""
+class TestSystemLLMHire:
+    """SystemLLM selects an agent to hire, agent executes and reports back."""
 
-    def test_browse_then_hire(self):
+    def test_hire_agent(self):
         log = _log()
         pe = PricingEngine(training_log=log)
         fam = FreeAgentManager(pricing_engine=pe)
@@ -192,34 +196,24 @@ class TestBrowseThenHire:
         )
         fam.register(expert)
 
-        # Step 1: Browse (no agent_id, no spawn)
-        action = DelegateTaskAction(
-            find_candidates=lambda desc: fam.match(desc),
-            call_llm=MagicMock(),
-            parent_actions=_parent_actions(),
-        )
-
-        browse_result = action.execute(
-            task_description="Find an agent for debugging",
-        )
-        assert "expert-1" in browse_result or "Candidates" in browse_result
-
-        # Step 2: Hire the agent by ID
         def hire_llm(req):
             return _r(tool_calls=[
                 ToolCall(id="t1", name="report_result",
                          arguments={"result": "Debugging complete."}),
             ])
 
-        action2 = DelegateTaskAction(
-            find_candidates=lambda desc: fam.match(desc),
+        system_llm = lambda req: _r(content='{"action": "hire", "agent_id": "expert-1"}')
+
+        hm = HiringManager(
+            system_llm=system_llm,
+            free_agent_manager=fam,
+            spawn_callback=lambda d: None,
             call_llm=hire_llm,
             parent_actions=_parent_actions(),
+            parent_system_prompt="test",
         )
 
-        hire_result = action2.execute(
-            task_description="Debug the crash",
-            agent_id="expert-1",
-        )
+        action = DelegateTaskAction(hiring_manager=hm)
+        hire_result = action.execute(task="Debug the crash")
 
         assert "Debugging complete" in hire_result or "Result reported" in hire_result
