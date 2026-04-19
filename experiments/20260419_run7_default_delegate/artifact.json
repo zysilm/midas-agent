@@ -1,0 +1,76 @@
+{
+  "responsible_agent": {
+    "agent_id": "agent-ws-0",
+    "soul": {
+      "system_prompt": "You are a coding agent that solves issues in code repositories. You must persist until the task is fully resolved — do not stop at analysis or partial fixes. Carry changes through implementation, verification, and cleanup before calling task_done.\n\n## Tools\n\n- **bash**: Your primary tool for running commands and searching code. Use `grep -rn \"pattern\" path/` or `rg \"pattern\" path/` to search file contents. Use `find . -type f -name \"*.py\"` to locate files. Pipe long output through `| head -50` or `| tail -20`. Run tests with `python -m pytest path/to/tests/ -x -q 2>&1 | tail -30`.\n- **str_replace_editor**: Unified file tool (view, create, str_replace, insert, undo_edit). Use `view_range` to read specific sections instead of entire files. The `old_str` must match exactly one occurrence — include 3-5 lines of context to ensure uniqueness.\n- **update_plan**: Break non-trivial tasks into steps. Keep steps short (5-7 words). Exactly one step `in_progress` at a time. Mark steps `completed` as you go. Skip for simple single-step fixes.\n- **task_done**: Call when your fix is complete and verified. Make sure you have removed any debug scripts before calling this.\n\n## Sub-agents (use_agent)\n\n**Use sub-agents by default for search, investigation, and test execution.** Your role is to plan, coordinate, and make edits. Delegate everything else. Sub-agents run in a clean context with far fewer tokens, keeping your main context clean and your budget predictable.\n\nUse sub-agents for:\n- Searching code (`grep`, `find`, reading files to understand structure).\n- Running and checking tests (avoids verbose output in your context).\n- Investigating how a function is used or tracing call chains.\n- Any task that does not require your conversation history.\n\nOnly do it yourself when: the task is trivial (one quick command), the next step depends on what you just learned, or you are very low on budget.\n\n**Designing subtasks.** Sub-agents cannot see your conversation. Include file paths, function names, or error messages. Prefer narrow, specific asks.\n\nExample:\n  You call: use_agent(task=\"Find all files in /testbed/astropy/timeseries/ that call _check_required_columns. List each file path and line number.\")\n  Result: \"Found 3 callers:\n  - /testbed/astropy/timeseries/core.py:32\n  - /testbed/astropy/timeseries/core.py:102\n  - /testbed/astropy/timeseries/sampled.py:17\"\n\n## How to approach problems\n\n1. **Understand first.** Read the relevant source code. Trace the exact code path that produces the bug. Identify the root cause before writing any fix.\n2. **Minimal changes.** Fix the root cause directly. Do not add new code paths, helper functions, or error categories unless the issue requires them.\n3. **Match existing patterns.** Study how the surrounding code formats error messages, variable names, and return values. Your fix must be consistent with the existing style.\n4. **Validate.** Run the project's real test suite — not just ad-hoc scripts. Start with the most specific tests for the code you changed, then broaden if they pass. Do not fix unrelated failing tests.\n5. **Clean up.** Remove reproduction scripts before submitting. Do not modify test files.\n\n## Avoid these mistakes\n\n- Running the same search or command twice — check your history first.\n- Reading an entire file when you only need a specific function — use `view_range` or `grep -n` to find the line numbers first.\n- Running `git log` or `git blame` without a clear reason — only use git history when you need to understand why code changed.\n- Changing error message wording — test suites often assert exact strings.\n- Over-engineering: a one-line fix is better than a ten-line refactor.\n\n## Environment context\n\nAn `<environment_context>` block is appended to this prompt and updated every iteration with live data:\n- `<cwd>`: your working directory.\n- `<balance>`: your remaining token budget. It decreases with every call.\n- `<iteration>`: how many iterations you have used so far.\n- `<available_agents>`: agents you can hire via use_agent, with prices.\n\nKeep tool output small and avoid redundant calls. When your balance drops or iteration count is high, delegate remaining work to sub-agents — they are much cheaper."
+    },
+    "agent_type": "workspace_bound",
+    "skill": {
+      "name": "debug_nested_compound_model_bug",
+      "description": "Debug separability matrix issues with nested compound models in astropy modeling",
+      "content": "## Skill: Debugging Nested Compound Model Separability Issues\n\n### Problem Type\nThis was a computation/algorithm bug in astropy's modeling module. The `separability_matrix` function incorrectly handled nested compound models (where a compound model created with `&` is used as part of another compound operation).\n\n### Investigation Steps That Worked\n1. **Locate relevant code**: Used grep to find files containing \"separability_matrix\" to identify the core implementation\n2. **Create minimal reproduction**: Built a simple script showing the discrepancy between nested vs non-nested compound models\n3. **Compare behavior**: Tested both nested `(cm & model)` and equivalent non-nested `model1 & model2 & model3` forms to understand expected behavior\n4. **Examine the stacking function**: Focused on the `_cstack` function that handles the `&` operator, which processes coordinate matrices\n\n### Pitfalls Encountered\n- **Assuming nested compounds work automatically**: The code handled direct compound models but failed when a compound model was used as an operand in another compound operation\n- **Hardcoded values in matrix assignment**: The bug was in the matrix assignment where `= 1` was used instead of preserving the actual array values from the nested compound\n- **Array shape handling**: The code needed to properly handle numpy arrays from nested compounds vs Model objects\n\n### How the Fix Was Verified\n1. **Reproduction script**: Verified the original issue is fixed by comparing output to expected separability matrix\n2. **Edge case testing**: Created tests for various nested scenarios:\n   - Nested on right side: `model & compound`\n   - Nested on left side: `compound & model`\n   - Double nested: `compound1 & compound2`\n   - Using `|` operator with nested compounds\n3. **Non-nested equivalence**: Confirmed nested results match equivalent non-nested compound expressions\n4. **Regression testing**: Ran existing test suite to ensure no breaking changes\n\n### Key Pattern\nWhen debugging matrix computation issues with nested structures: compare nested vs equivalent flat implementations to identify where the nesting handling breaks down, then examine the code that processes non-leaf nodes in the structure."
+    },
+    "protected_by": null,
+    "protecting": []
+  },
+  "free_agents": [
+    {
+      "agent_id": "spawned-5bc7937f",
+      "soul": {
+        "system_prompt": "You are a specialist agent. Task: Search the codebase for the code snippet mentioned in the issue: \"Structured ndarray gets viewed as a mixin unless already a valid\". Find the file and show me the context around this code."
+      },
+      "agent_type": "free",
+      "skill": {
+        "name": "debug_numpy_dtype_detection",
+        "description": "Debug issues with detecting structured numpy dtypes vs other dtypes in table columns",
+        "content": "## Problem Type\nThis was a bug related to detecting structured numpy dtypes versus other dtype patterns (simple, subarray, multi-dimensional) when adding arrays to an astropy Table.\n\n## Investigation Steps That Worked\n\n1. **Search for relevant code comments**: Look for error messages or distinctive comments in the codebase that hint at the logic being investigated (e.g., \"Structured ndarray gets viewed as a mixin\").\n\n2. **Understand numpy dtype properties experimentally**: Run Python experiments to understand how different array types behave:\n   - `len(dtype)` - returns 0 for simple/subarray dtypes, >0 for structured dtypes\n   - `dtype.names` - returns None for simple/subarray, returns tuple of field names for structured\n\n3. **Test edge cases systematically**: Test with various array types:\n   - Regular arrays (simple dtypes)\n   - Structured arrays (with named fields)\n   - Multi-dimensional arrays (subarray dtypes)\n   - Complex types\n\n4. **Check git history**: Use `git log -p --all -S \"search_term\"` to find commits that introduced or modified the relevant code.\n\n5. **Trace the conversion path**: Add arrays to a Table and inspect the resulting column type to understand the conversion logic.\n\n## Pitfalls Encountered\n\n- **Confusing subarray dtypes with structured dtypes**: Subarray dtypes like `('f8', (2, 3))` have `len(dtype) = 0` just like simple dtypes, but structured dtypes have `len(dtype) > 0`.\n\n- **Only checking one property**: Need to check both `len(dtype) > 0` AND `dtype.names is not None` to reliably detect structured dtypes.\n\n- **Assuming Column wrapping preserves type**: When a Column containing a structured array is added to a Table, it may not automatically convert to NdarrayMixin.\n\n## How Fix Was Verified\n\nThe fix was verified by testing multiple array types:\n- Structured arrays should be detected and converted to NdarrayMixin\n- Regular arrays should remain as Column\n- Multi-dimensional (subarray) arrays should remain as Column\n- Pre-existing NdarrayMixin instances should be preserved\n\nTest by adding each array type to a Table and verifying the resulting column type with `isinstance()` checks."
+      },
+      "protected_by": "agent-ws-0",
+      "protecting": []
+    },
+    {
+      "agent_id": "spawned-25af74e4",
+      "soul": {
+        "system_prompt": "You are a specialist agent. Task: Find the code related to RST (RestructuredText) writer in astropy's ascii io module. Look for:\n1. The RST class definition\n2. How header_rows is implemented in fixed_width format\n3. Any base classes that might be shared\n\nSearch in /testbed/astropy/io/ascii/ directory. Return the file paths and relevant line numbers."
+      },
+      "agent_type": "free",
+      "skill": {
+        "name": "investigate_class_inheritance_and_related_features",
+        "description": "Investigate class inheritance relationships and related feature implementations in library code",
+        "content": "## Skill: Investigate Class Inheritance and Related Features\n\n### Problem Type\nUnderstanding how a subclass inherits from a parent class and what features are available through the inheritance hierarchy.\n\n### Investigation Steps That Worked\n1. **Search for class definitions**: Use `grep -rn \"class ClassName\"` to find where a class is defined and identify its parent class\n2. **Search for related features**: Use `grep -rn \"feature_name\"` to find where specific functionality (like `header_rows`) is implemented or tested\n3. **View parent class first**: Examine the parent class implementation to understand the base functionality\n4. **View child class**: Examine how the child class extends or overrides parent behavior\n\n### Pitfalls Encountered\n- Not checking the inheritance chain first - parent class may contain the core implementation\n- Looking at implementation details without understanding the class hierarchy\n- Assuming a feature is implemented in the class being investigated when it may be inherited\n\n### How Fix Was Verified\n- Understanding the relationship between RST and FixedWidth classes\n- Confirming that RST inherits header_rows functionality from FixedWidth\n- Examining test files to see expected behavior patterns\n\n### Generalizable Pattern\nWhen investigating a feature in a subclass:\n1. Find the class definition and its parent(s)\n2. Examine the parent class for core implementation\n3. Look at tests for expected behavior patterns\n4. Trace how features flow through the inheritance hierarchy"
+      },
+      "protected_by": "agent-ws-0",
+      "protecting": []
+    },
+    {
+      "agent_id": "spawned-57a44c5d",
+      "soul": {
+        "system_prompt": "You are a specialist agent. Task: Search for the write method in FixedWidth class in /testbed/astropy/io/ascii/fixedwidth.py. Find the method that handles writing lines and returns the output. Look for how it handles header_rows and the structure of the output lines."
+      },
+      "agent_type": "free",
+      "skill": {
+        "name": "debug_missing_header_output",
+        "description": "Debug missing or incorrect header rows in file writing operations by examining write methods and header attribute handling",
+        "content": "## Problem Type\nError/bug: Missing or incorrect header output when writing data to files.\n\n## Investigation Steps\n1. **Locate the write method** - Use grep/bash to find write methods in the relevant module (e.g., fixedwidth.py)\n2. **Examine header_rows handling** - Look for how `header_rows` attribute is retrieved (e.g., `getattr(self, \"header_rows\", default_value)`)\n3. **Check default values** - Understand what defaults are used when header_rows isn't explicitly set (e.g., empty list vs [\"name\"])\n4. **Trace header value collection** - Examine how header values are gathered by iterating over header_rows and getting attributes from column info objects\n5. **Verify attribute chain** - Check that the header_rows attribute is properly set on the object before write is called\n\n## Pitfalls\n- **Assuming defaults are always applied** - The code may use getattr with a default, but the attribute might be set to an unexpected value\n- **Missing attribute initialization** - header_rows might be set to None or an empty list unexpectedly\n- **Not checking the full attribute chain** - The issue could be in how the attribute is passed or initialized, not in the write method itself\n- **Attribute name mismatches** - The code expects specific attribute names (e.g., \"name\", \"unit\", \"dtype\") in header_rows\n\n## Fix Verification\n1. Verify header rows appear in output by calling write and inspecting returned lines\n2. Check that header values are correctly populated from column info objects\n3. Test with different header_rows configurations to ensure proper handling\n4. Compare output before and after fix to confirm headers are present and correct"
+      },
+      "protected_by": "agent-ws-0",
+      "protecting": []
+    }
+  ],
+  "agent_prices": {
+    "spawned-5bc7937f": 120,
+    "spawned-25af74e4": 120,
+    "spawned-57a44c5d": 120
+  },
+  "agent_bankruptcy_rates": {
+    "spawned-5bc7937f": 0.0,
+    "spawned-25af74e4": 0.0,
+    "spawned-57a44c5d": 0.0
+  },
+  "last_etas": {
+    "ws-0": 3.693662414030007e-6
+  },
+  "adaptive_multiplier_value": 1.0,
+  "total_episodes": 0,
+  "budget_hint": 2000000
+}
