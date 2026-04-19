@@ -564,3 +564,119 @@ Error: TimeSeries object is invalid - expected 'mag' as the 2nd required column 
 2026-04-19 15:56:40,026 - midas_agent.stdlib.plan_execute_agent - INFO -   [iter 71] bash(command='ls /testbed/*.py 2>&1 || echo "Error listing files"') (26088 tokens)
 2026-04-19 15:56:40,070 - midas_agent.stdlib.plan_execute_agent - INFO -     → Error response from daemon: container bb1ef0f1967f0379d31b40abbbbc3a9aa13084c7fe37b67f0a1a42f48f3a8a3d is not running
 
+2026-04-19 15:56:42,356 - midas_agent.stdlib.plan_execute_agent - INFO -   [iter 72] bash(command='echo "test"') (26185 tokens)
+2026-04-19 15:56:42,400 - midas_agent.stdlib.plan_execute_agent - INFO -     → Error response from daemon: container bb1ef0f1967f0379d31b40abbbbc3a9aa13084c7fe37b67f0a1a42f48f3a8a3d is not running
+
+2026-04-19 15:56:44,581 - midas_agent.stdlib.plan_execute_agent - INFO -   [iter 73] bash(command='pwd') (26274 tokens)
+2026-04-19 15:56:44,623 - midas_agent.stdlib.plan_execute_agent - INFO -     → Error response from daemon: container bb1ef0f1967f0379d31b40abbbbc3a9aa13084c7fe37b67f0a1a42f48f3a8a3d is not running
+
+2026-04-19 15:56:46,948 - midas_agent.stdlib.plan_execute_agent - INFO -   [iter 74] bash(command='ls') (26370 tokens)
+2026-04-19 15:56:46,990 - midas_agent.stdlib.plan_execute_agent - INFO -     → Error response from daemon: container bb1ef0f1967f0379d31b40abbbbc3a9aa13084c7fe37b67f0a1a42f48f3a8a3d is not running
+
+2026-04-19 15:56:49,243 - midas_agent.stdlib.plan_execute_agent - INFO -   [iter 75] bash(command='echo hello') (26466 tokens)
+2026-04-19 15:56:49,292 - midas_agent.stdlib.plan_execute_agent - INFO -     → Error response from daemon: container bb1ef0f1967f0379d31b40abbbbc3a9aa13084c7fe37b67f0a1a42f48f3a8a3d is not running
+
+2026-04-19 15:56:51,760 - midas_agent.stdlib.plan_execute_agent - INFO -   [iter 76] bash(command='ls -la /testbed/') (26564 tokens)
+2026-04-19 15:56:51,807 - midas_agent.stdlib.plan_execute_agent - INFO -     → Error response from daemon: container bb1ef0f1967f0379d31b40abbbbc3a9aa13084c7fe37b67f0a1a42f48f3a8a3d is not running
+
+2026-04-19 15:56:55,423 - midas_agent.stdlib.plan_execute_agent - INFO -   [iter 77] bash(command='true') (26667 tokens)
+2026-04-19 15:56:55,471 - midas_agent.stdlib.plan_execute_agent - INFO -     → Error response from daemon: container bb1ef0f1967f0379d31b40abbbbc3a9aa13084c7fe37b67f0a1a42f48f3a8a3d is not running
+
+2026-04-19 15:56:57,634 - midas_agent.stdlib.plan_execute_agent - INFO -   [iter 78] bash(command='ls /testbed') (26753 tokens)
+2026-04-19 15:56:57,674 - midas_agent.stdlib.plan_execute_agent - INFO -     → Error response from daemon: container bb1ef0f1967f0379d31b40abbbbc3a9aa13084c7fe37b67f0a1a42f48f3a8a3d is not running
+
+2026-04-19 15:57:01,639 - midas_agent.stdlib.plan_execute_agent - INFO -   [iter 79] str_replace_editor(command='view', path='/testbed') (26860 tokens)
+2026-04-19 15:57:01,687 - midas_agent.stdlib.plan_execute_agent - INFO -     → Error: the path /testbed does not exist. Please provide a valid path.
+2026-04-19 15:57:03,825 - midas_agent.stdlib.plan_execute_agent - INFO -   [iter 80] bash(command='ls') (26909 tokens)
+2026-04-19 15:57:03,875 - midas_agent.stdlib.plan_execute_agent - INFO -     → Error response from daemon: container bb1ef0f1967f0379d31b40abbbbc3a9aa13084c7fe37b67f0a1a42f48f3a8a3d is not running
+
+2026-04-19 15:57:06,033 - midas_agent.stdlib.plan_execute_agent - INFO -   [iter 81] bash(command='date') (27006 tokens)
+2026-04-19 15:57:06,084 - midas_agent.stdlib.plan_execute_agent - INFO -     → Error response from daemon: container bb1ef0f1967f0379d31b40abbbbc3a9aa13084c7fe37b67f0a1a42f48f3a8a3d is not running
+
+2026-04-19 15:57:08,038 - midas_agent.stdlib.plan_execute_agent - INFO -   [iter 82] bash(command='whoami') (27099 tokens)
+2026-04-19 15:57:08,084 - midas_agent.stdlib.plan_execute_agent - INFO -     → Error response from daemon: container bb1ef0f1967f0379d31b40abbbbc3a9aa13084c7fe37b67f0a1a42f48f3a8a3d is not running
+
+2026-04-19 15:57:10,645 - midas_agent.stdlib.plan_execute_agent - INFO -   [iter 83] bash(command='id') (27191 tokens)
+2026-04-19 15:57:10,696 - midas_agent.stdlib.plan_execute_agent - INFO -     → Error response from daemon: container bb1ef0f1967f0379d31b40abbbbc3a9aa13084c7fe37b67f0a1a42f48f3a8a3d is not running
+
+2026-04-19 15:57:12,704 - midas_agent.stdlib.plan_execute_agent - INFO -   [iter 84] bash(command='ls -la /testbed') (27288 tokens)
+2026-04-19 15:57:12,747 - midas_agent.stdlib.plan_execute_agent - INFO -     → Error response from daemon: container bb1ef0f1967f0379d31b40abbbbc3a9aa13084c7fe37b67f0a1a42f48f3a8a3d is not running
+
+2026-04-19 15:57:16,276 - midas_agent.stdlib.plan_execute_agent - INFO -   [iter 85] bash(command='ls /testbed') (27379 tokens)
+2026-04-19 15:57:16,321 - midas_agent.stdlib.plan_execute_agent - INFO -     → Error response from daemon: container bb1ef0f1967f0379d31b40abbbbc3a9aa13084c7fe37b67f0a1a42f48f3a8a3d is not running
+
+2026-04-19 15:57:20,578 - midas_agent.stdlib.plan_execute_agent - INFO -   [iter 86] bash(command='ls -l /testbed') (27480 tokens)
+2026-04-19 15:57:20,629 - midas_agent.stdlib.plan_execute_agent - INFO -     → Error response from daemon: container bb1ef0f1967f0379d31b40abbbbc3a9aa13084c7fe37b67f0a1a42f48f3a8a3d is not running
+
+2026-04-19 15:57:22,441 - midas_agent.stdlib.plan_execute_agent - INFO -   [iter 87] bash(command='ls') (27562 tokens)
+2026-04-19 15:57:22,492 - midas_agent.stdlib.plan_execute_agent - INFO -     → Error response from daemon: container bb1ef0f1967f0379d31b40abbbbc3a9aa13084c7fe37b67f0a1a42f48f3a8a3d is not running
+
+2026-04-19 15:57:24,570 - midas_agent.stdlib.plan_execute_agent - INFO -   [iter 88] bash(command='echo "test"') (27666 tokens)
+2026-04-19 15:57:24,622 - midas_agent.stdlib.plan_execute_agent - INFO -     → Error response from daemon: container bb1ef0f1967f0379d31b40abbbbc3a9aa13084c7fe37b67f0a1a42f48f3a8a3d is not running
+
+2026-04-19 15:57:28,360 - midas_agent.stdlib.plan_execute_agent - INFO -   [iter 89] bash(command='ls /testbed') (27761 tokens)
+2026-04-19 15:57:28,407 - midas_agent.stdlib.plan_execute_agent - INFO -     → Error response from daemon: container bb1ef0f1967f0379d31b40abbbbc3a9aa13084c7fe37b67f0a1a42f48f3a8a3d is not running
+
+2026-04-19 15:57:31,123 - midas_agent.stdlib.plan_execute_agent - INFO -   [iter 90] bash(command='ls /testbed') (27856 tokens)
+2026-04-19 15:57:31,171 - midas_agent.stdlib.plan_execute_agent - INFO -     → Error response from daemon: container bb1ef0f1967f0379d31b40abbbbc3a9aa13084c7fe37b67f0a1a42f48f3a8a3d is not running
+
+2026-04-19 15:57:33,469 - midas_agent.stdlib.plan_execute_agent - INFO -   [iter 91] bash(command='ls /testbed') (27951 tokens)
+2026-04-19 15:57:33,522 - midas_agent.stdlib.plan_execute_agent - INFO -     → Error response from daemon: container bb1ef0f1967f0379d31b40abbbbc3a9aa13084c7fe37b67f0a1a42f48f3a8a3d is not running
+
+2026-04-19 15:57:35,928 - midas_agent.stdlib.plan_execute_agent - INFO -   [iter 92] bash(command='ls /testbed') (28046 tokens)
+2026-04-19 15:57:35,987 - midas_agent.stdlib.plan_execute_agent - INFO -     → Error response from daemon: container bb1ef0f1967f0379d31b40abbbbc3a9aa13084c7fe37b67f0a1a42f48f3a8a3d is not running
+
+2026-04-19 15:57:38,354 - midas_agent.stdlib.plan_execute_agent - INFO -   [iter 93] bash(command='ls /testbed') (28141 tokens)
+2026-04-19 15:57:38,404 - midas_agent.stdlib.plan_execute_agent - INFO -     → Error response from daemon: container bb1ef0f1967f0379d31b40abbbbc3a9aa13084c7fe37b67f0a1a42f48f3a8a3d is not running
+
+2026-04-19 15:57:40,786 - midas_agent.stdlib.plan_execute_agent - INFO -   [iter 94] bash(command='ls /testbed') (28236 tokens)
+2026-04-19 15:57:40,831 - midas_agent.stdlib.plan_execute_agent - INFO -     → Error response from daemon: container bb1ef0f1967f0379d31b40abbbbc3a9aa13084c7fe37b67f0a1a42f48f3a8a3d is not running
+
+2026-04-19 15:57:44,334 - midas_agent.stdlib.plan_execute_agent - INFO -   [iter 95] bash(command='ls /testbed') (28327 tokens)
+2026-04-19 15:57:44,382 - midas_agent.stdlib.plan_execute_agent - INFO -     → Error response from daemon: container bb1ef0f1967f0379d31b40abbbbc3a9aa13084c7fe37b67f0a1a42f48f3a8a3d is not running
+
+2026-04-19 15:57:47,509 - midas_agent.stdlib.plan_execute_agent - INFO -   [iter 96] bash(command='ls /testbed') (28422 tokens)
+2026-04-19 15:57:47,561 - midas_agent.stdlib.plan_execute_agent - INFO -     → Error response from daemon: container bb1ef0f1967f0379d31b40abbbbc3a9aa13084c7fe37b67f0a1a42f48f3a8a3d is not running
+
+2026-04-19 15:57:51,911 - midas_agent.stdlib.plan_execute_agent - INFO -   [iter 97] bash(command='ls /testbed') (28517 tokens)
+2026-04-19 15:57:51,969 - midas_agent.stdlib.plan_execute_agent - INFO -     → Error response from daemon: container bb1ef0f1967f0379d31b40abbbbc3a9aa13084c7fe37b67f0a1a42f48f3a8a3d is not running
+
+2026-04-19 15:57:55,391 - midas_agent.stdlib.plan_execute_agent - INFO -   [iter 98] bash(command='ls /testbed') (28612 tokens)
+2026-04-19 15:57:55,435 - midas_agent.stdlib.plan_execute_agent - INFO -     → Error response from daemon: container bb1ef0f1967f0379d31b40abbbbc3a9aa13084c7fe37b67f0a1a42f48f3a8a3d is not running
+
+2026-04-19 15:57:57,888 - midas_agent.stdlib.plan_execute_agent - INFO -   [iter 99] bash(command='ls /testbed') (28707 tokens)
+2026-04-19 15:57:57,935 - midas_agent.stdlib.plan_execute_agent - INFO -     → Error response from daemon: container bb1ef0f1967f0379d31b40abbbbc3a9aa13084c7fe37b67f0a1a42f48f3a8a3d is not running
+
+2026-04-19 15:58:00,104 - midas_agent.stdlib.plan_execute_agent - INFO -   [iter 100] bash(command='ls /testbed') (28802 tokens)
+2026-04-19 15:58:00,148 - midas_agent.stdlib.plan_execute_agent - INFO -     → Error response from daemon: container bb1ef0f1967f0379d31b40abbbbc3a9aa13084c7fe37b67f0a1a42f48f3a8a3d is not running
+
+2026-04-19 15:58:02,556 - midas_agent.stdlib.plan_execute_agent - INFO -   [iter 101] bash(command='ls /testbed') (28897 tokens)
+2026-04-19 15:58:02,597 - midas_agent.stdlib.plan_execute_agent - INFO -     → Error response from daemon: container bb1ef0f1967f0379d31b40abbbbc3a9aa13084c7fe37b67f0a1a42f48f3a8a3d is not running
+
+2026-04-19 15:58:02,598 - midas_agent.stdlib.plan_execute_agent - INFO -   Budget exhausted at iter 102
+2026-04-19 15:58:20,891 - midas_agent.docker.container_manager - INFO - Removed container bb1ef0f1967f
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+    import sys; from importlib import import_module; sys.argv = ['midas', 'train', '--config', 'train.yaml', '--issues', '10']; sys.exit(import_module('midas_agent.cli').main())
+                                                                                                                                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/Users/ziyang/Documents/midas-agent/midas_agent/cli.py", line 172, in main
+    _cmd_train(args)
+    ~~~~~~~~~~^^^^^^
+  File "/Users/ziyang/Documents/midas-agent/midas_agent/cli.py", line 120, in _cmd_train
+    run_training(config, issues=issues)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/ziyang/Documents/midas-agent/midas_agent/training.py", line 308, in run_training
+    evicted, survivors, eval_results = scheduler.evaluate_and_select(patches)
+                                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/Users/ziyang/Documents/midas-agent/midas_agent/scheduler/scheduler.py", line 149, in evaluate_and_select
+    eval_results = self._evaluation_module.evaluate_all(patches)
+  File "/Users/ziyang/Documents/midas-agent/midas_agent/evaluation/module.py", line 76, in evaluate_all
+    s_exec = self._execution_scorer.score(patch, issue)
+  File "/Users/ziyang/Documents/midas-agent/midas_agent/evaluation/swebench_scorer.py", line 62, in score
+    raise RuntimeError(f"SWE-bench evaluation returned None for {issue.issue_id}")
+RuntimeError: SWE-bench evaluation returned None for astropy__astropy-13033
+Training: 10 issues, budget=2000000
+astropy__astropy-13033: >>>>> Patch Apply Failed:
+patch: **** Only garbage was found in the patch input.
+
+Check (logs/run_evaluation/midas-97ec4062/midas-agent/astropy__astropy-13033/run_instance.log) for more information.

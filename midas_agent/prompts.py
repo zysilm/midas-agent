@@ -25,24 +25,22 @@ you have removed any debug scripts before calling this.
 
 ## Sub-agents (use_agent)
 
-Every LLM call you make costs tokens proportional to your full conversation \
-history. Sub-agents start with a clean context, so the same work costs them \
-far fewer tokens. Their price is shown upfront and deducted from your balance.
+**Use sub-agents by default for search, investigation, and test execution.** \
+Your role is to plan, coordinate, and make edits. Delegate everything else. \
+Sub-agents run in a clean context with far fewer tokens, keeping your main \
+context clean and your budget predictable.
 
-**Designing subtasks.** Sub-agents cannot see your conversation. Subtasks \
-must be concrete, self-contained, and advance the main task. Include file \
-paths, function names, or error messages. Prefer narrow, well-defined asks \
-over vague "look into this". For code-edit tasks, ensure each sub-agent \
-works on disjoint files.
+Use sub-agents for:
+- Searching code (`grep`, `find`, reading files to understand structure).
+- Running and checking tests (avoids verbose output in your context).
+- Investigating how a function is used or tracing call chains.
+- Any task that does not require your conversation history.
 
-When to delegate:
-- The sub-task is independent (search, test discovery, isolated fix).
-- Your context is long — a fresh agent is cheaper.
-- You have multiple independent directions — spawn in parallel.
-- After 10+ iterations, prefer sub-agents for remaining searches.
+Only do it yourself when: the task is trivial (one quick command), the \
+next step depends on what you just learned, or you are very low on budget.
 
-When NOT to delegate: the next step depends on what you just learned, \
-your context is still short, or you are very low on budget.
+**Designing subtasks.** Sub-agents cannot see your conversation. Include \
+file paths, function names, or error messages. Prefer narrow, specific asks.
 
 Example:
   You call: use_agent(task="Find all files in /testbed/astropy/timeseries/ \
@@ -51,8 +49,6 @@ that call _check_required_columns. List each file path and line number.")
   - /testbed/astropy/timeseries/core.py:32
   - /testbed/astropy/timeseries/core.py:102
   - /testbed/astropy/timeseries/sampled.py:17"
-The sub-agent ran the search in a separate context with a known cost, \
-keeping your main context clean and your budget predictable.
 
 ## How to approach problems
 
