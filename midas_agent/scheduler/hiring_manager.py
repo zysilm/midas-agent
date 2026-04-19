@@ -191,20 +191,86 @@ class HiringManager:
         agent._last_action_history = result.action_history
         return reported.get("result") or result.output or "Agent completed with no output."
 
+    def _initialize_agent(self, agent, task: str, role: str) -> None:
+        """Use SystemLLM to generate the agent's identity and initial skill."""
+        from midas_agent.workspace.graph_emergence.skill import Skill
+
+        prompt = (
+            "You are creating a specialist agent. Given the task and role, "
+            "generate the agent's identity.\n\n"
+            f"## Role: {role}\n"
+            f"## Task: {task}\n\n"
+            "Reply as JSON:\n"
+            '{"name": "<short_skill_name>", '
+            '"description": "<one line — what this agent is good at, for matching future tasks>", '
+            '"system_prompt": "<2-3 sentences — who the agent is and how it works>"}\n\n'
+            "## Examples\n\n"
+            "### Example 1\n"
+            "Role: explorer\n"
+            "Task: Search for all callers of the _cstack function in the modeling module\n\n"
+            '{"name": "code_search", '
+            '"description": "Search codebases for function definitions, callers, and usage patterns", '
+            '"system_prompt": "You are a code search specialist. You find function definitions, '
+            "trace call chains, and report file paths with line numbers. Use grep -rn for text "
+            'search and find for file discovery. Always report results as a structured list."}\n\n'
+            "### Example 2\n"
+            "Role: worker\n"
+            "Task: Fix the error message format in _check_required_columns to show which columns are missing\n\n"
+            '{"name": "targeted_code_fix", '
+            '"description": "Make precise, minimal edits to fix specific bugs in source code", '
+            '"system_prompt": "You are a code fix specialist. You make minimal, targeted edits to '
+            "fix bugs. Read the relevant code, understand the exact issue, make the smallest change "
+            'that fixes it, and verify with a test. Never change more than necessary."}'
+        )
+
+        request = LLMRequest(
+            messages=[{"role": "user", "content": prompt}],
+            model="default",
+        )
+
+        try:
+            response = self._system_llm(request)
+            content = (response.content or "").strip()
+            if content.startswith("```"):
+                content = content.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
+
+            import re
+            match = re.search(r'\{[^}]+\}', content, re.DOTALL)
+            if match:
+                data = json.loads(match.group())
+            else:
+                data = json.loads(content)
+
+            name = data.get("name", "specialist")
+            description = data.get("description", task[:100])
+            system_prompt = data.get("system_prompt", f"You are a specialist agent. Task: {task}")
+
+            agent.skill = Skill(name=name, description=description, content="")
+            agent.soul.system_prompt = system_prompt
+            self._free_agent_manager.update_embedding(agent.agent_id)
+
+            logger.info("  HiringManager: initialized %s as %s — %s", agent.agent_id, name, description)
+        except Exception as e:
+            logger.warning("  HiringManager: agent init failed (%s), using defaults", e)
+            agent.skill = Skill(name=role, description=task[:100], content="")
+
     def _run_spawned_agent(self, task: str, role: str) -> str:
-        """Spawn a new agent and run it."""
+        """Spawn a new agent, initialize its identity, and run it."""
         from midas_agent.stdlib.react_agent import ReactAgent
 
         agent = self._spawn_callback(task)
         aid = getattr(agent, "agent_id", None) or "new agent"
         logger.info("  HiringManager: spawned %s (protected_by=%s)", aid, agent.protected_by)
 
+        # Initialize agent identity via SystemLLM
+        self._initialize_agent(agent, task, role)
+
         reported: dict = {}
         def on_report(text, _reported=reported):
             _reported["result"] = text
 
         sub_agent = ReactAgent(
-            system_prompt=self._parent_system_prompt,
+            system_prompt=agent.soul.system_prompt,
             actions=self._build_sub_agent_actions(
                 agent.protected_by,
                 role=role,
