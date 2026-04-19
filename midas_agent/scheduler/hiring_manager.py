@@ -113,15 +113,15 @@ class HiringManager:
             f"Task: {task}\n\n"
             f"Agents:\n{roster}\n\n"
             "Pick one:\n"
-            'A) Hire agent if its skill matches the task. Reply: {"action":"hire","agent_id":"<id>"}\n'
-            'B) Spawn new explorer (read-only: search, run scripts, investigate). Reply: {"action":"spawn","role":"explorer"}\n'
-            'C) Spawn new worker (can edit files). Reply: {"action":"spawn","role":"worker"}\n\n'
+            'A) Hire agent if its skill matches the task. Reply: {"action":"hire","agent_id":"<id>","reason":"..."}\n'
+            'B) Spawn new explorer (read-only: search, run scripts, investigate). Reply: {"action":"spawn","role":"explorer","reason":"..."}\n'
+            'C) Spawn new worker (can edit files). Reply: {"action":"spawn","role":"worker","reason":"..."}\n\n'
             "Examples:\n"
-            '- Task: "Find where function X is defined" + Agent: code_explorer → hire (searching code matches code_explorer)\n'
-            '- Task: "Run test_foo.py" + Agent: test_runner → hire (running tests matches test_runner)\n'
-            '- Task: "Run test_foo.py" + Agent: code_explorer → spawn explorer (running tests does not match code_explorer)\n'
-            '- Task: "Fix bug on line 50" + Agent: targeted_code_fix → hire (fixing code matches targeted_code_fix)\n'
-            '- Task: "Fix bug on line 50" + Agent: code_explorer → spawn worker (fixing code needs a worker, not explorer)\n\n'
+            '- Task: "Find where function X is defined" + Agent: code_explorer → {"action":"hire","agent_id":"spawned-aaa","reason":"searching code matches code_explorer"}\n'
+            '- Task: "Run test_foo.py" + Agent: test_runner → {"action":"hire","agent_id":"spawned-bbb","reason":"running tests matches test_runner"}\n'
+            '- Task: "Run test_foo.py" + Agent: code_explorer → {"action":"spawn","role":"explorer","reason":"running tests does not match code_explorer"}\n'
+            '- Task: "Fix bug on line 50" + Agent: targeted_code_fix → {"action":"hire","agent_id":"spawned-ccc","reason":"fixing code matches targeted_code_fix"}\n'
+            '- Task: "Fix bug on line 50" + Agent: code_explorer → {"action":"spawn","role":"worker","reason":"fixing code needs file editing, code_explorer is read-only"}\n\n'
             "JSON only:"
         )
 
@@ -137,14 +137,23 @@ class HiringManager:
             # Try to extract JSON from the response (handle markdown fences)
             if content.startswith("```"):
                 content = content.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
-            decision = json.loads(content)
+            # Try to find JSON object in response
+            import re
+            match = re.search(r'\{[^}]+\}', content, re.DOTALL)
+            if match:
+                decision = json.loads(match.group())
+            else:
+                decision = json.loads(content)
+            reason = decision.get("reason", "")
             action = decision.get("action")
             if action == "hire" and "agent_id" in decision:
+                logger.info("  HiringManager: reason=%s", reason)
                 return {"action": "hire", "agent_id": decision["agent_id"]}
             if action == "spawn":
                 role = decision.get("role", "explorer")
                 if role not in ("explorer", "worker"):
                     role = "explorer"
+                logger.info("  HiringManager: reason=%s", reason)
                 return {"action": "spawn", "role": role}
         except (json.JSONDecodeError, AttributeError, KeyError, TypeError) as e:
             logger.warning("  HiringManager: malformed SystemLLM response (%s): %.200s", e, content)
