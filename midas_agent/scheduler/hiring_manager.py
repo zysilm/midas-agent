@@ -54,7 +54,7 @@ class HiringManager:
     # Public API
     # ------------------------------------------------------------------
 
-    def delegate(self, task: str) -> str:
+    def delegate(self, task: str, parent_context: str = "") -> str:
         """Pick or spawn an agent via SystemLLM, then run it on *task*."""
         from midas_agent.stdlib.react_agent import ReactAgent
 
@@ -66,11 +66,11 @@ class HiringManager:
         logger.info("  HiringManager: decision=%s for task=%.100s", decision, task)
 
         if decision["action"] == "hire":
-            return self._run_hired_agent(decision["agent_id"], task)
+            return self._run_hired_agent(decision["agent_id"], task, parent_context)
 
         # spawn (default fallback)
         role = decision.get("role", "explorer")
-        return self._run_spawned_agent(task, role)
+        return self._run_spawned_agent(task, role, parent_context)
 
     # ------------------------------------------------------------------
     # Roster building
@@ -172,7 +172,7 @@ class HiringManager:
     # Agent execution
     # ------------------------------------------------------------------
 
-    def _run_hired_agent(self, agent_id: str, task: str) -> str:
+    def _run_hired_agent(self, agent_id: str, task: str, parent_context: str = "") -> str:
         """Look up an existing agent, inject skill, and run."""
         from midas_agent.stdlib.react_agent import ReactAgent
 
@@ -206,7 +206,12 @@ class HiringManager:
             max_iterations=20,
         )
 
-        result = sub_agent.run(context=task)
+        # Build context: parent history (truncated) + task
+        sub_context = task
+        if parent_context:
+            sub_context = f"## Parent agent history (summary)\n{parent_context}\n\n## Your task\n{task}"
+
+        result = sub_agent.run(context=sub_context)
         agent._last_action_history = result.action_history
         return self._format_action_history(result.action_history) or result.output or "Agent completed with no output."
 
@@ -248,7 +253,7 @@ class HiringManager:
             logger.warning("  HiringManager: agent init failed (%s), using defaults", e)
             agent.skill = Skill(name=role, description=task[:100], content="")
 
-    def _run_spawned_agent(self, task: str, role: str) -> str:
+    def _run_spawned_agent(self, task: str, role: str, parent_context: str = "") -> str:
         """Spawn a new agent, initialize its identity, and run it."""
         from midas_agent.stdlib.react_agent import ReactAgent
 
@@ -277,7 +282,12 @@ class HiringManager:
             max_iterations=20,
         )
 
-        sub_context = f"[Spawned agent {aid}] {task}"
+        # Build context: parent history (truncated) + task
+        if parent_context:
+            sub_context = f"## Parent agent history (summary)\n{parent_context}\n\n## Your task\n{task}"
+        else:
+            sub_context = f"[Spawned agent {aid}] {task}"
+
         result = sub_agent.run(context=sub_context)
         agent._last_action_history = result.action_history
         return self._format_action_history(result.action_history) or result.output or "Sub-agent completed with no output."

@@ -44,8 +44,9 @@ class DelegateTaskAction(Action):
 
     def execute(self, **kwargs) -> str:
         task = kwargs.get("task") or kwargs.get("task_description") or ""
+        parent_context = kwargs.get("parent_context", "")
         if not task.strip():
             return "Error: task must be a non-empty string."
         if self._hiring_manager is None:
             return "Error: no hiring manager configured."
-        return self._hiring_manager.delegate(task)
+        return self._hiring_manager.delegate(task, parent_context=parent_context)

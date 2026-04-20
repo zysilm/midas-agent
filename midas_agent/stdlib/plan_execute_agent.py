@@ -40,6 +40,47 @@ class PlanExecuteAgent(ReactAgent):
         self._env_cwd = env_cwd
         self._env_agents = env_agents or []
 
+    @staticmethod
+    def _build_parent_context_summary(messages: list[dict], max_result_chars: int = 200) -> str:
+        """Build a truncated summary of the parent agent's conversation.
+
+        Keeps system/user messages in full. Truncates tool results to
+        max_result_chars so the sub-agent knows what was done without
+        the full raw data.
+        """
+        lines: list[str] = []
+        for msg in messages:
+            role = msg.get("role", "")
+            content = msg.get("content", "")
+
+            if role == "system":
+                continue  # sub-agent gets its own system prompt
+
+            if role == "user":
+                lines.append(f"[user] {content}")
+
+            elif role == "assistant":
+                # Summarize tool calls
+                tool_calls = msg.get("tool_calls", [])
+                if tool_calls:
+                    for tc in tool_calls:
+                        func = tc.get("function", {})
+                        name = func.get("name", "?")
+                        args = func.get("arguments", "")
+                        if isinstance(args, str) and len(args) > 200:
+                            args = args[:200] + "..."
+                        lines.append(f"[action] {name}({args})")
+                elif content:
+                    lines.append(f"[assistant] {content[:200]}")
+
+            elif role == "tool":
+                result = content or ""
+                if len(result) > max_result_chars:
+                    result = result[:max_result_chars] + "... (truncated)"
+                lines.append(f"[result] {result}")
+
+        return "\n".join(lines)
+
     def _build_env_context_xml(self, iteration: int) -> str:
         """Build environment context XML with live data."""
         from midas_agent.context.environment import EnvironmentContext
@@ -189,7 +230,12 @@ class PlanExecuteAgent(ReactAgent):
                         "  [iter %d] use_agent(task=%s) (delegated by planner)",
                         iterations, delegate_task,
                     )
-                    result = use_agent_action.execute(task=delegate_task)
+                    # Build truncated parent context for sub-agent
+                    parent_context = self._build_parent_context_summary(messages)
+                    result = use_agent_action.execute(
+                        task=delegate_task,
+                        parent_context=parent_context,
+                    )
                     logger.info("    → %s", result if result else "(empty)")
 
                     record = ActionRecord(
