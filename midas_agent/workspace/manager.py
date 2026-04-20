@@ -146,6 +146,8 @@ class WorkspaceManager:
         dag_executor = DAGExecutor(
             action_registry=registry,
             max_tool_output_chars=self._config.max_tool_output_chars,
+            max_context_tokens=self._config.max_context_tokens,
+            system_llm=self._system_llm_callback,
         )
         mutator = ConfigMutator(system_llm=self._system_llm_callback)
         config_creator = ConfigCreator(system_llm=self._system_llm_callback)

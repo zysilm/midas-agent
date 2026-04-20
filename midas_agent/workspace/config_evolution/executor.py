@@ -64,9 +64,13 @@ class DAGExecutor:
         self,
         action_registry: ActionRegistry,
         max_tool_output_chars: int | None = None,
+        max_context_tokens: int | None = None,
+        system_llm: Callable[[LLMRequest], LLMResponse] | None = None,
     ) -> None:
         self._action_registry = action_registry
         self._max_tool_output_chars = max_tool_output_chars
+        self._max_context_tokens = max_context_tokens
+        self._system_llm = system_llm
 
     def set_work_dir(self, work_dir: str) -> None:
         """Propagate working directory to all actions that support it."""
@@ -123,6 +127,8 @@ class DAGExecutor:
                 call_llm=call_llm,
                 balance_provider=balance_provider,
                 max_tool_output_chars=self._max_tool_output_chars,
+                max_context_tokens=self._max_context_tokens,
+                system_llm=self._system_llm,
             )
 
             try:
