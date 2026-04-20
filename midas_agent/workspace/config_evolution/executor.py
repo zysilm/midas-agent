@@ -36,6 +36,13 @@ class DAGExecutor:
             if hasattr(action, "cwd"):
                 action.cwd = work_dir
 
+    def set_io(self, io) -> None:
+        """Propagate IO backend to all actions that support it."""
+        for name in list(self._action_registry._actions):
+            action = self._action_registry._actions[name]
+            if hasattr(action, "_io"):
+                action._io = io
+
     def execute(
         self,
         config: WorkflowConfig,

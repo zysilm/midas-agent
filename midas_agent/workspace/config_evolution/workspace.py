@@ -45,6 +45,7 @@ class ConfigEvolutionWorkspace(Workspace):
         self._budget = 0
         self._last_result: ExecutionResult | None = None
         self._episode_count = 0
+        self._io = None  # Set by training.py for Docker execution mode
 
     # ------------------------------------------------------------------
     # Helpers
@@ -68,6 +69,8 @@ class ConfigEvolutionWorkspace(Workspace):
 
     def execute(self, issue: Issue) -> None:
         self.calls.append(("execute", {"issue_id": issue.issue_id}))
+        if self._io is not None:
+            self._dag_executor.set_io(self._io)
         if self.work_dir:
             self._dag_executor.set_work_dir(self.work_dir)
         self._last_result = self._dag_executor.execute(
@@ -98,7 +101,15 @@ class ConfigEvolutionWorkspace(Workspace):
             f.write(patch_content)
 
     def _generate_patch(self) -> str:
-        """Get patch content from git diff if work_dir is set, else from DAG output."""
+        """Get patch content from git diff — Docker IO first, then local, then DAG output."""
+        if self._io is not None:
+            try:
+                self._io.run_bash("git add -A")
+                result = self._io.run_bash("git diff --cached")
+                self._io.run_bash("git reset")
+                return result
+            except Exception:
+                pass
         if self.work_dir and os.path.isdir(os.path.join(self.work_dir, ".git")):
             try:
                 result = subprocess.run(
