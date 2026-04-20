@@ -16,6 +16,40 @@ class CyclicDependencyError(Exception):
     pass
 
 
+# Max chars per tool result when formatting step output for downstream context.
+_MAX_RESULT_CHARS = 2000
+
+
+def _format_step_output(result) -> str:
+    """Format a step's full action history into readable context.
+
+    Downstream steps receive this instead of just the final text,
+    so they see every file read, command run, and result.
+    """
+    parts: list[str] = []
+    for rec in result.action_history:
+        # Format arguments concisely
+        args_parts = []
+        for k, v in rec.arguments.items():
+            v_str = v if isinstance(v, str) else repr(v)
+            if len(v_str) > 200:
+                v_str = v_str[:200] + "..."
+            args_parts.append(f"{k}={v_str}")
+        args_str = ", ".join(args_parts)
+
+        # Include result (truncated for very large outputs)
+        res = rec.result or ""
+        if len(res) > _MAX_RESULT_CHARS:
+            res = res[:_MAX_RESULT_CHARS] + f"\n... ({len(rec.result)} chars total, truncated)"
+
+        parts.append(f"[Action] {rec.action_name}({args_str})\n[Result] {res}")
+
+    if result.output:
+        parts.append(f"[Conclusion] {result.output}")
+
+    return "\n\n".join(parts)
+
+
 @dataclass
 class ExecutionResult:
     step_outputs: dict[str, str]
@@ -63,12 +97,12 @@ class DAGExecutor:
         for step_id in sorted_ids:
             step = steps_by_id[step_id]
 
-            # Build context: issue description + prior step outputs.
+            # Build context: issue description + full context from predecessors.
             context_parts = [issue.description]
             for dep_id in step.inputs:
                 if dep_id in step_outputs:
                     context_parts.append(
-                        f"[Output from step '{dep_id}']: {step_outputs[dep_id]}"
+                        f"[Full context from step '{dep_id}']:\n{step_outputs[dep_id]}"
                     )
             context = "\n\n".join(context_parts)
 
@@ -87,22 +121,23 @@ class DAGExecutor:
             try:
                 result = agent.run(context=context)
             except Exception:
-                # ReactAgent does not catch RuntimeError etc., so they
-                # propagate here.  Treat any unhandled exception as an abort.
                 aborted = True
                 abort_step = step_id
                 break
 
             all_action_history.extend(result.action_history)
 
-            # Check if the agent was aborted due to budget exhaustion.
+            # Store full action history as step output so downstream
+            # steps see everything this step did, not just the final text.
+            full_output = _format_step_output(result)
+
             if result.termination_reason == "budget_exhausted":
                 aborted = True
                 abort_step = step_id
-                step_outputs[step_id] = result.output
+                step_outputs[step_id] = full_output
                 break
 
-            step_outputs[step_id] = result.output
+            step_outputs[step_id] = full_output
 
         # Build the final ExecutionResult.
         patch = step_outputs.get(sorted_ids[-1]) if not aborted else None
