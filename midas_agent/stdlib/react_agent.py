@@ -202,10 +202,10 @@ class ReactAgent:
                             "  [iter %d] %s(%s)",
                             iterations,
                             tool_call.name,
-                            ", ".join(f"{k}={repr(v)[:80]}" for k, v in tool_call.arguments.items()),
+                            ", ".join(f"{k}={repr(v)}" for k, v in tool_call.arguments.items()),
                         )
                         result = action.execute(**tool_call.arguments)
-                        logger.info("    → %s", result[:200] if result else "(empty)")
+                        logger.info("    → %s", result if result else "(empty)")
 
                     # Write full output to action log BEFORE truncation
                     if self.action_log is not None:
@@ -279,7 +279,7 @@ class ReactAgent:
                         if not messages or messages[0].get("role") != "system":
                             messages.insert(0, {"role": "system", "content": self.system_prompt})
             elif response.content:
-                logger.info("  [iter %d] Response: %s", iterations, response.content[:200])
+                logger.info("  [iter %d] Response: %s", iterations, response.content)
                 return AgentResult(
                     output=response.content,
                     iterations=iterations,

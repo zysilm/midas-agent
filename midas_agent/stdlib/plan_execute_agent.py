@@ -94,7 +94,7 @@ class PlanExecuteAgent(ReactAgent):
             delegate = decision.get("delegate", False)
             if delegate:
                 task = decision.get("task", "")
-                logger.info("  [iter %d] Planning: delegate — %s", iteration + 1, task[:100])
+                logger.info("  [iter %d] Planning: delegate — %s", iteration + 1, task)
             else:
                 logger.info("  [iter %d] Planning: act directly", iteration + 1)
             return delegate, decision.get("task", "")
@@ -186,11 +186,11 @@ class PlanExecuteAgent(ReactAgent):
                 use_agent_action = self._actions_by_name.get("use_agent")
                 if use_agent_action:
                     logger.info(
-                        "  [iter %d] use_agent(task=%.80s) (delegated by planner)",
+                        "  [iter %d] use_agent(task=%s) (delegated by planner)",
                         iterations, delegate_task,
                     )
                     result = use_agent_action.execute(task=delegate_task)
-                    logger.info("    → %s", result[:300] if result else "(empty)")
+                    logger.info("    → %s", result if result else "(empty)")
 
                     record = ActionRecord(
                         action_name="use_agent",
@@ -250,7 +250,7 @@ class PlanExecuteAgent(ReactAgent):
                 for tool_call in response.tool_calls:
                     action = self._actions_by_name.get(tool_call.name)
                     if action is None:
-                        logger.warning("  [iter %d] Unknown tool: %s", iterations, tool_call.name[:80])
+                        logger.warning("  [iter %d] Unknown tool: %s", iterations, tool_call.name)
                         messages.append({
                             "role": "tool",
                             "tool_call_id": tool_call.id,
@@ -261,11 +261,11 @@ class PlanExecuteAgent(ReactAgent):
                         "  [iter %d] %s(%s) (%d tokens)",
                         iterations,
                         tool_call.name,
-                        ", ".join(f"{k}={repr(v)[:80]}" for k, v in tool_call.arguments.items()),
+                        ", ".join(f"{k}={repr(v)}" for k, v in tool_call.arguments.items()),
                         resp_tokens,
                     )
                     result = action.execute(**tool_call.arguments)
-                    logger.info("    → %s", result[:300] if result else "(empty)")
+                    logger.info("    → %s", result if result else "(empty)")
 
                     # Write full output to action log BEFORE truncation
                     if self.action_log is not None:
@@ -327,14 +327,14 @@ class PlanExecuteAgent(ReactAgent):
                     plan_received = True
                     logger.info(
                         "  [iter %d] Plan response (%d tokens): %s",
-                        iterations, resp_tokens, response.content[:300],
+                        iterations, resp_tokens, response.content,
                     )
                     messages.append({"role": "assistant", "content": response.content})
                     continue
 
                 logger.info(
                     "  [iter %d] Text response (no tool call, %d tokens): %s",
-                    iterations, resp_tokens, response.content[:300],
+                    iterations, resp_tokens, response.content,
                 )
                 return AgentResult(
                     output=response.content,
