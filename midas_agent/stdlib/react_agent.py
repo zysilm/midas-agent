@@ -136,6 +136,7 @@ class ReactAgent:
         from midas_agent.scheduler.resource_meter import BudgetExhaustedError
 
         iterations = 0
+        total_tokens = 0
         action_history: list[ActionRecord] = []
         messages: list[dict] = [{"role": "system", "content": self.system_prompt}]
         tools = self._build_tools()
@@ -148,6 +149,7 @@ class ReactAgent:
                 request = LLMRequest(messages=messages, model="default", tools=tools)
                 response = self.call_llm(request)
             except BudgetExhaustedError:
+                logger.info("  Budget exhausted at iter %d (%d tokens)", iterations + 1, total_tokens)
                 return AgentResult(
                     output="",
                     iterations=iterations,
@@ -156,6 +158,8 @@ class ReactAgent:
                 )
 
             iterations += 1
+            if response.usage:
+                total_tokens += response.usage.input_tokens + response.usage.output_tokens
 
             # Check iteration limit after incrementing
             if self.max_iterations is not None and iterations >= self.max_iterations:
@@ -199,10 +203,11 @@ class ReactAgent:
                         )
                     else:
                         logger.info(
-                            "  [iter %d] %s(%s)",
+                            "  [iter %d] %s(%s) (%d tokens)",
                             iterations,
                             tool_call.name,
                             ", ".join(f"{k}={repr(v)[:80]}" for k, v in tool_call.arguments.items()),
+                            total_tokens,
                         )
                         result = action.execute(**tool_call.arguments)
                         logger.info("    → %s", result[:200] if result else "(empty)")
@@ -252,7 +257,7 @@ class ReactAgent:
 
                     # Check for task_done or report_result action
                     if tool_call.name in ("task_done", "report_result"):
-                        logger.info("  Task done.")
+                        logger.info("  Task done at iter %d (%d tokens).", iterations, total_tokens)
                         return AgentResult(
                             output=result,
                             iterations=iterations,
