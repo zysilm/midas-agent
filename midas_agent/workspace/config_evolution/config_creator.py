@@ -165,31 +165,51 @@ class ConfigCreator:
 
         logger.info("Config creation pass 1 done (%d chars)", len(summary))
 
-        # -- Pass 2: summary → YAML config --
+        # -- Pass 2: summary → YAML config (with validate-retry loop) --
+        from midas_agent.workspace.config_evolution.mutator import validate_config
+
         generate_prompt = CONFIG_CREATION_GENERATE_PROMPT.format(
             score=score,
             summary=summary,
             iteration_count=len(action_history),
         )
 
-        try:
-            resp = self._system_llm(
-                LLMRequest(messages=[{"role": "user", "content": generate_prompt}],
-                           model="default"),
+        max_retries = 3
+        messages = [{"role": "user", "content": generate_prompt}]
+
+        for attempt in range(1 + max_retries):
+            try:
+                resp = self._system_llm(
+                    LLMRequest(messages=messages, model="default"),
+                )
+            except Exception as e:
+                logger.warning("Config creation pass 2 failed: %s", e)
+                return None
+
+            raw_yaml = _extract_yaml(resp.content or "")
+            if not raw_yaml:
+                logger.warning("Config creation pass 2 returned empty response")
+                return None
+
+            config = _parse_config_yaml(raw_yaml)
+            if config is None:
+                messages.append({"role": "assistant", "content": resp.content or ""})
+                messages.append({"role": "user", "content": "That YAML failed to parse. Please output valid YAML."})
+                continue
+
+            validation_errors = validate_config(config)
+            if not validation_errors:
+                logger.info("Config created: '%s' (%d steps, attempt %d)", config.meta.name, len(config.steps), attempt + 1)
+                return config
+
+            error_msg = (
+                "The configuration has validation errors:\n"
+                + "\n".join(f"- {e}" for e in validation_errors)
+                + "\n\nPlease fix these errors and output the corrected YAML."
             )
-        except Exception as e:
-            logger.warning("Config creation pass 2 failed: %s", e)
-            return None
+            messages.append({"role": "assistant", "content": resp.content or ""})
+            messages.append({"role": "user", "content": error_msg})
+            logger.info("Config creation: %d errors, retrying (attempt %d/%d)", len(validation_errors), attempt + 1, 1 + max_retries)
 
-        raw_yaml = _extract_yaml(resp.content or "")
-        if not raw_yaml:
-            logger.warning("Config creation pass 2 returned empty response")
-            return None
-
-        config = _parse_config_yaml(raw_yaml)
-        if config is None:
-            logger.warning("Config creation: failed to parse YAML")
-            return None
-
-        logger.info("Config created: '%s' (%d steps)", config.meta.name, len(config.steps))
-        return config
+        logger.warning("Config creation: exhausted retries")
+        return None

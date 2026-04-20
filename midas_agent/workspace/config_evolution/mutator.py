@@ -1,8 +1,14 @@
-"""Config mutator — reproduction and reflective self-rewrite via SystemLLM."""
+"""Config mutator — reproduction and reflective self-rewrite via SystemLLM.
+
+The mutation loop: LLM generates YAML → deterministic validator checks it →
+if invalid, feed errors back to LLM → retry until valid.  All calls go
+through SystemLLM (unmetered, system cost).
+"""
 from __future__ import annotations
 
 import json
 import logging
+from collections import deque
 from typing import Callable
 
 import yaml
@@ -17,9 +23,14 @@ from midas_agent.workspace.config_evolution.config_schema import (
 
 logger = logging.getLogger(__name__)
 
-# Constraint limits for evolved prompts
+# Retry budget for the validate-fix loop
+MAX_VALIDATION_RETRIES = 3
+
+# Valid action names that can appear in step.tools
+VALID_TOOLS = {"bash", "str_replace_editor", "task_done"}
+
+# Prompt size limit per step
 MAX_STEP_PROMPT_CHARS = 2000
-MAX_PROMPT_GROWTH = 1.3  # 30 % increase per mutation
 
 
 # ------------------------------------------------------------------
@@ -46,32 +57,83 @@ def _config_to_yaml(config: WorkflowConfig) -> str:
     return yaml.dump(data, default_flow_style=False, allow_unicode=True, sort_keys=False)
 
 
-def _validate_mutation(
-    old_config: WorkflowConfig,
-    new_config: WorkflowConfig,
-) -> bool:
-    """Check that a mutation only changed prompts and respects constraints."""
-    if len(new_config.steps) != len(old_config.steps):
-        return False
+def validate_config(config: WorkflowConfig) -> list[str]:
+    """Deterministic validation of a WorkflowConfig.
 
-    for old_step, new_step in zip(old_config.steps, new_config.steps):
-        # Structure must be preserved
-        if new_step.id != old_step.id:
-            return False
-        if new_step.tools != old_step.tools:
-            return False
-        if new_step.inputs != old_step.inputs:
-            return False
-        # Prompt constraints
-        if not new_step.prompt.strip():
-            return False
-        if len(new_step.prompt) > MAX_STEP_PROMPT_CHARS:
-            return False
-        old_len = len(old_step.prompt)
-        if old_len >= 50 and len(new_step.prompt) > old_len * MAX_PROMPT_GROWTH:
-            return False
+    Returns a list of error strings.  Empty list = valid.
+    Checks: YAML structure, step IDs unique, tools legal, inputs
+    reference existing steps, DAG is acyclic, prompts non-empty.
+    """
+    errors: list[str] = []
 
-    return True
+    if not config.steps:
+        errors.append("Config must have at least one step.")
+        return errors
+
+    step_ids = [s.id for s in config.steps]
+
+    # Unique IDs
+    seen: set[str] = set()
+    for sid in step_ids:
+        if sid in seen:
+            errors.append(f"Duplicate step id: '{sid}'.")
+        seen.add(sid)
+
+    for step in config.steps:
+        # Valid tools
+        for tool in step.tools:
+            if tool not in VALID_TOOLS:
+                errors.append(
+                    f"Step '{step.id}': unknown tool '{tool}'. "
+                    f"Valid tools: {sorted(VALID_TOOLS)}."
+                )
+
+        # Inputs reference existing steps
+        for inp in step.inputs:
+            if inp not in seen:
+                errors.append(
+                    f"Step '{step.id}': input '{inp}' does not match any step id."
+                )
+
+        # Non-empty prompt
+        if not step.prompt.strip():
+            errors.append(f"Step '{step.id}': prompt is empty.")
+
+        # Prompt size
+        if len(step.prompt) > MAX_STEP_PROMPT_CHARS:
+            errors.append(
+                f"Step '{step.id}': prompt is {len(step.prompt)} chars "
+                f"(max {MAX_STEP_PROMPT_CHARS})."
+            )
+
+    # Acyclic check (Kahn's algorithm)
+    in_degree = {s.id: 0 for s in config.steps}
+    dependents: dict[str, list[str]] = {s.id: [] for s in config.steps}
+    for step in config.steps:
+        for inp in step.inputs:
+            if inp in in_degree:
+                in_degree[step.id] += 1
+                dependents[inp].append(step.id)
+
+    queue: deque[str] = deque(sid for sid, d in in_degree.items() if d == 0)
+    visited = 0
+    while queue:
+        current = queue.popleft()
+        visited += 1
+        for dep in dependents[current]:
+            in_degree[dep] -= 1
+            if in_degree[dep] == 0:
+                queue.append(dep)
+
+    if visited != len(config.steps):
+        cycle_ids = [sid for sid, d in in_degree.items() if d > 0]
+        errors.append(f"Cyclic dependency among steps: {cycle_ids}.")
+
+    # At least one entry node
+    if all(s.inputs for s in config.steps):
+        errors.append("No entry node (at least one step must have inputs=[]).")
+
+    return errors
 
 
 # ------------------------------------------------------------------
@@ -86,7 +148,7 @@ class ConfigMutator:
         self._system_llm = system_llm
 
     # ------------------------------------------------------------------
-    # Reflective self-rewrite (Option B)
+    # Reflective self-rewrite
     # ------------------------------------------------------------------
 
     def reflective_self_rewrite(
@@ -98,10 +160,10 @@ class ConfigMutator:
         """Improve step prompts based on real execution traces.
 
         Two-pass approach:
-          1. Trace → abstract experience summary  (reuses creation summarise prompt)
-          2. Config + summary + score → improved config  (reflective mutation prompt)
+          1. Trace → abstract experience summary
+          2. Config + summary + score → improved config (with validate-retry loop)
 
-        Falls back to the original config if any step fails.
+        Falls back to the original config if all retries fail.
         """
         from midas_agent.prompts import (
             CONFIG_CREATION_SUMMARIZE_PROMPT,
@@ -151,35 +213,57 @@ class ConfigMutator:
             score=score,
         )
 
-        try:
-            resp = self._system_llm(
-                LLMRequest(messages=[{"role": "user", "content": mutate_prompt}],
-                           model="default"),
+        # Build conversation for the validate-retry loop
+        messages = [{"role": "user", "content": mutate_prompt}]
+
+        for attempt in range(1 + MAX_VALIDATION_RETRIES):
+            try:
+                resp = self._system_llm(
+                    LLMRequest(messages=messages, model="default"),
+                )
+            except Exception as e:
+                logger.warning("Reflective mutation pass 2 failed: %s", e)
+                return config
+
+            raw_yaml = _extract_yaml(resp.content or "")
+            if not raw_yaml:
+                logger.warning("Reflective mutation: empty response (attempt %d)", attempt + 1)
+                return config
+
+            new_config = _parse_config_yaml(raw_yaml)
+            if new_config is None:
+                # YAML didn't parse — ask LLM to fix
+                messages.append({"role": "assistant", "content": resp.content or ""})
+                messages.append({"role": "user", "content": "That YAML failed to parse. Please output valid YAML."})
+                continue
+
+            # Deterministic validation
+            validation_errors = validate_config(new_config)
+            if not validation_errors:
+                logger.info(
+                    "Reflective mutation accepted for '%s' (attempt %d)",
+                    config.meta.name, attempt + 1,
+                )
+                return new_config
+
+            # Feed errors back to the LLM for retry
+            error_msg = (
+                "The configuration has validation errors:\n"
+                + "\n".join(f"- {e}" for e in validation_errors)
+                + "\n\nPlease fix these errors and output the corrected YAML."
             )
-        except Exception as e:
-            logger.warning("Reflective mutation pass 2 failed: %s", e)
-            return config
+            messages.append({"role": "assistant", "content": resp.content or ""})
+            messages.append({"role": "user", "content": error_msg})
+            logger.info(
+                "Reflective mutation: %d validation errors, retrying (attempt %d/%d)",
+                len(validation_errors), attempt + 1, 1 + MAX_VALIDATION_RETRIES,
+            )
 
-        raw_yaml = _extract_yaml(resp.content or "")
-        if not raw_yaml:
-            logger.warning("Reflective mutation pass 2 returned empty response")
-            return config
-
-        new_config = _parse_config_yaml(raw_yaml)
-        if new_config is None:
-            logger.warning("Reflective mutation: failed to parse YAML")
-            return config
-
-        # -- Constraint gating --
-        if not _validate_mutation(config, new_config):
-            logger.warning("Reflective mutation rejected by constraint gate")
-            return config
-
-        logger.info("Reflective mutation accepted for '%s'", config.meta.name)
-        return new_config
+        logger.warning("Reflective mutation: exhausted retries, keeping original config")
+        return config
 
     # ------------------------------------------------------------------
-    # Legacy methods (kept for backward compatibility / eviction path)
+    # Legacy reproduce (for eviction path — kept for backward compat)
     # ------------------------------------------------------------------
 
     def reproduce(
@@ -187,12 +271,7 @@ class ConfigMutator:
         base_config: WorkflowConfig,
         summaries: list[str],
     ) -> dict:
-        """Create a new config variant based on the base config and episode summaries.
-
-        Calls system_llm to generate a new configuration, then parses the
-        response into a dict.  Falls back to a simple dict derived from the
-        base config when parsing fails.
-        """
+        """Create a new config variant based on the base config and episode summaries."""
         steps_repr = []
         for step in base_config.steps:
             steps_repr.append({
@@ -220,7 +299,6 @@ class ConfigMutator:
         )
         response = self._system_llm(request)
 
-        # Try to parse the LLM response as JSON; fall back to a simple dict.
         try:
             result = json.loads(response.content or "{}")
             if isinstance(result, dict):
