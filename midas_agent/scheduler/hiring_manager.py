@@ -149,6 +149,26 @@ class HiringManager:
         return {"action": "spawn", "role": "explorer"}
 
     # ------------------------------------------------------------------
+    # Format sub-agent results
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _format_action_history(action_history: list) -> str:
+        """Format sub-agent action history as [tool] args → result log."""
+        lines: list[str] = []
+        for record in action_history:
+            # Format args concisely
+            args_str = ", ".join(
+                f"{k}={repr(v)[:120]}" for k, v in record.arguments.items()
+            )
+            lines.append(f"[{record.action_name}] {args_str}")
+            if record.result:
+                # Include full result, not truncated
+                lines.append(f"→ {record.result}")
+            lines.append("")
+        return "\n".join(lines)
+
+    # ------------------------------------------------------------------
     # Agent execution
     # ------------------------------------------------------------------
 
@@ -188,7 +208,7 @@ class HiringManager:
 
         result = sub_agent.run(context=task)
         agent._last_action_history = result.action_history
-        return reported.get("result") or result.output or "Agent completed with no output."
+        return self._format_action_history(result.action_history) or result.output or "Agent completed with no output."
 
     def _initialize_agent(self, agent, task: str, role: str) -> None:
         """Use SystemLLM to generate the agent's identity and initial skill."""
@@ -260,7 +280,7 @@ class HiringManager:
         sub_context = f"[Spawned agent {aid}] {task}"
         result = sub_agent.run(context=sub_context)
         agent._last_action_history = result.action_history
-        return reported.get("result") or result.output or "Sub-agent completed with no output."
+        return self._format_action_history(result.action_history) or result.output or "Sub-agent completed with no output."
 
     # ------------------------------------------------------------------
     # Sub-agent action building (moved from DelegateTaskAction)
