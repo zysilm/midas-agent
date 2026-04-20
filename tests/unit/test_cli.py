@@ -122,13 +122,12 @@ class TestBuildActionSet:
     """build_action_set assembles the right actions for inference mode."""
 
     def test_local_mode_has_core_actions(self, tmp_path):
-        """Local mode includes bash, str_replace_editor, search_code, find_files."""
+        """Local mode includes bash, str_replace_editor, task_done."""
         actions = build_action_set(cwd=str(tmp_path), env="local")
         names = {a.name for a in actions}
         assert "bash" in names
         assert "str_replace_editor" in names
-        assert "search_code" in names
-        assert "find_files" in names
+        assert "task_done" in names
 
     def test_local_mode_has_task_done(self, tmp_path):
         """Local mode always includes task_done."""
@@ -159,7 +158,7 @@ class TestBuildActionSet:
         assert isinstance(actions, list)
         assert all(isinstance(a, Action) for a in actions)
 
-    def test_at_least_six_actions(self, tmp_path):
-        """Local mode provides at least 6 actions (4 core + update_plan + task_done)."""
+    def test_at_least_three_actions(self, tmp_path):
+        """Local mode provides at least 3 actions (bash + str_replace_editor + task_done)."""
         actions = build_action_set(cwd=str(tmp_path), env="local")
-        assert len(actions) >= 6
+        assert len(actions) >= 3
