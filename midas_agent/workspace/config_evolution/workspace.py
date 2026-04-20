@@ -71,7 +71,9 @@ class ConfigEvolutionWorkspace(Workspace):
         self.calls.append(("execute", {"issue_id": issue.issue_id}))
         if self._io is not None:
             self._dag_executor.set_io(self._io)
-        if self.work_dir:
+            # Docker IO: use the container workdir, not the host path
+            self._dag_executor.set_work_dir(self._io._workdir)
+        elif self.work_dir:
             self._dag_executor.set_work_dir(self.work_dir)
         self._last_result = self._dag_executor.execute(
             self._workflow_config, issue, self._call_llm,
