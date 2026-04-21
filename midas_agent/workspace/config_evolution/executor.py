@@ -144,6 +144,12 @@ class DAGExecutor:
         first_step = steps_by_id[sorted_ids[0]]
         actions = list(self._action_registry._actions.values())
         actions_by_name = {a.name: a for a in actions}
+
+        # Set task_done description to current step
+        task_done_action = actions_by_name.get("task_done")
+        if task_done_action and hasattr(task_done_action, "set_step"):
+            task_done_action.set_step(first_step.prompt.strip()[:200])
+
         tools = ReactAgent(
             system_prompt="", actions=actions, call_llm=call_llm,
         )._build_tools()
@@ -273,6 +279,14 @@ class DAGExecutor:
                             "  [step %d/%d] %s",
                             current_step_idx + 1, len(sorted_ids), current_step_id,
                         )
+
+                        # Update task_done description + rebuild tools
+                        if task_done_action and hasattr(task_done_action, "set_step"):
+                            task_done_action.set_step(next_step.prompt.strip()[:200])
+                        tools = ReactAgent(
+                            system_prompt="", actions=actions, call_llm=call_llm,
+                        )._build_tools()
+
                         messages.append({
                             "role": "user",
                             "content": (
