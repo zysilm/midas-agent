@@ -67,12 +67,10 @@ def build_action_set(cwd: str, env: str = "local") -> list[Action]:
     from midas_agent.stdlib.actions.bash import BashAction
     from midas_agent.stdlib.actions.str_replace_editor import StrReplaceEditorAction
     from midas_agent.stdlib.actions.task_done import TaskDoneAction
-    from midas_agent.stdlib.actions.update_plan import UpdatePlanAction
 
     return [
         BashAction(cwd=cwd),
         StrReplaceEditorAction(cwd=cwd),
-        UpdatePlanAction(),
         TaskDoneAction(),
     ]
 

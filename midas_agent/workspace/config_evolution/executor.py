@@ -246,7 +246,7 @@ class DAGExecutor:
                     })
 
                     # task_done: advance to next step or finish
-                    if tool_call.name in ("task_done", "report_result"):
+                    if tool_call.name == "task_done":
                         step_outputs[current_step_id] = result
                         logger.info(
                             "  [step %d/%d] %s done at iter %d (%d tokens).",
