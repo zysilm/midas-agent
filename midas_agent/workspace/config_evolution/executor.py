@@ -148,10 +148,16 @@ class DAGExecutor:
             system_prompt="", actions=actions, call_llm=call_llm,
         )._build_tools()
 
-        # Build initial messages: system prompt + issue + first step guidance.
+        # Build initial messages: DAG system prompt + issue + first step guidance.
+        from midas_agent.prompts import DAG_SYSTEM_PROMPT
+
         messages: list[dict] = [
-            {"role": "system", "content": first_step.prompt},
-            {"role": "user", "content": issue.description},
+            {"role": "system", "content": DAG_SYSTEM_PROMPT},
+            {"role": "user", "content": (
+                f"Here is the issue to fix:\n\n{issue.description}\n\n"
+                f"---\n\n"
+                f"**Current phase: {first_step.id}**\n\n{first_step.prompt}"
+            )},
         ]
 
         step_outputs: dict[str, str] = {}
@@ -270,8 +276,9 @@ class DAGExecutor:
                         messages.append({
                             "role": "user",
                             "content": (
-                                f"Phase complete. Now focus on the next phase:\n\n"
-                                f"{next_step.prompt}"
+                                f"**Current phase: {current_step_id}**\n\n"
+                                f"{next_step.prompt}\n\n"
+                                f"Focus ONLY on this phase. Call task_done when complete."
                             ),
                         })
                         break  # break inner tool_call loop, continue outer LLM loop
