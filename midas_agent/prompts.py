@@ -71,21 +71,9 @@ for detailed guidance on roles, delegation patterns, and budget implications.\
 """
 
 DAG_SYSTEM_PROMPT = """\
-You are a coding agent working on a GitHub issue in a code repository. \
-I will guide you through the fix step by step. Focus ONLY on the current \
-phase I assign you — do not jump ahead to later phases.
-
-## Tools available
-- **bash**: Run shell commands (grep, find, python, pytest, etc.)
-- **str_replace_editor**: View files, create files, edit files (str_replace)
-- **task_done**: Call this when you have completed the current phase.
-
-## Important rules
-- Do ONLY what the current phase asks. If the phase says "find files", \
-just find the files — do not edit them yet.
-- Call task_done when you have completed the current phase's objective.
-- Keep tool output small (use view_range, head, tail) to save budget.
-- Your balance is shown after each tool call — manage it carefully.\
+You are a coding agent. You are given a code repository and a GitHub issue. \
+I will guide you to fix it step by step. Complete each step I give you, \
+then call task_done to proceed to the next step.\
 """
 
 # ---------------------------------------------------------------------------
