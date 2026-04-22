@@ -136,7 +136,6 @@ class ReactAgent:
         from midas_agent.scheduler.resource_meter import BudgetExhaustedError
 
         iterations = 0
-        consecutive_text = 0  # track text-only responses to avoid infinite loops
         total_tokens = 0
         action_history: list[ActionRecord] = []
         messages: list[dict] = [{"role": "system", "content": self.system_prompt}]
@@ -172,7 +171,6 @@ class ReactAgent:
                 )
 
             if response.tool_calls:
-                consecutive_text = 0  # reset on tool use
                 # Build assistant message with tool calls
                 assistant_msg: dict = {"role": "assistant"}
                 if response.content:
@@ -286,23 +284,10 @@ class ReactAgent:
                         if not messages or messages[0].get("role") != "system":
                             messages.insert(0, {"role": "system", "content": self.system_prompt})
             elif response.content:
-                # Text response without tool call — the LLM is thinking
-                # aloud.  Append and nudge it to use a tool. If it gives
-                # 3 consecutive text responses, terminate.
-                logger.info("  [iter %d] Response: %s", iterations, response.content[:200])
+                # Text response without tool call — should not happen
+                # with tool_choice="required", but handle gracefully.
+                logger.info("  [iter %d] Response (no tool): %s", iterations, response.content[:200])
                 messages.append({"role": "assistant", "content": response.content})
-                consecutive_text += 1
-                if consecutive_text >= 3:
-                    return AgentResult(
-                        output=response.content,
-                        iterations=iterations,
-                        termination_reason="no_action",
-                        action_history=action_history,
-                    )
-                messages.append({
-                    "role": "user",
-                    "content": "Please use a tool to proceed. Do not just describe what you would do — actually do it.",
-                })
             else:
                 # Completely empty response — terminate.
                 return AgentResult(

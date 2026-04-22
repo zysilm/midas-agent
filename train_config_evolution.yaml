@@ -1,7 +1,7 @@
-initial_budget: 500000
-workspace_count: 3
+initial_budget: 2000000
+workspace_count: 1
 runtime_mode: config_evolution
-n_evict: 2
+n_evict: 0
 score_floor: 0.01
 multiplier_mode: adaptive
 multiplier_init: 1.0

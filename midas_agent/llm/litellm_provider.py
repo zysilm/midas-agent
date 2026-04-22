@@ -67,6 +67,7 @@ class LiteLLMProvider(LLMProvider):
             kwargs["max_tokens"] = request.max_tokens
         if request.tools is not None:
             kwargs["tools"] = request.tools
+            kwargs["tool_choice"] = "required"
 
         response = litellm.completion(**kwargs)
 
