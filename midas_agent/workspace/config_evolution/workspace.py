@@ -210,11 +210,13 @@ class ConfigEvolutionWorkspace(Workspace):
             # enough data has accumulated).  Skip for the default
             # single-step config — it awaits config creation on first
             # success, not incremental mutation.
+            self._last_gepa_changed = False
             if not self._is_default_config():
-                new_config = self._prompt_optimizer.maybe_optimize(
+                new_config, changed = self._prompt_optimizer.maybe_optimize(
                     self._workflow_config,
                 )
                 self._workflow_config = new_config
+                self._last_gepa_changed = changed
             # else: keep current config as-is (default config)
 
         # -- Save snapshot for export --

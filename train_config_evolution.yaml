@@ -1,12 +1,9 @@
-initial_budget: 2000000
-workspace_count: 1
+initial_budget: 1500000
 runtime_mode: config_evolution
-n_evict: 0
 score_floor: 0.01
-multiplier_mode: adaptive
-multiplier_init: 1.0
-mult_max: 2.5
 beta: 0.3
 execution_env: docker
 max_tool_output_chars: 100000
 max_context_tokens: 32000
+adaptive_workspaces: true
+max_workspaces: 2

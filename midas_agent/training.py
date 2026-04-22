@@ -397,8 +397,15 @@ def run_training(
 
     patches_base_dir = os.path.join(train_dir, "log", "patches")
 
-    # -- Create workspaces once --
+    # -- Create workspaces and adaptive controller --
+    from midas_agent.scheduler.adaptive_workspace import AdaptiveWorkspaceController
+
+    adaptive_ctrl = AdaptiveWorkspaceController() if config.adaptive_workspaces else None
     scheduler.create_workspaces()
+    if adaptive_ctrl:
+        workspaces = scheduler.get_workspaces()
+        if workspaces:
+            adaptive_ctrl.init_champion(workspaces[0].workspace_id)
 
     # -- Resume from checkpoint if available --
     processed_issue_ids: list[str] = []
@@ -539,8 +546,55 @@ def run_training(
             for ws in workspaces:
                 ws.post_episode(eval_results_dict, evicted_ids=evicted)
 
-            # 7. Replace evicted workspaces (seeded with best-η config)
-            scheduler.replace_evicted()
+            # 7. Adaptive workspace management or fixed eviction
+            if adaptive_ctrl:
+                # Record η for each workspace
+                for ws in workspaces:
+                    r = eval_results.get(ws.workspace_id)
+                    if r:
+                        cost = max(1, ws.budget_received)
+                        eta = r.s_w / cost
+                        adaptive_ctrl.record_episode(ws.workspace_id, eta)
+
+                # Check if any workspace's GEPA changed its config
+                gepa_changes = {
+                    ws.workspace_id: getattr(ws, "_last_gepa_changed", False)
+                    for ws in workspaces
+                }
+                any_gepa_ran = any(gepa_changes.values()) or any(
+                    getattr(ws, "_prompt_optimizer", None)
+                    and not getattr(ws, "_prompt_optimizer").should_optimize()
+                    and getattr(ws, "_prompt_optimizer")._episodes_since_last_optimization == 0
+                    for ws in workspaces
+                )
+
+                if any_gepa_ran:
+                    champ_id = adaptive_ctrl.champion_stats.workspace_id if adaptive_ctrl.champion_stats else None
+                    chall_id = adaptive_ctrl.challenger_stats.workspace_id if adaptive_ctrl.challenger_stats else None
+
+                    champ_changed = gepa_changes.get(champ_id, False)
+                    chall_changed = gepa_changes.get(chall_id, False) if chall_id else None
+
+                    result = adaptive_ctrl.on_gepa_result(champ_changed, chall_changed)
+
+                    if result["action"] == "start_h2h":
+                        # Create a challenger workspace with the champion's NEW config
+                        new_id = f"ws-challenger-{global_idx}"
+                        best_config = scheduler._get_best_config()
+                        scheduler._workspace_manager.replace(
+                            champ_id, champ_id, best_config,
+                        ) if False else None  # champion keeps its config
+                        ws_new = scheduler._workspace_manager.create(new_id, best_config)
+                        adaptive_ctrl.start_head_to_head(new_id)
+
+                    elif result["action"] == "select_winner":
+                        loser_id = result.get("loser_id")
+                        if loser_id:
+                            scheduler._workspace_manager.destroy(loser_id)
+                            logger.info("  Adaptive: removed loser %s", loser_id)
+            else:
+                # Fixed eviction mode
+                scheduler.replace_evicted()
 
             # 8. Save SWE-bench submission artifacts
             _save_swebench_artifacts(

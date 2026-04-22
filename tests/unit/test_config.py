@@ -39,7 +39,7 @@ class TestMidasConfig:
         assert cfg.mult_max == 50.0
         assert cfg.beta == 0.3
         assert cfg.eval_model == ""
-        assert cfg.n_evict == 1
+        assert cfg.n_evict == 0
         assert cfg.max_iterations_free_agent == 50
         assert cfg.storage_backend == "sqlite"
 

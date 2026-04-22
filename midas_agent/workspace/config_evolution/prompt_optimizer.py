@@ -388,11 +388,17 @@ class GEPAConfigOptimizer:
             and self._dataset.size >= self._min_dataset_size
         )
 
-    def maybe_optimize(self, config: WorkflowConfig) -> WorkflowConfig:
-        """Run GEPA if conditions are met, otherwise return config as-is."""
+    def maybe_optimize(self, config: WorkflowConfig) -> tuple[WorkflowConfig, bool]:
+        """Run GEPA if conditions are met, otherwise return config as-is.
+
+        Returns (config, changed) where changed indicates if GEPA
+        produced a different config.
+        """
         if not self.should_optimize():
-            return config
-        return self.optimize(config)
+            return config, False
+        new_config = self.optimize(config)
+        changed = new_config is not config
+        return new_config, changed
 
     def optimize(self, config: WorkflowConfig) -> WorkflowConfig:
         """Run GEPA on each step prompt in the config.

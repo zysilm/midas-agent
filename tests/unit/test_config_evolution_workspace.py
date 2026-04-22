@@ -44,7 +44,7 @@ class TestConfigEvolutionWorkspace:
         wc = self._make_workflow_config()
         optimizer = MagicMock(spec=GEPAConfigOptimizer)
         # maybe_optimize must return a real WorkflowConfig, not a Mock
-        optimizer.maybe_optimize.return_value = wc
+        optimizer.maybe_optimize.return_value = (wc, False)
         merger = MagicMock(spec=ConfigMerger)
         merger.merge.return_value = wc
         return ConfigEvolutionWorkspace(
@@ -86,7 +86,7 @@ class TestConfigEvolutionWorkspace:
             abort_step=None,
         )
         optimizer = MagicMock(spec=GEPAConfigOptimizer)
-        optimizer.maybe_optimize.return_value = wc
+        optimizer.maybe_optimize.return_value = (wc, False)
         merger = MagicMock(spec=ConfigMerger)
         merger.merge.return_value = wc
         ws = ConfigEvolutionWorkspace(
