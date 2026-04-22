@@ -198,10 +198,24 @@ def _rebuild_workspace_config(train_dir: str, config_filename: str):
         return _parse_config_yaml(f.read())
 
 
+def _find_latest_train_dir() -> str | None:
+    """Find the most recent .midas/train/<ts>/ with a checkpoint.json."""
+    train_root = os.path.join(".midas", "train")
+    if not os.path.isdir(train_root):
+        return None
+    candidates = []
+    for name in sorted(os.listdir(train_root), reverse=True):
+        path = os.path.join(train_root, name)
+        if os.path.isfile(os.path.join(path, "checkpoint.json")):
+            candidates.append(path)
+    return candidates[0] if candidates else None
+
+
 def run_training(
     config: MidasConfig,
     issues: list[Issue] | None = None,
     fresh: bool = False,
+    resume_dir: str | None = None,
 ) -> None:
     """Run the full training loop.
 
@@ -215,9 +229,22 @@ def run_training(
     7. Replace evicted workspaces
     8. Clean up repo
     """
-    # -- Create training directory --
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    train_dir = os.path.join(".midas", "train", timestamp)
+    # -- Resolve training directory --
+    if resume_dir and resume_dir != "auto":
+        train_dir = resume_dir
+    elif resume_dir == "auto" and not fresh:
+        train_dir = _find_latest_train_dir()
+        if train_dir:
+            logger.info("Auto-detected training directory: %s", train_dir)
+        else:
+            train_dir = None  # will create new below
+    else:
+        train_dir = None
+
+    if train_dir is None:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        train_dir = os.path.join(".midas", "train", timestamp)
+
     os.makedirs(os.path.join(train_dir, "data"), exist_ok=True)
     os.makedirs(os.path.join(train_dir, "log", "configs"), exist_ok=True)
     os.makedirs(os.path.join(train_dir, "log", "action_logs"), exist_ok=True)

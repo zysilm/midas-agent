@@ -47,6 +47,13 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         action="store_true",
         help="Ignore existing checkpoint, start fresh training",
     )
+    train_parser.add_argument(
+        "--resume",
+        default=None,
+        nargs="?",
+        const="auto",
+        help="Resume from a training directory. No value = auto-detect latest.",
+    )
 
     # -- infer subcommand --
     infer_parser = subparsers.add_parser("infer", help="Run inference")
@@ -120,8 +127,9 @@ def _cmd_train(args: argparse.Namespace) -> None:
         issues = [issues[args.issue_index]]
 
     fresh = getattr(args, "fresh", False)
+    resume = getattr(args, "resume", None)
     print(f"Training: {len(issues)} issues, budget={config.initial_budget}")
-    run_training(config, issues=issues, fresh=fresh)
+    run_training(config, issues=issues, fresh=fresh, resume_dir=resume)
 
 
 def _cmd_infer(args: argparse.Namespace) -> None:
