@@ -104,12 +104,13 @@ class BudgetAllocator:
                 etas[ws_id] = eta
                 scored_etas.append(eta)
 
-        # Second pass: assign median eta to new workspaces (no score)
+        # Second pass: new/reproduced workspaces get the best eta
+        # (they are seeded from the best config, so treat them equally)
         if scored_etas:
-            median_eta = statistics.median(scored_etas)
+            best_eta = max(scored_etas)
             for ws_id in workspace_costs:
                 if ws_id not in workspace_scores:
-                    etas[ws_id] = median_eta
+                    etas[ws_id] = best_eta
 
         self._last_etas = etas
         return etas

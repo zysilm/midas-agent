@@ -265,8 +265,8 @@ class TestBudgetAllocator:
         # Should use floor (0.1) not actual score (0.05)
         assert pytest.approx(etas["ws-1"]) == 0.1 / 100
 
-    def test_calculate_eta_new_workspace_median(self):
-        """A new workspace (not in scores) gets the median eta of survivors."""
+    def test_calculate_eta_new_workspace_best(self):
+        """A new workspace (not in scores) gets the best eta of survivors."""
         allocator = self._make_allocator(score_floor=0.01)
         # ws-1 and ws-2 have scores; ws-3 is new (no score)
         scores = {"ws-1": 0.8, "ws-2": 0.4}
@@ -274,10 +274,8 @@ class TestBudgetAllocator:
 
         etas = allocator.calculate_eta(scores, costs)
 
-        eta_1 = 0.8 / 100
-        eta_2 = 0.4 / 100
-        median_eta = (eta_1 + eta_2) / 2  # median of two values
-        assert pytest.approx(etas["ws-3"]) == median_eta
+        best_eta = 0.8 / 100  # ws-1 has the best eta
+        assert pytest.approx(etas["ws-3"]) == best_eta
 
     def test_calculate_allocation_proportional(self):
         """Allocation is proportional to eta across workspaces."""
