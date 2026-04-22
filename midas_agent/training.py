@@ -125,9 +125,83 @@ def collect_patches(workspaces, patches_base_dir: str = "") -> dict[str, str]:
     return {ws.workspace_id: ws._last_patch for ws in workspaces}
 
 
+# ------------------------------------------------------------------
+# Checkpoint helpers
+# ------------------------------------------------------------------
+
+def _atomic_write_json(path: str, data: dict) -> None:
+    """Write JSON atomically (temp file + rename)."""
+    tmp = path + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(data, f, indent=2)
+    os.replace(tmp, path)
+
+
+def _save_checkpoint(
+    train_dir: str,
+    episode_idx: int,
+    processed_issue_ids: list[str],
+    workspaces: list,
+    scheduler,
+) -> None:
+    """Save checkpoint after a completed episode."""
+    # Map workspace → latest config YAML filename
+    ws_configs = {}
+    for ws in workspaces:
+        ep_count = getattr(ws, "_episode_count", 0)
+        ws_configs[ws.workspace_id] = f"{ws.workspace_id}_ep{ep_count}.yaml"
+
+    # Get adaptive multiplier value
+    mult_value = 1.0
+    if hasattr(scheduler, "_budget_allocator"):
+        ba = scheduler._budget_allocator
+        if hasattr(ba, "_adaptive_multiplier"):
+            mult_value = ba._adaptive_multiplier.value
+
+    # Get GEPA counter from first workspace
+    gepa_counter = 0
+    for ws in workspaces:
+        opt = getattr(ws, "_prompt_optimizer", None)
+        if opt and hasattr(opt, "_episodes_since_last_optimization"):
+            gepa_counter = opt._episodes_since_last_optimization
+            break
+
+    checkpoint = {
+        "episode_idx": episode_idx,
+        "processed_issue_ids": processed_issue_ids,
+        "workspace_configs": ws_configs,
+        "adaptive_multiplier_value": mult_value,
+        "gepa_episodes_since_optimization": gepa_counter,
+        "timestamp": datetime.now().isoformat(),
+    }
+    _atomic_write_json(os.path.join(train_dir, "checkpoint.json"), checkpoint)
+    logger.info("Checkpoint saved: episode %d", episode_idx)
+
+
+def _load_checkpoint(train_dir: str) -> dict | None:
+    """Load checkpoint if it exists. Returns None if no checkpoint."""
+    path = os.path.join(train_dir, "checkpoint.json")
+    if not os.path.isfile(path):
+        return None
+    with open(path) as f:
+        return json.load(f)
+
+
+def _rebuild_workspace_config(train_dir: str, config_filename: str):
+    """Rebuild a WorkflowConfig from a saved YAML file."""
+    from midas_agent.workspace.config_evolution.config_creator import _parse_config_yaml
+
+    path = os.path.join(train_dir, "log", "configs", config_filename)
+    if not os.path.isfile(path):
+        return None
+    with open(path) as f:
+        return _parse_config_yaml(f.read())
+
+
 def run_training(
     config: MidasConfig,
     issues: list[Issue] | None = None,
+    fresh: bool = False,
 ) -> None:
     """Run the full training loop.
 
@@ -229,15 +303,59 @@ def run_training(
     # -- Create workspaces once --
     scheduler.create_workspaces()
 
+    # -- Resume from checkpoint if available --
+    processed_issue_ids: list[str] = []
+    checkpoint = _load_checkpoint(train_dir) if not fresh else None
+    if checkpoint:
+        processed_ids_set = set(checkpoint["processed_issue_ids"])
+        processed_issue_ids = list(checkpoint["processed_issue_ids"])
+
+        # Restore workspace configs from saved YAML
+        workspaces = scheduler.get_workspaces()
+        for ws in workspaces:
+            ws_configs = checkpoint.get("workspace_configs", {})
+            config_file = ws_configs.get(ws.workspace_id)
+            if config_file:
+                restored_config = _rebuild_workspace_config(train_dir, config_file)
+                if restored_config:
+                    # Infer episode count from filename (ws-0_ep5.yaml → 5)
+                    ep_count = int(config_file.split("_ep")[1].split(".")[0]) if "_ep" in config_file else 0
+                    ws.restore_state(restored_config, ep_count)
+
+        # Reload GEPA dataset
+        for ws in workspaces:
+            opt = getattr(ws, "_prompt_optimizer", None)
+            if opt and hasattr(opt, "load_dataset_from_dir"):
+                data_dir = os.path.join(train_dir, "data")
+                opt.load_dataset_from_dir(data_dir)
+                opt._episodes_since_last_optimization = checkpoint.get(
+                    "gepa_episodes_since_optimization", 0,
+                )
+
+        # Restore adaptive multiplier
+        mult_val = checkpoint.get("adaptive_multiplier_value", 1.0)
+        if hasattr(scheduler, "_budget_allocator"):
+            ba = scheduler._budget_allocator
+            if hasattr(ba, "_adaptive_multiplier"):
+                ba._adaptive_multiplier._value = mult_val
+
+        # Filter out already-processed issues
+        issues = [i for i in issues if i.issue_id not in processed_ids_set]
+        logger.info(
+            "Resumed from checkpoint: %d episodes done, %d remaining",
+            len(processed_issue_ids), len(issues),
+        )
+
     # -- Episode loop --
     for episode_idx, issue in enumerate(issues):
+        global_idx = len(processed_issue_ids) + episode_idx
         logger.info(
             "Episode %d/%d: %s (%s)",
-            episode_idx + 1, len(issues), issue.issue_id, issue.repo,
+            global_idx + 1, global_idx + len(issues), issue.issue_id, issue.repo,
         )
 
         # 1. Clone repo
-        repo_dir = tempfile.mkdtemp(prefix=f"midas_repo_{episode_idx}_")
+        repo_dir = tempfile.mkdtemp(prefix=f"midas_repo_{global_idx}_")
         try:
             if issue.base_commit and issue.repo:
                 clone_repo(issue.repo, issue.base_commit, repo_dir)
@@ -303,7 +421,7 @@ def run_training(
             if evicted:
                 logger.info("  Evicted: %s", evicted)
 
-            # 6. Post-episode (config creation / reflective mutation)
+            # 6. Post-episode (config creation / GEPA optimization)
             eval_results_dict = {
                 ws_id: {"s_w": r.s_w, "s_exec": r.s_exec}
                 for ws_id, r in eval_results.items()
@@ -314,8 +432,15 @@ def run_training(
             # 7. Replace evicted workspaces (seeded with best-η config)
             scheduler.replace_evicted()
 
+            # 8. Save checkpoint
+            processed_issue_ids.append(issue.issue_id)
+            _save_checkpoint(
+                train_dir, global_idx, processed_issue_ids,
+                workspaces, scheduler,
+            )
+
         finally:
-            # 8. Clean up containers and repo copies
+            # 9. Clean up containers and repo copies
             for cm in containers:
                 try:
                     cm.stop()

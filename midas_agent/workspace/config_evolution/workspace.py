@@ -62,6 +62,11 @@ class ConfigEvolutionWorkspace(Workspace):
             and self._workflow_config.steps[0].id == _DEFAULT_STEP_ID
         )
 
+    def restore_state(self, config: WorkflowConfig, episode_count: int) -> None:
+        """Restore workspace state from a checkpoint."""
+        self._workflow_config = config
+        self._episode_count = episode_count
+
     # ------------------------------------------------------------------
     # Workspace lifecycle
     # ------------------------------------------------------------------

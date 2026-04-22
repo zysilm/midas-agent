@@ -331,6 +331,25 @@ class GEPAConfigOptimizer:
     def dataset(self) -> ConfigDatasetBuilder:
         return self._dataset
 
+    def load_dataset_from_dir(self, data_dir: str) -> None:
+        """Reload GEPA dataset from persisted JSON files on disk.
+
+        Used when resuming training from a checkpoint.
+        """
+        if not os.path.isdir(data_dir):
+            return
+        for f in sorted(os.listdir(data_dir)):
+            if not f.endswith(".json"):
+                continue
+            path = os.path.join(data_dir, f)
+            with open(path) as fh:
+                data = json.load(fh)
+            self._dataset.add_episode(
+                data["issue_description"], data["trace"], data["score"],
+            )
+        if self._dataset.size > 0:
+            logger.info("GEPA: reloaded %d episodes from %s", self._dataset.size, data_dir)
+
     def record_episode(
         self,
         task_input: str,
