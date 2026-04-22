@@ -247,15 +247,21 @@ def _save_swebench_artifacts(
 
     patch = getattr(best_ws, "_last_patch", "") or ""
 
-    # Append to all_preds.jsonl
+    # Write to all_preds.jsonl (upsert: replace existing entry for this issue)
     preds_path = os.path.join(train_dir, "all_preds.jsonl")
     pred = {
         "instance_id": issue.issue_id,
         "model_name_or_path": "midas-agent",
         "model_patch": patch,
     }
-    with open(preds_path, "a") as f:
-        f.write(json.dumps(pred) + "\n")
+    existing = []
+    if os.path.isfile(preds_path):
+        with open(preds_path) as f:
+            existing = [json.loads(l) for l in f if json.loads(l)["instance_id"] != issue.issue_id]
+    existing.append(pred)
+    with open(preds_path, "w") as f:
+        for p in existing:
+            f.write(json.dumps(p) + "\n")
 
     # Save reasoning trace
     trajs_dir = os.path.join(train_dir, "trajs")
@@ -446,8 +452,20 @@ def run_training(
     processed_issue_ids: list[str] = []
     checkpoint = _load_checkpoint(train_dir) if not fresh else None
     if checkpoint:
-        processed_ids_set = set(checkpoint["processed_issue_ids"])
-        processed_issue_ids = list(checkpoint["processed_issue_ids"])
+        # Filter out failed episodes (empty patch) — retry them
+        all_processed = checkpoint["processed_issue_ids"]
+        preds_path = os.path.join(train_dir, "all_preds.jsonl")
+        failed_ids = set()
+        if os.path.isfile(preds_path):
+            with open(preds_path) as f:
+                for line in f:
+                    pred = json.loads(line)
+                    if not pred.get("model_patch"):
+                        failed_ids.add(pred["instance_id"])
+        if failed_ids:
+            logger.info("Retrying %d failed episodes: %s", len(failed_ids), failed_ids)
+        processed_ids_set = set(all_processed) - failed_ids
+        processed_issue_ids = [iid for iid in all_processed if iid not in failed_ids]
 
         # Restore workspace configs from saved YAML
         workspaces = scheduler.get_workspaces()
