@@ -85,16 +85,25 @@ class Scheduler:
         """Distribute token budgets to all active workspaces.
 
         Config evolution mode: every workspace gets ``initial_budget``
-        every episode.  Eta is computed after evaluation for selection
-        (eviction), not for budget allocation.
+        every episode.  Budget resets each episode (no carry-over).
         """
         workspaces = self._workspace_manager.list_workspaces()
         for ws in workspaces:
+            # Reset balance to initial_budget (not cumulative)
+            current = self._training_log.get_balance(ws.workspace_id)
+            if current != 0:
+                # Zero out existing balance first
+                self._training_log.record_consume(
+                    entity_id=ws.workspace_id,
+                    amount=current,
+                    workspace_id=ws.workspace_id,
+                )
             self._training_log.record_allocate(
                 to=ws.workspace_id,
                 amount=self._config.initial_budget,
             )
-            ws.receive_budget(self._config.initial_budget)
+            ws._budget = self._config.initial_budget
+            ws.budget_received = self._config.initial_budget
 
     # ------------------------------------------------------------------
     # Evaluation and selection
