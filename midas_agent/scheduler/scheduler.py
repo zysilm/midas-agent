@@ -84,53 +84,17 @@ class Scheduler:
     def allocate_budgets(self) -> None:
         """Distribute token budgets to all active workspaces.
 
-        On cold start (first episode, no etas yet) every workspace receives
-        ``config.initial_budget``.  On subsequent episodes the allocation is
-        proportional to the most recent eta values.
+        Config evolution mode: every workspace gets ``initial_budget``
+        every episode.  Eta is computed after evaluation for selection
+        (eviction), not for budget allocation.
         """
         workspaces = self._workspace_manager.list_workspaces()
-
-        if not self._last_etas:
-            # Cold start: uniform initial budget.
-            for ws in workspaces:
-                self._training_log.record_allocate(
-                    to=ws.workspace_id,
-                    amount=self._config.initial_budget,
-                )
-                ws.receive_budget(self._config.initial_budget)
-        else:
-            # Ensure new workspaces (replacements) are included in the
-            # eta map.  Any workspace present in the roster but absent
-            # from _last_etas receives the median eta of existing entries.
-            current_ids = {ws.workspace_id for ws in workspaces}
-            missing_ids = current_ids - set(self._last_etas.keys())
-            if missing_ids and self._last_etas:
-                import statistics
-                median_eta = statistics.median(self._last_etas.values())
-                for ws_id in missing_ids:
-                    self._last_etas[ws_id] = median_eta
-
-            # Filter etas to active workspaces so evicted entries don't
-            # consume part of the budget pool.
-            active_etas = {
-                ws_id: eta
-                for ws_id, eta in self._last_etas.items()
-                if ws_id in current_ids
-            }
-
-            # Proportional allocation based on etas.
-            allocations = self._budget_allocator.calculate_allocation(
-                active_etas,
-                last_total_consumption=self._last_total_consumption,
+        for ws in workspaces:
+            self._training_log.record_allocate(
+                to=ws.workspace_id,
+                amount=self._config.initial_budget,
             )
-            for ws in workspaces:
-                amount = allocations.get(ws.workspace_id, 0)
-                if amount > 0:
-                    self._training_log.record_allocate(
-                        to=ws.workspace_id,
-                        amount=amount,
-                    )
-                    ws.receive_budget(amount)
+            ws.receive_budget(self._config.initial_budget)
 
     # ------------------------------------------------------------------
     # Evaluation and selection
