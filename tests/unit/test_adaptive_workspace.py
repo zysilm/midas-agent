@@ -175,3 +175,67 @@ class TestAdaptiveWorkspaceController:
         assert result["winner_id"] == "ws-0"
         assert ctrl.phase == "single"
         assert ctrl.active_count == 1
+
+    # --- Serialization ---
+
+    def test_to_dict_single(self):
+        ctrl = AdaptiveWorkspaceController()
+        ctrl.init_champion("ws-0")
+        ctrl.record_episode("ws-0", 0.5)
+        d = ctrl.to_dict()
+        assert d["phase"] == "single"
+        assert d["champion"]["workspace_id"] == "ws-0"
+        assert d["champion"]["etas"] == [0.5]
+        assert d["challenger"] is None
+
+    def test_to_dict_h2h(self):
+        ctrl = AdaptiveWorkspaceController()
+        ctrl.init_champion("ws-0")
+        ctrl.start_head_to_head("ws-1")
+        ctrl.record_episode("ws-0", 0.6)
+        ctrl.record_episode("ws-1", 0.4)
+        d = ctrl.to_dict()
+        assert d["phase"] == "head_to_head"
+        assert d["champion"]["workspace_id"] == "ws-0"
+        assert d["challenger"]["workspace_id"] == "ws-1"
+        assert d["challenger"]["etas"] == [0.4]
+
+    def test_from_dict_single(self):
+        data = {
+            "phase": "single",
+            "champion": {"workspace_id": "ws-0", "etas": [0.3, 0.7]},
+            "challenger": None,
+        }
+        ctrl = AdaptiveWorkspaceController.from_dict(data)
+        assert ctrl.phase == "single"
+        assert ctrl.active_count == 1
+        assert ctrl.champion_stats.workspace_id == "ws-0"
+        assert ctrl.champion_stats.etas == [0.3, 0.7]
+        assert ctrl.challenger_stats is None
+
+    def test_from_dict_h2h(self):
+        data = {
+            "phase": "head_to_head",
+            "champion": {"workspace_id": "ws-0", "etas": [0.6]},
+            "challenger": {"workspace_id": "ws-1", "etas": [0.4]},
+        }
+        ctrl = AdaptiveWorkspaceController.from_dict(data)
+        assert ctrl.phase == "head_to_head"
+        assert ctrl.active_count == 2
+        assert ctrl.challenger_stats.workspace_id == "ws-1"
+
+    def test_roundtrip(self):
+        """to_dict → from_dict preserves all state."""
+        ctrl = AdaptiveWorkspaceController()
+        ctrl.init_champion("ws-0")
+        ctrl.start_head_to_head("ws-1")
+        ctrl.record_episode("ws-0", 0.8)
+        ctrl.record_episode("ws-0", 0.6)
+        ctrl.record_episode("ws-1", 0.5)
+
+        restored = AdaptiveWorkspaceController.from_dict(ctrl.to_dict())
+        assert restored.phase == ctrl.phase
+        assert restored.champion_stats.workspace_id == "ws-0"
+        assert restored.champion_stats.etas == [0.8, 0.6]
+        assert restored.challenger_stats.workspace_id == "ws-1"
+        assert restored.challenger_stats.etas == [0.5]

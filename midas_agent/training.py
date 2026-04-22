@@ -143,6 +143,7 @@ def _save_checkpoint(
     processed_issue_ids: list[str],
     workspaces: list,
     scheduler,
+    adaptive_ctrl=None,
 ) -> None:
     """Save checkpoint after a completed episode."""
     # Map workspace → latest config YAML filename
@@ -174,6 +175,11 @@ def _save_checkpoint(
         "gepa_episodes_since_optimization": gepa_counter,
         "timestamp": datetime.now().isoformat(),
     }
+
+    # Save adaptive workspace controller state
+    if adaptive_ctrl:
+        checkpoint["adaptive_controller"] = adaptive_ctrl.to_dict()
+
     _atomic_write_json(os.path.join(train_dir, "checkpoint.json"), checkpoint)
     logger.info("Checkpoint saved: episode %d", episode_idx)
 
@@ -445,6 +451,13 @@ def run_training(
 
         # Filter out already-processed issues
         issues = [i for i in issues if i.issue_id not in processed_ids_set]
+        # Restore adaptive controller state
+        if adaptive_ctrl and "adaptive_controller" in checkpoint:
+            from midas_agent.scheduler.adaptive_workspace import AdaptiveWorkspaceController
+            adaptive_ctrl = AdaptiveWorkspaceController.from_dict(
+                checkpoint["adaptive_controller"]
+            )
+
         logger.info(
             "Resumed from checkpoint: %d episodes done, %d remaining",
             len(processed_issue_ids), len(issues),
@@ -605,7 +618,7 @@ def run_training(
             processed_issue_ids.append(issue.issue_id)
             _save_checkpoint(
                 train_dir, global_idx, processed_issue_ids,
-                workspaces, scheduler,
+                workspaces, scheduler, adaptive_ctrl,
             )
 
         finally:

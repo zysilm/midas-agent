@@ -171,3 +171,36 @@ class AdaptiveWorkspaceController:
             self.champion_stats.workspace_id if self.champion_stats else "?",
             challenger_id,
         )
+
+    def to_dict(self) -> dict:
+        """Serialize state for checkpoint persistence."""
+        return {
+            "phase": self.phase,
+            "champion": {
+                "workspace_id": self.champion_stats.workspace_id,
+                "etas": self.champion_stats.etas,
+            } if self.champion_stats else None,
+            "challenger": {
+                "workspace_id": self.challenger_stats.workspace_id,
+                "etas": self.challenger_stats.etas,
+            } if self.challenger_stats else None,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "AdaptiveWorkspaceController":
+        """Restore from checkpoint data."""
+        ctrl = cls()
+        ctrl.phase = data.get("phase", cls.SINGLE)
+        champ = data.get("champion")
+        if champ:
+            ctrl.champion_stats = PhaseStats(
+                workspace_id=champ["workspace_id"],
+                etas=champ.get("etas", []),
+            )
+        chall = data.get("challenger")
+        if chall:
+            ctrl.challenger_stats = PhaseStats(
+                workspace_id=chall["workspace_id"],
+                etas=chall.get("etas", []),
+            )
+        return ctrl
