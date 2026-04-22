@@ -357,7 +357,6 @@ def run_training(
     # Save training config into train_dir for resume
     saved_config = os.path.join(train_dir, "train_config.yaml")
     if config_path and not os.path.isfile(saved_config):
-        import shutil
         shutil.copy2(config_path, saved_config)
 
     # -- Wire up all components --
