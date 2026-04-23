@@ -59,7 +59,8 @@ class SWEBenchScorer(ExecutionScorer):
         )
 
         if result is None:
-            raise RuntimeError(f"SWE-bench evaluation returned None for {issue.issue_id}")
+            logger.warning("SWE-bench evaluation returned None for %s", issue.issue_id)
+            return 0.0
 
         instance_id, report = result
         return self._parse_report(report, issue)
