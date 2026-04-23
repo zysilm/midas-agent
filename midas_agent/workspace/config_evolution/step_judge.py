@@ -15,27 +15,31 @@ from midas_agent.llm.types import LLMRequest, LLMResponse
 logger = logging.getLogger(__name__)
 
 STEP_JUDGE_PROMPT = """\
-You are a step completion judge for a coding agent workflow.
+You are a step completion validator for a coding agent workflow.
 
-The agent is working on a step with the following goal:
+The agent has stopped calling tools and claims this step is done.
+Your job is to TRUST the agent by default — it has full context that \
+you don't have. Only reject if the agent clearly did NOT attempt the \
+required work.
 
-## Step goal
+## Step goal (what the agent was asked to do)
 {goal}
 
-## Agent trace (iterations so far)
+## Agent trace
 {trace}
 
-## Questions
-1. Is the step goal completed? Answer DONE or NOT_DONE.
-2. At which EXACT iteration number did the step become complete? \
-(the iteration where the agent had gathered/done enough to satisfy the goal). \
-If NOT_DONE, write 0.
-3. Brief reason.
+## Agent's final message
+{agent_message}
 
-Answer format:
-STATUS: DONE or NOT_DONE
-COMPLETED_AT: <iteration number>
-REASON: <one sentence>\
+## Question
+Did the agent actually perform the work required by the step goal? \
+Trust the agent's judgment — it has full context. Only say REJECT if \
+the trace shows the agent gave up without trying (e.g., no tool calls \
+at all, or only read files without acting).
+
+Answer with EXACTLY one line:
+ACCEPT — if the agent did meaningful work toward the goal
+REJECT — only if the agent clearly skipped the step\
 """
 
 
@@ -47,31 +51,40 @@ class JudgeVerdict:
 
 
 class StepJudge:
-    """Evaluates whether a DAG step's goal has been met."""
+    """Validates agent's claim of step completion.
+
+    The agent decides when it's done (text response = stop).
+    The judge only validates: "did the agent actually do the work?"
+    Trust the agent by default — only reject obvious skip/giveup.
+    """
 
     def __init__(
         self,
         system_llm: Callable[[LLMRequest], LLMResponse],
-        check_interval: int = 10,
     ) -> None:
         self._system_llm = system_llm
-        self.check_interval = check_interval
 
-    def should_check(self, iteration: int) -> bool:
-        """Return True every check_interval iterations."""
-        return iteration > 0 and iteration % self.check_interval == 0
-
-    def evaluate(self, goal: str, trace: str) -> JudgeVerdict:
-        """Ask the LLM whether the step goal is met.
+    def validate_completion(
+        self,
+        goal: str,
+        trace: str,
+        agent_message: str,
+    ) -> JudgeVerdict:
+        """Validate the agent's claim that the step is done.
 
         Args:
             goal: the step's completion criteria
             trace: formatted trace of iterations so far
+            agent_message: the agent's text response (its "I'm done" message)
 
         Returns:
-            JudgeVerdict with done, completed_at, reason
+            JudgeVerdict — done=True means ACCEPT (trust agent)
         """
-        prompt = STEP_JUDGE_PROMPT.format(goal=goal, trace=trace)
+        prompt = STEP_JUDGE_PROMPT.format(
+            goal=goal,
+            trace=trace,
+            agent_message=agent_message[:500],
+        )
 
         try:
             resp = self._system_llm(
@@ -82,33 +95,24 @@ class StepJudge:
             )
             return self._parse_response(resp.content or "")
         except Exception as e:
-            logger.warning("StepJudge failed: %s", e)
-            return JudgeVerdict(done=False, completed_at=0, reason=f"Judge error: {e}")
+            # On judge failure, trust the agent
+            logger.warning("StepJudge failed: %s — trusting agent", e)
+            return JudgeVerdict(done=True, completed_at=0, reason=f"Judge error, trusting agent: {e}")
 
     @staticmethod
     def _parse_response(text: str) -> JudgeVerdict:
-        """Parse STATUS, COMPLETED_AT, REASON from judge response."""
-        done = False
-        completed_at = 0
-        reason = text
+        """Parse ACCEPT/REJECT from judge response."""
+        text_upper = text.upper().strip()
 
-        # Parse STATUS
-        status_match = re.search(r"STATUS:\s*(DONE|NOT_DONE|NOT DONE)", text, re.IGNORECASE)
-        if status_match:
-            status = status_match.group(1).upper().replace(" ", "_")
-            done = status == "DONE"
+        if "REJECT" in text_upper:
+            done = False
+            reason = text.strip().split("\n")[0]
+        else:
+            # ACCEPT or anything else → trust agent
+            done = True
+            reason = text.strip().split("\n")[0]
 
-        # Parse COMPLETED_AT
-        at_match = re.search(r"COMPLETED_AT:\s*(\d+)", text)
-        if at_match:
-            completed_at = int(at_match.group(1))
-
-        # Parse REASON
-        reason_match = re.search(r"REASON:\s*(.+)", text, re.DOTALL)
-        if reason_match:
-            reason = reason_match.group(1).strip().split("\n")[0]
-
-        return JudgeVerdict(done=done, completed_at=completed_at, reason=reason)
+        return JudgeVerdict(done=done, completed_at=0, reason=reason)
 
     @staticmethod
     def format_trace_for_judge(action_history: list, iterations: int) -> str:

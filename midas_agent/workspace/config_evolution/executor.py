@@ -154,10 +154,9 @@ class DAGExecutor:
             system_prompt="", actions=dag_actions, call_llm=call_llm,
         )._build_tools()
 
-        # Step judge for detecting completion
+        # Step judge validates agent's completion claims
         judge = StepJudge(
             system_llm=self._system_llm,
-            check_interval=10,
         ) if self._system_llm else None
 
         # Build initial messages: DAG system prompt + full issue + first step.
@@ -325,33 +324,6 @@ class DAGExecutor:
                         "content": tool_content,
                     })
 
-                # Judge check: every check_interval iterations within this step
-                if judge and current_step.goal and judge.should_check(step_iterations):
-                    step_actions = all_action_history[step_action_start:]
-                    trace_text = StepJudge.format_trace_for_judge(
-                        step_actions, len(step_actions),
-                    )
-                    verdict = judge.evaluate(current_step.goal, trace_text)
-                    logger.info(
-                        "  [judge] step '%s' at iter %d: %s (completed_at=%d) — %s",
-                        current_step_id, step_iterations,
-                        "DONE" if verdict.done else "NOT_DONE",
-                        verdict.completed_at, verdict.reason,
-                    )
-
-                    if verdict.done:
-                        # Advance to next step
-                        has_more = _advance_to_next_step(verdict.reason)
-                        if not has_more:
-                            return ExecutionResult(
-                                step_outputs=step_outputs,
-                                patch=None,
-                                aborted=False,
-                                abort_step=None,
-                                action_history=all_action_history,
-                            )
-                        continue  # restart outer loop with new step
-
                 # Compaction check
                 if self._max_context_tokens and self._system_llm:
                     total_chars = sum(len(str(m.get("content", ""))) for m in messages)
@@ -385,25 +357,27 @@ class DAGExecutor:
                         messages.append({"role": "user", "content": stuck_msg})
 
             elif response.content:
-                # Text response — agent may be signaling step completion
+                # Text response = agent claims step is done.
+                # Validate with judge (trust agent by default).
                 logger.info("  [iter %d] Response (text): %s", iterations, response.content[:200])
-                messages.append({"role": "assistant", "content": response.content})
 
-                # If agent gives text, check judge immediately (natural stop signal)
                 if judge and current_step.goal:
                     step_actions = all_action_history[step_action_start:]
                     trace_text = StepJudge.format_trace_for_judge(
                         step_actions, len(step_actions),
                     )
-                    verdict = judge.evaluate(current_step.goal, trace_text)
+                    verdict = judge.validate_completion(
+                        current_step.goal, trace_text, response.content,
+                    )
                     logger.info(
-                        "  [judge on text] step '%s': %s (completed_at=%d) — %s",
+                        "  [judge] step '%s': %s — %s",
                         current_step_id,
-                        "DONE" if verdict.done else "NOT_DONE",
-                        verdict.completed_at, verdict.reason,
+                        "ACCEPT" if verdict.done else "REJECT",
+                        verdict.reason,
                     )
 
                     if verdict.done:
+                        # Agent is done, advance
                         has_more = _advance_to_next_step(
                             response.content or verdict.reason,
                         )
@@ -416,6 +390,31 @@ class DAGExecutor:
                                 action_history=all_action_history,
                             )
                         continue
+                    else:
+                        # Judge rejected — agent skipped the step
+                        # Tell agent to keep working
+                        messages.append({"role": "assistant", "content": response.content})
+                        messages.append({
+                            "role": "user",
+                            "content": (
+                                f"You haven't completed this step yet. "
+                                f"The goal is: {current_step.goal}\n"
+                                f"Please continue working on it."
+                            ),
+                        })
+                        continue
+                else:
+                    # No judge or no goal — text response = step done
+                    has_more = _advance_to_next_step(response.content)
+                    if not has_more:
+                        return ExecutionResult(
+                            step_outputs=step_outputs,
+                            patch=None,
+                            aborted=False,
+                            abort_step=None,
+                            action_history=all_action_history,
+                        )
+                    continue
 
             else:
                 # Empty response — terminate
