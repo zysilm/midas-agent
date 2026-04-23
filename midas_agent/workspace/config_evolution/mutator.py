@@ -49,6 +49,7 @@ def _config_to_yaml(config: WorkflowConfig) -> str:
                 "prompt": s.prompt,
                 "tools": s.tools,
                 "inputs": s.inputs,
+                **({"goal": s.goal} if s.goal else {}),
             }
             for s in config.steps
         ],

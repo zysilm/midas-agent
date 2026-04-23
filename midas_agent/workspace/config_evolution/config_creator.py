@@ -101,6 +101,7 @@ def _parse_config_yaml(yaml_text: str) -> WorkflowConfig | None:
                 prompt=s.get("prompt", ""),
                 tools=s.get("tools", []),
                 inputs=s.get("inputs", []),
+                goal=s.get("goal", ""),
             ))
 
         if not steps:

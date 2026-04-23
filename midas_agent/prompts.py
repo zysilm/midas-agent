@@ -40,9 +40,9 @@ for specific sections.
 
 DAG_SYSTEM_PROMPT = """\
 You are a coding agent working on a code repository. \
-I will guide you step by step. Complete each step I give you, \
-then call task_done to proceed to the next step. \
-Focus ONLY on what the current step asks — do not skip ahead.\
+I will guide you step by step. Focus ONLY on what the current step asks. \
+When you have completed the current step, stop calling tools and state \
+your findings as text.\
 """
 
 # ---------------------------------------------------------------------------
@@ -87,7 +87,7 @@ a declarative YAML workflow configuration that captures the workflow pattern.
 - bash: Run shell commands (grep, find, python, pytest, etc.)
 - str_replace_editor: Read files (view command), create files (create command), \
 edit files (str_replace command)
-- task_done: Signal completion
+NOTE: there is NO task_done tool. Step completion is detected automatically.
 
 ## Configuration format
 ```yaml
@@ -98,19 +98,23 @@ meta:
 steps:
   - id: <step_id>
     prompt: |
-      <system prompt for this step — what to do and how>
+      <what the agent should do in this step>
+    goal: |
+      <completion criteria — how to know this step is done>
     tools: [<tool subset>]
     inputs: []  # [] = entry node, [dep_id] = depends on prior step
 ```
 
 ## Constraints
-- Each step runs as an independent agent with max 10 iterations
+- Each step has a `prompt` (what to do) and a `goal` (when it's done)
+- Goals must be concrete and verifiable (e.g., "identified source files and \
+line ranges" NOT "understood the code")
 - Steps communicate only via text output passed to dependent steps
-- Prompts must be GENERIC — applicable to any bug-fixing task, not specific to \
-any codebase or issue
-- Keep to 3-5 steps. Too many steps wastes budget on inter-step context loss
-- Every step that needs to read or edit code needs str_replace_editor in its tools
-- Every step that needs to run commands needs bash in its tools
+- Prompts and goals must be GENERIC — applicable to any bug-fixing task
+- Keep to 3-5 steps
+- Every step that needs to read or edit code needs str_replace_editor
+- Every step that needs to run commands needs bash
+- Do NOT include task_done in any step's tools
 
 ## Experience summary from a successful run (score={score})
 
@@ -134,42 +138,22 @@ Given a BASE workflow DAG and a GitHub issue, rewrite ONLY the prompt field \
 of each step to embed the relevant parts of the issue. Keep everything else \
 (meta, step IDs, tools, inputs) EXACTLY as-is.
 
-## Step 1: Extract the GOAL from the issue
+## Rules
 
-First, extract a one-sentence success criteria from the issue. This is what \
-"done" looks like. Examples:
-- "GOAL: `separability_matrix(Pix2Sky_TAN() & cm)` should return the same \
-diagonal result as the flat compound version."
-- "GOAL: Removing a required column from TimeSeries should raise a clear error \
-naming the missing column, not 'expected time but found time'."
-- "GOAL: `Table.write(format='html', formats=...)` should respect the formats \
-argument, producing formatted values like '1.24e-24' instead of full precision."
+Include the FULL issue description in EVERY step prompt. The agent must \
+always have full context — do not split or omit any part of the issue.
 
-## Step 2: Embed the GOAL in EVERY step
-
-Include the extracted GOAL line at the TOP of every step prompt. The agent \
-may lose context over long conversations — the goal must always be visible.
-
-## Step 3: Split the remaining issue context across steps
-- **localize**: Include symptoms (error messages, unexpected behavior) to \
-search for. Do NOT include reproduction code or fix hints.
-- **investigate**: Include the reproduction code. Reference localize output.
-- **fix**: Include expected correct behavior. Reference investigate findings. \
-The fix+validate step should iterate: apply fix, run tests, if tests fail \
-adjust and retry.
-- **validate**: Include test expectations. If tests fail, go back and fix \
-the code — do not just report failure.
+For each step, prepend the step-specific instruction BEFORE the full issue:
+- **localize**: "First, locate the relevant source files for this issue."
+- **investigate**: "Reproduce the bug and identify the root cause."
+- **fix**: "Apply a minimal fix to resolve the issue. Do NOT modify test files."
+- **validate**: "Run tests to verify the fix. Do NOT modify test files."
 
 ## Constraints
-- Each step prompt must be self-contained — the agent sees NOTHING else
-- The GOAL line must appear at the top of EVERY step prompt
-- Do NOT repeat the full issue in every step (only the goal + step-specific context)
-- Keep each prompt under 2000 characters
+- Each step prompt = step instruction + FULL issue description
 - End each prompt with "Call task_done when complete."
 - Output the COMPLETE YAML with the same structure
-- IMPORTANT: Include in the fix and validate steps: "Do NOT modify test files. \
-Only change source code files to fix the issue. Test changes have already been \
-handled separately."
+- Do NOT modify step IDs, tools, or inputs
 
 ## Base DAG
 

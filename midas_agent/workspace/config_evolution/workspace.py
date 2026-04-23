@@ -86,16 +86,8 @@ class ConfigEvolutionWorkspace(Workspace):
         elif self.work_dir:
             self._dag_executor.set_work_dir(self.work_dir)
 
-        # Merge issue into config for multi-step DAGs.
-        # The base config has generic prompts; the merged config has
-        # issue-specific context embedded in each step prompt.
-        if not self._is_default_config():
-            exec_config = self._config_merger.merge(self._workflow_config, issue)
-        else:
-            exec_config = self._workflow_config
-
         self._last_result = self._dag_executor.execute(
-            exec_config, issue, self._call_llm,
+            self._workflow_config, issue, self._call_llm,
             balance_provider=lambda: self._budget,
         )
 
