@@ -255,16 +255,6 @@ class ReactAgent:
                         "content": tool_content,
                     })
 
-                    # Check for task_done action
-                    if tool_call.name == "task_done":
-                        logger.info("  Task done at iter %d (%d tokens).", iterations, total_tokens)
-                        return AgentResult(
-                            output=result,
-                            iterations=iterations,
-                            termination_reason="done",
-                            action_history=action_history,
-                        )
-
                 # Check if agent is stuck
                 stuck_msg = ReactAgent._check_stuck(action_history)
                 if stuck_msg:
@@ -284,10 +274,42 @@ class ReactAgent:
                         if not messages or messages[0].get("role") != "system":
                             messages.insert(0, {"role": "system", "content": self.system_prompt})
             elif response.content:
-                # Text response without tool call — should not happen
-                # with tool_choice="required", but handle gracefully.
-                logger.info("  [iter %d] Response (no tool): %s", iterations, response.content[:200])
-                messages.append({"role": "assistant", "content": response.content})
+                # Text response without tool calls — agent claims done.
+                # Use judge to validate if system_llm is available.
+                logger.info("  [iter %d] Text response (claim done): %s", iterations, response.content[:200])
+
+                if self.system_llm and action_history:
+                    from midas_agent.workspace.config_evolution.step_judge import StepJudge
+                    judge = StepJudge(self.system_llm)
+                    trace = StepJudge.format_trace_for_judge(action_history, len(action_history))
+                    verdict = judge.validate_completion(
+                        goal="Fix the issue described in the task",
+                        trace=trace,
+                        agent_message=response.content,
+                    )
+                    if verdict.done:
+                        logger.info("  Judge ACCEPT at iter %d: %s", iterations, verdict.reason[:100])
+                        return AgentResult(
+                            output=response.content,
+                            iterations=iterations,
+                            termination_reason="done",
+                            action_history=action_history,
+                        )
+                    else:
+                        logger.info("  Judge REJECT at iter %d: %s", iterations, verdict.reason[:100])
+                        messages.append({"role": "assistant", "content": response.content})
+                        messages.append({"role": "user", "content": (
+                            "You haven't completed the task yet. "
+                            "Continue working on the issue — use tools to make progress."
+                        )})
+                else:
+                    # No judge available — trust the agent
+                    return AgentResult(
+                        output=response.content,
+                        iterations=iterations,
+                        termination_reason="done",
+                        action_history=action_history,
+                    )
             else:
                 # Completely empty response — terminate.
                 return AgentResult(

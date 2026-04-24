@@ -248,8 +248,8 @@ class ConfigMerger:
     ) -> WorkflowConfig:
         """Merge issue context into base DAG step prompts.
 
-        Returns the merged config, or the original base config if
-        merging fails after retries.
+        Raises RuntimeError if merging fails — there is no silent fallback.
+        The agent cannot work without issue context in the step prompts.
         """
         from midas_agent.prompts import CONFIG_MERGE_PROMPT
         from midas_agent.workspace.config_evolution.mutator import (
@@ -266,18 +266,16 @@ class ConfigMerger:
         messages = [{"role": "user", "content": merge_prompt}]
 
         for attempt in range(1 + MAX_MERGE_RETRIES):
-            try:
-                resp = self._system_llm(
-                    LLMRequest(messages=messages, model="default"),
-                )
-            except Exception as e:
-                logger.warning("Config merge failed: %s", e)
-                return base_config
+            resp = self._system_llm(
+                LLMRequest(messages=messages, model="default"),
+            )
 
             raw_yaml = _extract_yaml(resp.content or "")
             if not raw_yaml:
-                logger.warning("Config merge returned empty response")
-                return base_config
+                messages.append({"role": "assistant", "content": resp.content or ""})
+                messages.append({"role": "user", "content": "You must output the YAML inside ```yaml fences. Please try again."})
+                logger.info("Config merge: no YAML in response, retrying (attempt %d/%d)", attempt + 1, 1 + MAX_MERGE_RETRIES)
+                continue
 
             merged = _parse_config_yaml(raw_yaml)
             if merged is None:
@@ -285,8 +283,9 @@ class ConfigMerger:
                 messages.append({"role": "user", "content": "That YAML failed to parse. Please output valid YAML."})
                 continue
 
-            # Validate basic config structure
-            validation_errors = validate_config(merged)
+            # Validate basic config structure (skip prompt length — merged
+            # prompts are long because they embed the full issue text)
+            validation_errors = validate_config(merged, skip_prompt_length=True)
             if validation_errors:
                 error_msg = (
                     "The configuration has validation errors:\n"
@@ -318,14 +317,37 @@ class ConfigMerger:
                 )
                 continue
 
+            # Verify prompts actually changed — issue must be embedded
+            prompts_changed = any(
+                b.prompt != m.prompt
+                for b, m in zip(base_config.steps, merged.steps)
+            )
+            if not prompts_changed:
+                messages.append({"role": "assistant", "content": resp.content or ""})
+                messages.append({
+                    "role": "user",
+                    "content": (
+                        "The prompts are IDENTICAL to the base config. You MUST rewrite "
+                        "each step's prompt to include the issue description. "
+                        "Please try again."
+                    ),
+                })
+                logger.info(
+                    "Config merge: prompts unchanged, retrying (attempt %d/%d)",
+                    attempt + 1, 1 + MAX_MERGE_RETRIES,
+                )
+                continue
+
             logger.info(
                 "Config merged for issue '%s' (%d steps, attempt %d)",
                 issue.issue_id, len(merged.steps), attempt + 1,
             )
             return merged
 
-        logger.warning("Config merge: exhausted retries, using base config")
-        return base_config
+        raise RuntimeError(
+            f"Config merge failed after {1 + MAX_MERGE_RETRIES} attempts "
+            f"for issue '{issue.issue_id}'. Cannot proceed without issue context."
+        )
 
     @staticmethod
     def _structure_preserved(

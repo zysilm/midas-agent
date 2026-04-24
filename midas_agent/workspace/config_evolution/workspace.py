@@ -86,8 +86,20 @@ class ConfigEvolutionWorkspace(Workspace):
         elif self.work_dir:
             self._dag_executor.set_work_dir(self.work_dir)
 
+        # Merge issue context into step prompts for multi-step DAGs.
+        # Single-step (default) configs pass issue via ReactAgent context.
+        exec_config = self._workflow_config
+        if not self._is_default_config():
+            exec_config = self._config_merger.merge(
+                self._workflow_config, issue,
+            )
+            logger.info(
+                "Workspace %s: merged issue '%s' into %d-step config",
+                self.workspace_id, issue.issue_id, len(exec_config.steps),
+            )
+
         self._last_result = self._dag_executor.execute(
-            self._workflow_config, issue, self._call_llm,
+            exec_config, issue, self._call_llm,
             balance_provider=lambda: self._budget,
         )
 

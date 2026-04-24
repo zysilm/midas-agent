@@ -35,7 +35,8 @@ for specific sections.
 (3-5 lines) to make `old_str` unique.
   - `insert`: Insert text after a specific line number.
   - `undo_edit`: Revert the last edit to a file.
-- **task_done**: Call this when you have completed your task or the current step.\
+When you have completed the task, stop calling tools and state your \
+findings and what you changed as text.\
 """
 
 DAG_SYSTEM_PROMPT = """\
@@ -135,25 +136,37 @@ CONFIG_MERGE_PROMPT = """\
 You are a workflow configuration merger for a coding agent system.
 
 Given a BASE workflow DAG and a GitHub issue, rewrite ONLY the prompt field \
-of each step to embed the relevant parts of the issue. Keep everything else \
-(meta, step IDs, tools, inputs) EXACTLY as-is.
+of each step to embed the RELEVANT PARTS of the issue. Keep everything else \
+(meta, step IDs, tools, inputs, goals) EXACTLY as-is.
 
-## Rules
+## Rules — distribute the issue across steps
 
-Include the FULL issue description in EVERY step prompt. The agent must \
-always have full context — do not split or omit any part of the issue.
+Do NOT put the full issue in every step. Instead, give each step ONLY the \
+information it needs to do its specific job. This prevents the agent from \
+jumping ahead (e.g., trying to fix the code during localization).
 
-For each step, prepend the step-specific instruction BEFORE the full issue:
-- **localize**: "First, locate the relevant source files for this issue."
-- **investigate**: "Reproduce the bug and identify the root cause."
-- **fix**: "Apply a minimal fix to resolve the issue. Do NOT modify test files."
-- **validate**: "Run tests to verify the fix. Do NOT modify test files."
+How to distribute:
+- **localize/search steps**: Issue title + brief description of the symptom \
+(what module, what goes wrong). Do NOT include reproduction code or expected \
+fix details. The agent should search without knowing the answer yet.
+- **reproduce/investigate steps**: Issue title + the reproduction steps and \
+code snippets from the issue + expected vs actual behavior. The agent needs \
+to reproduce the bug, not fix it.
+- **fix/patch steps**: The FULL issue description — the agent needs complete \
+context to apply the correct fix. Include the expected behavior, actual \
+behavior, and reproduction code.
+- **validate/test steps**: Issue title + expected correct behavior. The agent \
+needs to know what "fixed" looks like to verify properly.
+- **cleanup steps**: Only the issue title for reference.
 
 ## Constraints
-- Each step prompt = step instruction + FULL issue description
-- End each prompt with "Call task_done when complete."
+- Each step prompt = original step instruction + distributed issue context
+- End each prompt with: "When you complete this phase, stop calling tools \
+and state your findings as text."
 - Output the COMPLETE YAML with the same structure
-- Do NOT modify step IDs, tools, or inputs
+- Do NOT modify step IDs, tools, inputs, or goals
+- Every step prompt MUST be different from the base — you MUST embed issue \
+context into each one
 
 ## Base DAG
 
