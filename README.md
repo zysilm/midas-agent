@@ -139,7 +139,3 @@ midas infer --dag config.yaml
 ├── data/                    # Success + failure traces (GEPA dataset)
 └── log/configs/             # DAG YAML per episode (shows prompt evolution)
 ```
-
-## License
-
-MIT
