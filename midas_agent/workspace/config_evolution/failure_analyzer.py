@@ -16,11 +16,9 @@ a GitHub issue but the gold-standard test failed (score=0).
 ## Issue summary
 {issue_summary}
 
-## Agent trace (condensed)
+## Agent trace (actions with full parameters, results truncated)
 {trace}
 
-<<<<<<< HEAD
-=======
 ## What the agent actually changed (str_replace edits)
 {patch_summary}
 
@@ -30,28 +28,49 @@ a GitHub issue but the gold-standard test failed (score=0).
 ## Gold test output (what the test actually checked)
 {test_output}
 
->>>>>>> 860a91e (Wire gold test output into failure analyzer)
 ## Task
-1. Which step went wrong? Choose from: {step_ids}
-2. What is the ABSTRACT lesson? Do NOT include issue-specific details \
-(no file names, function names, variable names). The lesson must be \
-general enough to help on OTHER issues.
+1. Which DAG step went wrong? Choose from: {step_ids}
+2. What SPECIFICALLY did the agent do wrong in that step?
+3. What is the ABSTRACT lesson (no file/function names — must generalize \
+to other issues)?
 
 ## Format
 Respond in exactly this format:
 STEP: <step_id>
-LESSON: <one sentence abstract lesson>
-
-Example:
-STEP: fix
-LESSON: When the issue describes a misleading error message, fix the \
-message text, not the underlying condition logic.\
+MISTAKE: <what specifically went wrong>
+LESSON: <one sentence abstract lesson for future runs>\
 """
+
+
+def _build_rich_trace(raw_trace: str, max_result_chars: int = 200) -> str:
+    """Keep full action names + params, truncate only tool results."""
+    lines = []
+    for line in raw_trace.split("\n"):
+        if "\u2192" in line:
+            parts = line.split("\u2192", 1)
+            prefix = parts[0]
+            result = parts[1].strip() if len(parts) > 1 else ""
+            if len(result) > max_result_chars:
+                result = result[:max_result_chars] + "..."
+            lines.append(f"{prefix}\u2192 {result}")
+        else:
+            lines.append(line)
+    return "\n".join(lines)
+
+
+def _extract_patch_summary(raw_trace: str) -> str:
+    """Extract str_replace edit actions from the trace."""
+    edits = []
+    for line in raw_trace.split("\n"):
+        if "str_replace_editor" in line and "str_replace" in line and "old_str=" in line:
+            edits.append(line)
+    return "\n".join(edits) if edits else "(no edits found in trace)"
 
 
 @dataclass
 class FailureAnalysis:
     step_id: str
+    mistake: str
     lesson: str
 
 
@@ -69,28 +88,16 @@ class FailureAnalyzer:
         issue_summary: str,
         trace: str,
         step_ids: list[str],
-<<<<<<< HEAD
-=======
         gold_test_names: list[str] | None = None,
         patch: str | None = None,
         test_output: str | None = None,
->>>>>>> 860a91e (Wire gold test output into failure analyzer)
     ) -> FailureAnalysis | None:
-        """Analyze a failed trace and return the step that failed + abstract lesson.
+        """Analyze a failed trace and return the step + mistake + lesson.
 
         Args:
-            issue_summary: brief description of the issue (first 200 chars)
-            trace: condensed execution trace
+            issue_summary: the issue description
+            trace: full execution trace (from format_trace)
             step_ids: list of step IDs in the DAG config
-<<<<<<< HEAD
-
-        Returns:
-            FailureAnalysis or None if analysis fails
-        """
-        prompt = FAILURE_ANALYSIS_PROMPT.format(
-            issue_summary=issue_summary[:500],
-            trace=trace[:3000],
-=======
             gold_test_names: FAIL_TO_PASS test names from SWE-bench
             patch: the agent's actual git diff (if available)
             test_output: SWE-bench test output showing what failed and why
@@ -116,7 +123,6 @@ class FailureAnalyzer:
             patch_summary=patch_summary,
             gold_test_info=gold_test_info,
             test_output=test_output_section,
->>>>>>> 860a91e (Wire gold test output into failure analyzer)
             step_ids=", ".join(step_ids),
         )
 
@@ -132,12 +138,15 @@ class FailureAnalyzer:
     @staticmethod
     def _parse_response(text: str, step_ids: list[str]) -> FailureAnalysis | None:
         step_id = ""
+        mistake = ""
         lesson = ""
 
         for line in text.strip().split("\n"):
             line = line.strip()
             if line.upper().startswith("STEP:"):
                 step_id = line[5:].strip().lower()
+            elif line.upper().startswith("MISTAKE:"):
+                mistake = line[8:].strip()
             elif line.upper().startswith("LESSON:"):
                 lesson = line[7:].strip()
 
@@ -151,6 +160,6 @@ class FailureAnalyzer:
                     step_id = sid
                     break
             else:
-                step_id = step_ids[-1]  # default to last step (usually fix/validate)
+                step_id = step_ids[-1]
 
-        return FailureAnalysis(step_id=step_id, lesson=lesson)
+        return FailureAnalysis(step_id=step_id, mistake=mistake, lesson=lesson)
