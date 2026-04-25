@@ -437,15 +437,8 @@ def run_training(
 
     patches_base_dir = os.path.join(train_dir, "log", "patches")
 
-    # -- Create workspaces and adaptive controller --
-    from midas_agent.scheduler.adaptive_workspace import AdaptiveWorkspaceController
-
-    adaptive_ctrl = AdaptiveWorkspaceController() if config.adaptive_workspaces else None
+    # -- Create workspace --
     scheduler.create_workspaces()
-    if adaptive_ctrl:
-        workspaces = scheduler.get_workspaces()
-        if workspaces:
-            adaptive_ctrl.init_champion(workspaces[0].workspace_id)
 
     # -- Resume from checkpoint if available --
     processed_issue_ids: list[str] = []
@@ -497,148 +490,121 @@ def run_training(
 
         # Filter out already-processed issues
         issues = [i for i in issues if i.issue_id not in processed_ids_set]
-        # Restore adaptive controller state
-        if adaptive_ctrl and "adaptive_controller" in checkpoint:
-            from midas_agent.scheduler.adaptive_workspace import AdaptiveWorkspaceController
-            adaptive_ctrl = AdaptiveWorkspaceController.from_dict(
-                checkpoint["adaptive_controller"]
-            )
-
         logger.info(
             "Resumed from checkpoint: %d episodes done, %d remaining",
             len(processed_issue_ids), len(issues),
         )
 
     # -- Episode loop --
+    MAX_RETRIES = 5  # max attempts per issue (1 initial + 4 retries)
+
     for episode_idx, issue in enumerate(issues):
-        global_idx = len(processed_issue_ids) + episode_idx
         logger.info(
             "Episode %d/%d: %s (%s)",
-            global_idx + 1, global_idx + len(issues), issue.issue_id, issue.repo,
+            episode_idx + 1, len(issues), issue.issue_id, issue.repo,
         )
 
-        # 1. Clone repo
-        repo_dir = tempfile.mkdtemp(prefix=f"midas_repo_{global_idx}_")
-        try:
-            if issue.base_commit and issue.repo:
-                clone_repo(issue.repo, issue.base_commit, repo_dir)
-                logger.info("  Cloned %s @ %s", issue.repo, issue.base_commit[:8])
-            else:
-                logger.info("  No repo to clone (dry run)")
+        best_score = 0.0
+        for attempt in range(1, MAX_RETRIES + 1):
+            if attempt > 1:
+                logger.info("  Retry %d/%d (after DAG update)", attempt, MAX_RETRIES)
 
-            # 2. Set current issue and allocate budgets
-            scheduler.set_current_issue(issue)
-            scheduler.allocate_budgets()
-
-            # 3. Setup and execute all workspaces in parallel
-            workspaces = scheduler.get_workspaces()
-            ws_repo_dirs: list[str] = []
+            # 1. Clone repo (fresh for each attempt)
+            repo_dir = tempfile.mkdtemp(prefix=f"midas_repo_{episode_idx}_")
             containers: list = []
+            try:
+                if issue.base_commit and issue.repo:
+                    clone_repo(issue.repo, issue.base_commit, repo_dir)
+                    if attempt == 1:
+                        logger.info("  Cloned %s @ %s", issue.repo, issue.base_commit[:8])
 
-            with ThreadPoolExecutor(max_workers=len(workspaces)) as executor:
-                futures = {}
+                # 2. Allocate budget and execute
+                scheduler.set_current_issue(issue)
+                scheduler.allocate_budgets()
+
+                workspaces = scheduler.get_workspaces()
+                ws_repo_dirs: list[str] = []
+
                 for ws in workspaces:
-                    futures[executor.submit(
-                        _setup_and_execute_workspace,
-                        ws, repo_dir, config, issue, ws_repo_dirs, containers,
-                    )] = ws
-                for future in as_completed(futures):
-                    ws = futures[future]
                     try:
-                        future.result()
+                        _setup_and_execute_workspace(
+                            ws, repo_dir, config, issue, ws_repo_dirs, containers,
+                        )
                     except Exception as e:
                         logger.warning("  %s: execution failed: %s", ws.workspace_id, e)
 
-            # 4. Submit patches
-            for ws in workspaces:
-                ws.submit_patch()
-
-            # 5. Evaluate and select
-            patches = collect_patches(workspaces, patches_base_dir)
-            evicted, survivors, eval_results = scheduler.evaluate_and_select(patches)
-
-            logger.info(
-                "  Scores: %s",
-                {ws_id: f"{r.s_w:.3f}" for ws_id, r in eval_results.items()},
-            )
-            if evicted:
-                logger.info("  Evicted: %s", evicted)
-
-            # 6. Post-episode (config creation / GEPA optimization)
-            eval_results_dict = {
-                ws_id: {"s_w": r.s_w, "s_exec": r.s_exec}
-                for ws_id, r in eval_results.items()
-            }
-            for ws in workspaces:
-                ws.post_episode(eval_results_dict, evicted_ids=evicted)
-
-            # 7. Adaptive workspace management or fixed eviction
-            if adaptive_ctrl:
-                # Record η for each workspace
+                # 3. Submit patches and evaluate
                 for ws in workspaces:
-                    r = eval_results.get(ws.workspace_id)
-                    if r:
-                        adaptive_ctrl.record_episode(ws.workspace_id, r.s_exec)
+                    ws.submit_patch()
 
-                # Check if any workspace's GEPA changed its config
-                gepa_changes = {
-                    ws.workspace_id: getattr(ws, "_last_gepa_changed", False)
-                    for ws in workspaces
+                patches = collect_patches(workspaces, patches_base_dir)
+                evicted, survivors, eval_results = scheduler.evaluate_and_select(patches)
+
+                ws = workspaces[0]  # single workspace
+                r = eval_results.get(ws.workspace_id)
+                score = r.s_exec if r else 0.0
+                best_score = max(best_score, score)
+
+                logger.info("  Score: %.3f (attempt %d/%d)", score, attempt, MAX_RETRIES)
+
+                # 4. Post-episode (record trace, config creation on first success)
+                eval_results_dict = {
+                    ws_id: {"s_w": res.s_w, "s_exec": res.s_exec}
+                    for ws_id, res in eval_results.items()
                 }
-                any_gepa_ran = any(gepa_changes.values()) or any(
-                    getattr(ws, "_prompt_optimizer", None)
-                    and not getattr(ws, "_prompt_optimizer").should_optimize()
-                    and getattr(ws, "_prompt_optimizer")._episodes_since_last_optimization == 0
-                    for ws in workspaces
+                ws.post_episode(eval_results_dict, evicted_ids=[])
+
+                # 5. Save artifacts
+                _save_swebench_artifacts(
+                    train_dir, issue, workspaces, eval_results,
                 )
 
-                if any_gepa_ran:
-                    champ_id = adaptive_ctrl.champion_stats.workspace_id if adaptive_ctrl.champion_stats else None
-                    chall_id = adaptive_ctrl.challenger_stats.workspace_id if adaptive_ctrl.challenger_stats else None
+                # 6. If passed, move on
+                if score >= 1.0:
+                    logger.info("  PASS at attempt %d", attempt)
+                    break
 
-                    champ_changed = gepa_changes.get(champ_id, False)
-                    chall_changed = gepa_changes.get(chall_id, False) if chall_id else None
+                # 7. If failed and have a DAG config, reflect and retry
+                if not ws._is_default_config() and attempt < MAX_RETRIES:
+                    optimizer = ws._prompt_optimizer
+                    if optimizer._traces:
+                        logger.info("  Reflecting on failure (attempt %d)...", attempt)
+                        new_config, changed = optimizer.maybe_optimize(ws._workflow_config)
+                        if changed:
+                            ws._workflow_config = new_config
+                            logger.info("  DAG updated — retrying same issue")
+                        else:
+                            # Force reflection even if interval not reached
+                            new_config = optimizer.optimize(ws._workflow_config)
+                            if new_config is not ws._workflow_config:
+                                ws._workflow_config = new_config
+                                logger.info("  DAG updated (forced) — retrying same issue")
+                            else:
+                                logger.info("  No DAG changes — skipping retries")
+                                break
+                else:
+                    break  # no DAG yet or max retries
 
-                    result = adaptive_ctrl.on_gepa_result(champ_changed, chall_changed)
+            finally:
+                for cm in containers:
+                    try:
+                        cm.stop()
+                    except Exception:
+                        pass
+                # Clean up repo copies
+                for d in ws_repo_dirs:
+                    try:
+                        import shutil
+                        shutil.rmtree(d, ignore_errors=True)
+                    except Exception:
+                        pass
 
-                    if result["action"] == "start_h2h":
-                        # Create a challenger workspace with the champion's NEW config
-                        new_id = f"ws-challenger-{global_idx}"
-                        best_config = scheduler._get_best_config()
-                        scheduler._workspace_manager.replace(
-                            champ_id, champ_id, best_config,
-                        ) if False else None  # champion keeps its config
-                        ws_new = scheduler._workspace_manager.create(new_id, best_config)
-                        adaptive_ctrl.start_head_to_head(new_id)
-
-                    elif result["action"] == "select_winner":
-                        loser_id = result.get("loser_id")
-                        if loser_id:
-                            scheduler._workspace_manager.destroy(loser_id)
-                            logger.info("  Adaptive: removed loser %s", loser_id)
-            else:
-                # Fixed eviction mode
-                scheduler.replace_evicted()
-
-            # 8. Save SWE-bench submission artifacts
-            _save_swebench_artifacts(
-                train_dir, issue, workspaces, eval_results,
-            )
-
-            # 10. Save checkpoint
-            processed_issue_ids.append(issue.issue_id)
-            _save_checkpoint(
-                train_dir, global_idx, processed_issue_ids,
-                workspaces, scheduler, adaptive_ctrl,
-            )
-
-        finally:
-            # 11. Clean up containers and repo copies
-            for cm in containers:
-                try:
-                    cm.stop()
-                except Exception:
-                    pass
+        # Save checkpoint after all attempts for this issue
+        processed_issue_ids.append(issue.issue_id)
+        _save_checkpoint(
+            train_dir, episode_idx, processed_issue_ids,
+            workspaces, scheduler, None,  # no adaptive controller
+        )
             shutil.rmtree(repo_dir, ignore_errors=True)
             shutil.rmtree(repo_dir + "_workspaces", ignore_errors=True)
 
