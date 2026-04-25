@@ -215,7 +215,7 @@ def _cmd_infer(args: argparse.Namespace) -> None:
         print(f"Error: failed to parse DAG config from {args.dag}")
         sys.exit(1)
 
-    print(f"DAG: {dag_config.meta.name} ({len(dag_config.steps)} steps)")
+    logger.info("DAG: %s (%d steps)", dag_config.meta.name, len(dag_config.steps))
 
     from midas_agent.llm.litellm_provider import LiteLLMProvider
 
@@ -254,7 +254,7 @@ def _infer_eval(args, dag_config, provider, budget, logger):
     elif args.issues is not None:
         issues = issues[:args.issues]
 
-    print(f"Eval: {len(issues)} issues, budget={budget}")
+    logger.info("Eval: %d issues, budget=%d", len(issues), budget)
 
     def call_llm(req, retries=3):
         for attempt in range(retries):
@@ -272,9 +272,7 @@ def _infer_eval(args, dag_config, provider, budget, logger):
     results = []
 
     for i, issue in enumerate(issues):
-        print(f"\n{'='*60}")
-        print(f"Issue {i+1}/{len(issues)}: {issue.issue_id}")
-        print(f"{'='*60}")
+        logger.info("Issue %d/%d: %s", i + 1, len(issues), issue.issue_id)
 
         try:
             import subprocess
@@ -326,25 +324,22 @@ def _infer_eval(args, dag_config, provider, budget, logger):
             results.append({"issue": issue.issue_id, "score": score,
                            "iters": len(result.action_history), "patch": len(patch),
                            "time": elapsed})
-            print(f"  Score: {score:.3f}, iters: {len(result.action_history)}, "
-                  f"patch: {len(patch)} chars, time: {elapsed:.0f}s")
+            logger.info("  Result: score=%.3f, iters=%d, patch=%d chars, time=%.0fs",
+                        score, len(result.action_history), len(patch), elapsed)
 
         except Exception as e:
-            print(f"  FAILED: {e}")
+            logger.error("  FAILED: %s", e)
             results.append({"issue": issue.issue_id, "score": 0.0,
                            "iters": 0, "patch": 0, "time": 0})
         finally:
             cm.stop()
 
     # Summary
-    print(f"\n{'='*60}")
-    print("SUMMARY")
-    print(f"{'='*60}")
     passed = sum(1 for r in results if r["score"] >= 1.0)
-    print(f"Pass rate: {passed}/{len(results)} ({100*passed/len(results):.0f}%)")
+    logger.info("SUMMARY: Pass rate: %d/%d (%d%%)", passed, len(results), 100 * passed // len(results))
     for r in results:
-        print(f"  {r['issue']}: score={r['score']:.3f}, "
-              f"iters={r['iters']}, patch={r['patch']} chars, {r['time']:.0f}s")
+        logger.info("  %s: score=%.3f, iters=%d, patch=%d chars, %.0fs",
+                    r["issue"], r["score"], r["iters"], r["patch"], r["time"])
 
 
 def _infer_tui(dag_config, provider, budget):
