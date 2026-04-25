@@ -126,14 +126,34 @@ class FailureAnalyzer:
             step_ids=", ".join(step_ids),
         )
 
-        try:
-            resp = self._system_llm(
-                LLMRequest(messages=[{"role": "user", "content": prompt}], model="default"),
-            )
-            return self._parse_response(resp.content or "", step_ids)
-        except Exception as e:
-            logger.warning("Failure analysis failed: %s", e)
-            return None
+        max_retries = 3
+        messages = [{"role": "user", "content": prompt}]
+
+        for attempt in range(1, max_retries + 1):
+            try:
+                resp = self._system_llm(
+                    LLMRequest(messages=messages, model="default"),
+                )
+            except Exception as e:
+                logger.warning("Failure analysis API error (attempt %d/%d): %s", attempt, max_retries, e)
+                continue
+
+            result = self._parse_response(resp.content or "", step_ids)
+            if result is not None:
+                return result
+
+            # Response didn't parse — ask to retry with correct format
+            logger.info("Failure analysis: response didn't parse (attempt %d/%d), retrying", attempt, max_retries)
+            messages.append({"role": "assistant", "content": resp.content or ""})
+            messages.append({"role": "user", "content": (
+                "Your response could not be parsed. Please respond in EXACTLY this format:\n"
+                "STEP: <step_id>\n"
+                "MISTAKE: <what went wrong>\n"
+                "LESSON: <abstract lesson>"
+            )})
+
+        logger.warning("Failure analysis: exhausted %d retries", max_retries)
+        return None
 
     @staticmethod
     def _parse_response(text: str, step_ids: list[str]) -> FailureAnalysis | None:
