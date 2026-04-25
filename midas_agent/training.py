@@ -594,7 +594,6 @@ def run_training(
                 # Clean up repo copies
                 for d in ws_repo_dirs:
                     try:
-                        import shutil
                         shutil.rmtree(d, ignore_errors=True)
                     except Exception:
                         pass
