@@ -54,24 +54,39 @@ These lessons feed into the Config Reflector, which rewrites the DAG prompts. No
 
 ```bash
 poetry install
+```
 
-# Configure LLM (any LiteLLM-compatible provider)
-cat > .midas/config.yaml << EOF
-model: minimax/MiniMax-M2.5
+Configure your LLM provider in `.midas/config.yaml` (any [LiteLLM-compatible](https://docs.litellm.ai/docs/providers) model):
+
+```yaml
+model: your-provider/your-model
 api_key: sk-...
-api_base: https://api.minimax.io/v1
-EOF
+api_base: https://...   # optional, depends on provider
+```
 
-# Train (evolves DAG config over episodes)
-midas train --config train_config_evolution.yaml --issues 30
+### Train
 
-# Resume from checkpoint
-midas train --resume .midas/train/my-run/
+```bash
+# Train on all 500 SWE-bench Verified issues
+midas train --config train_config_evolution.yaml
 
-# Eval with frozen config (no evolution)
-midas infer --dag .midas/train/my-run/log/configs/ws-0_ep10.yaml --issues 50
+# Train on first N issues (for testing)
+midas train --config train_config_evolution.yaml --issues 10
 
-# Interactive mode
+# Resume from checkpoint after interruption
+midas train --resume .midas/train/<run-dir>/
+```
+
+### Infer
+
+```bash
+# Evaluate a trained DAG config on all SWE-bench Verified issues
+midas infer --dag .midas/train/<run-dir>/log/configs/ws-0_latest.yaml
+
+# Evaluate on first N issues
+midas infer --dag config.yaml --issues 50
+
+# Interactive mode (solve a problem in your local repo)
 midas infer --dag config.yaml
 ```
 
