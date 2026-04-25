@@ -100,6 +100,10 @@ midas infer --dag config.yaml
 - **Rich failure analysis** — sees full trace, patch diff, and gold test names
 - **Checkpoint & resume** — per-episode snapshots, crash-safe
 
+## Tests
+
+> Work in progress.
+
 ## Training Output
 
 ```
