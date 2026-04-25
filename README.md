@@ -1,138 +1,144 @@
 # Midas Agent
 
-Budget-driven training engine that evolves coding agent workflows on SWE-bench. Selects configurations by **eta = Score / Cost**, trains through failure-driven reflection (GEPA), and adapts multi-step DAG workflows over time.
+A self-improving coding agent that learns from its own failures. Given a set of GitHub issues, Midas trains a multi-step DAG workflow through a closed-loop process: solve issues, analyze failures, reflect on what went wrong, and evolve the workflow prompts — so the next batch of issues benefits from past mistakes.
 
-## Architecture
+## Motivation
+
+Most coding agents use a fixed prompt and hope for the best. When they fail, the failure is discarded. Midas closes that loop:
+
+1. The agent solves issues using a **multi-step DAG** (localize → investigate → fix → validate)
+2. Failed attempts are **analyzed** — an LLM identifies which step went wrong and extracts an abstract lesson
+3. A **reflector** rewrites the DAG prompts to incorporate those lessons
+4. The new config is **validated head-to-head** against the old one on fresh issues
+5. The winner survives. Repeat.
+
+Over episodes, the DAG prompts evolve from generic instructions into battle-tested guidance like *"don't edit test files"*, *"fix the error message, not the condition logic"*, *"actually change the behavior, don't just add a deprecation warning."*
+
+## Pipeline
 
 <p align="center">
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 340" width="720" height="340" font-family="system-ui, sans-serif" font-size="13">
-  <!-- Boxes -->
-  <rect x="260" y="10" width="200" height="44" rx="8" fill="#1a1a2e" stroke="#e94560" stroke-width="2"/>
-  <text x="360" y="37" text-anchor="middle" fill="#fff" font-weight="bold">Training Loop</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 520" width="800" height="520" font-family="system-ui, sans-serif" font-size="13">
+  <defs>
+    <marker id="ah" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6Z" fill="#888"/></marker>
+  </defs>
 
-  <rect x="520" y="90" width="180" height="44" rx="8" fill="#1a1a2e" stroke="#0f3460" stroke-width="2"/>
-  <text x="610" y="117" text-anchor="middle" fill="#fff" font-weight="bold">DAG Executor</text>
+  <!-- Background label: CLOSED LOOP -->
+  <text x="400" y="505" text-anchor="middle" fill="#555" font-size="12" font-style="italic">closed-loop training — each cycle improves the next</text>
 
-  <rect x="520" y="180" width="180" height="44" rx="8" fill="#1a1a2e" stroke="#0f3460" stroke-width="2"/>
-  <text x="610" y="207" text-anchor="middle" fill="#fff" font-weight="bold">SWE-bench Scorer</text>
+  <!-- 1. Training Loop -->
+  <rect x="280" y="15" width="240" height="50" rx="10" fill="#1a1a2e" stroke="#e94560" stroke-width="2"/>
+  <text x="400" y="38" text-anchor="middle" fill="#fff" font-weight="bold" font-size="14">Training Loop</text>
+  <text x="400" y="54" text-anchor="middle" fill="#aaa" font-size="11">for each SWE-bench issue</text>
 
-  <rect x="260" y="270" width="200" height="44" rx="8" fill="#1a1a2e" stroke="#e94560" stroke-width="2"/>
-  <text x="360" y="297" text-anchor="middle" fill="#fff" font-weight="bold">Failure Analyzer</text>
+  <!-- 2. DAG Executor -->
+  <rect x="560" y="110" width="220" height="70" rx="10" fill="#1a1a2e" stroke="#0f3460" stroke-width="2"/>
+  <text x="670" y="135" text-anchor="middle" fill="#fff" font-weight="bold">DAG Executor</text>
+  <text x="670" y="153" text-anchor="middle" fill="#aaa" font-size="10">localize → investigate → fix → validate</text>
+  <text x="670" y="168" text-anchor="middle" fill="#aaa" font-size="10">StepJudge validates each transition</text>
 
-  <rect x="20" y="180" width="180" height="44" rx="8" fill="#1a1a2e" stroke="#e94560" stroke-width="2"/>
-  <text x="110" y="207" text-anchor="middle" fill="#fff" font-weight="bold">GEPA Reflector</text>
+  <!-- 3. SWE-bench Scorer -->
+  <rect x="560" y="230" width="220" height="50" rx="10" fill="#1a1a2e" stroke="#0f3460" stroke-width="2"/>
+  <text x="670" y="260" text-anchor="middle" fill="#fff" font-weight="bold">SWE-bench Scorer</text>
 
-  <rect x="20" y="90" width="180" height="44" rx="8" fill="#1a1a2e" stroke="#16c79a" stroke-width="2"/>
-  <text x="110" y="117" text-anchor="middle" fill="#fff" font-weight="bold">Adaptive Workspace</text>
+  <!-- 4. Failure Analyzer -->
+  <rect x="280" y="340" width="240" height="70" rx="10" fill="#1a1a2e" stroke="#e94560" stroke-width="2"/>
+  <text x="400" y="365" text-anchor="middle" fill="#fff" font-weight="bold">Failure Analyzer</text>
+  <text x="400" y="383" text-anchor="middle" fill="#aaa" font-size="10">sees: trace + patch + gold test names</text>
+  <text x="400" y="398" text-anchor="middle" fill="#aaa" font-size="10">outputs: which step failed + abstract lesson</text>
+
+  <!-- 5. GEPA Reflector -->
+  <rect x="20" y="230" width="220" height="70" rx="10" fill="#1a1a2e" stroke="#e94560" stroke-width="2"/>
+  <text x="130" y="255" text-anchor="middle" fill="#fff" font-weight="bold">Config Reflector</text>
+  <text x="130" y="273" text-anchor="middle" fill="#aaa" font-size="10">success traces + failure lessons</text>
+  <text x="130" y="288" text-anchor="middle" fill="#aaa" font-size="10">→ rewrites all step prompts</text>
+
+  <!-- 6. Adaptive Workspace -->
+  <rect x="20" y="110" width="220" height="70" rx="10" fill="#1a1a2e" stroke="#16c79a" stroke-width="2"/>
+  <text x="130" y="135" text-anchor="middle" fill="#fff" font-weight="bold">Adaptive Workspace</text>
+  <text x="130" y="153" text-anchor="middle" fill="#aaa" font-size="10">champion vs challenger (head-to-head)</text>
+  <text x="130" y="168" text-anchor="middle" fill="#aaa" font-size="10">winner selected by issues solved</text>
 
   <!-- Arrows -->
-  <defs><marker id="ah" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6Z" fill="#888"/></marker></defs>
+  <path d="M520,45 Q600,45 600,110" fill="none" stroke="#888" stroke-width="1.5" marker-end="url(#ah)"/>
+  <text x="575" y="78" fill="#aaa" font-size="10">issue + merged config</text>
 
-  <path d="M460,40 Q520,40 520,90" fill="none" stroke="#888" stroke-width="1.5" marker-end="url(#ah)"/>
-  <path d="M610,134 L610,180" fill="none" stroke="#888" stroke-width="1.5" marker-end="url(#ah)"/>
-  <path d="M520,202 Q360,240 360,270" fill="none" stroke="#888" stroke-width="1.5" marker-end="url(#ah)"/>
-  <path d="M260,292 Q110,292 110,224" fill="none" stroke="#888" stroke-width="1.5" marker-end="url(#ah)"/>
-  <path d="M110,180 L110,134" fill="none" stroke="#888" stroke-width="1.5" marker-end="url(#ah)"/>
-  <path d="M200,100 Q260,70 260,40" fill="none" stroke="#888" stroke-width="1.5" marker-end="url(#ah)"/>
+  <path d="M670,180 L670,230" fill="none" stroke="#888" stroke-width="1.5" marker-end="url(#ah)"/>
+  <text x="685" y="210" fill="#aaa" font-size="10">patch</text>
 
-  <!-- Labels on arrows -->
-  <text x="510" y="68" fill="#aaa" font-size="11">clone + run</text>
-  <text x="620" y="163" fill="#aaa" font-size="11">score</text>
-  <text x="420" y="255" fill="#aaa" font-size="11">fail traces</text>
-  <text x="140" y="260" fill="#aaa" font-size="11">lessons</text>
-  <text x="65" y="163" fill="#aaa" font-size="11">new config</text>
-  <text x="180" y="58" fill="#aaa" font-size="11">champion</text>
+  <path d="M560,260 Q400,310 400,340" fill="none" stroke="#888" stroke-width="1.5" marker-end="url(#ah)"/>
+  <text x="460" y="310" fill="#aaa" font-size="10">score=0 → analyze</text>
+
+  <path d="M280,380 Q130,420 130,300" fill="none" stroke="#888" stroke-width="1.5" marker-end="url(#ah)"/>
+  <text x="160" y="370" fill="#aaa" font-size="10">lessons</text>
+
+  <path d="M130,230 L130,180" fill="none" stroke="#888" stroke-width="1.5" marker-end="url(#ah)"/>
+  <text x="85" y="210" fill="#aaa" font-size="10">new config</text>
+
+  <path d="M240,130 Q280,90 280,55" fill="none" stroke="#888" stroke-width="1.5" marker-end="url(#ah)"/>
+  <text x="215" y="78" fill="#aaa" font-size="10">champion config</text>
+
+  <!-- Success path shortcut -->
+  <path d="M560,245 Q460,245 460,65" fill="none" stroke="#16c79a" stroke-width="1.2" stroke-dasharray="5,3" marker-end="url(#ah)"/>
+  <text x="470" y="160" fill="#16c79a" font-size="10">score=1 → record</text>
 </svg>
 </p>
 
-```
-Scheduler ──► Workspace(s) ──► ReactAgent ──► Docker (SWE-bench)
-                 │
-         DAG: localize → investigate → fix → validate
-```
+### How the loop works
 
-### Three Layers
-
-| Layer | Role |
-|-------|------|
-| **Scheduler** | Episode loop, budget allocation, checkpoint/resume |
-| **Workspace** | Config evolution, DAG merge, GEPA reflection, adaptive selection |
-| **ReactAgent** | Tool-calling agent (bash, str_replace_editor). Text response = done signal |
+| Step | What happens |
+|------|-------------|
+| **Train** | Pick an issue, merge it into the DAG step prompts, run in Docker |
+| **Execute** | Agent follows DAG steps. Text response = step done. StepJudge validates. |
+| **Score** | SWE-bench runs gold tests. Pass (1.0) or fail (0.0). |
+| **Analyze** | On failure: LLM sees full trace + agent's patch + gold test names. Identifies which step failed and extracts an abstract lesson. |
+| **Reflect** | Every N episodes: ConfigReflector sees all success + failure traces. Rewrites DAG prompts — lessons are condensed in, not appended. |
+| **Compete** | New config enters head-to-head against champion on fresh issues. Winner keeps its spot. |
 
 ## Quick Start
 
 ```bash
-# Install
 poetry install
 
-# Configure LLM
+# Configure LLM (any LiteLLM-compatible provider)
 cat > .midas/config.yaml << EOF
-model: openrouter/qwen/qwen3-coder-30b-a3b-instruct
-api_key: sk-or-...
+model: minimax/MiniMax-M2.5
+api_key: sk-...
+api_base: https://api.minimax.io/v1
 EOF
 
-# Train on SWE-bench Verified
-midas train --config train_config_evolution.yaml --train-dir my-run
-
-# Train first N issues only
+# Train (evolves DAG config over episodes)
 midas train --config train_config_evolution.yaml --issues 30
 
 # Resume from checkpoint
 midas train --resume .midas/train/my-run/
 
-# Inference (interactive TUI)
+# Eval with frozen config (no evolution)
+midas infer --dag .midas/train/my-run/log/configs/ws-0_ep10.yaml --issues 50
+
+# Interactive mode
 midas infer --dag config.yaml
-
-# Inference (eval on SWE-bench, frozen config)
-midas infer --dag config.yaml --issues 50
 ```
-
-## How Training Works
-
-1. **Episode 1** -- Single-step ReactAgent solves an issue. On first success, `ConfigCreator` generates a multi-step DAG from the trace.
-
-2. **Episodes 2+** -- `ConfigMerger` embeds each new issue into the DAG step prompts. `StepJudge` validates step completion (trust-based). Agent terminates by producing text (no `task_done` tool).
-
-3. **Every N failures** -- GEPA triggers:
-   - `FailureAnalyzer` extracts abstract lessons from failed traces (sees full trace + patch + gold test names)
-   - `ConfigReflector` proposes a new whole-config from success + failure traces
-   - Lessons condensed into prompts (no prompt inflation)
-
-4. **Adaptive Workspaces** -- New config enters head-to-head against the champion. Winner selected by total issues solved. Both traces feed the next reflection cycle.
 
 ## Key Features
 
-- **eta = S/C selection** -- efficiency-driven workspace competition
-- **DAG workflows** -- multi-step plans (localize, investigate, fix, validate) that evolve
-- **Failure-driven evolution (GEPA)** -- real execution outcomes, not proxy metrics
-- **Adaptive workspaces** -- champion vs challenger head-to-head on identical issues
-- **No task_done tool** -- text response = termination; unknown tool calls treated as done
-- **ConfigMerger** -- embeds issue into step prompts (prevents overscoping), repairs structure via grafting
-- **Checkpoint & resume** -- crash-safe, per-episode checkpoints
-- **SWE-bench compatible** -- outputs `all_preds.jsonl` + traces for leaderboard submission
+- **Closed-loop learning** — failures are analyzed, lessons extracted, prompts improved
+- **DAG workflows** — multi-step plans that evolve from generic to battle-tested
+- **Adaptive workspaces** — champion vs challenger, winner survives
+- **No task_done tool** — text response = done; unknown tool calls treated as termination
+- **ConfigMerger** — embeds issue into step prompts to prevent overscoping
+- **Rich failure analysis** — sees full trace, patch diff, and gold test names
+- **Checkpoint & resume** — per-episode snapshots, crash-safe
 
 ## Training Output
 
 ```
 .midas/train/<run>/
-├── checkpoint.json         # Resume metadata
-├── train_config.yaml       # Saved config
-├── all_preds.jsonl         # SWE-bench submission format
-├── data/                   # Execution traces (GEPA dataset)
-├── trajs/                  # Per-issue reasoning traces
-└── log/
-    ├── configs/            # DAG YAML per episode
-    ├── action_logs/        # JSONL action logs
-    ├── patches/            # Git patches
-    └── best_config.yaml    # Best config at training end
+├── checkpoint.json
+├── train_config.yaml
+├── all_preds.jsonl          # SWE-bench submission
+├── data/                    # Success + failure traces (GEPA dataset)
+└── log/configs/             # DAG YAML per episode (shows prompt evolution)
 ```
-
-## Requirements
-
-- Python 3.11+
-- Docker (SWE-bench execution)
-- Poetry
-- Any [LiteLLM](https://docs.litellm.ai/)-compatible model
 
 ## License
 
