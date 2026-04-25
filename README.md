@@ -16,34 +16,63 @@ Over episodes, the DAG prompts evolve from generic instructions into battle-test
 
 ## Pipeline
 
-```mermaid
-flowchart TD
-    A["<b>Training Loop</b><br/><i>for each SWE-bench issue</i>"] -->|"issue + merged config"| B
-    B["<b>DAG Executor</b><br/><i>multi-step DAG, generated from first success</i><br/><i>StepJudge validates each transition</i>"] -->|"patch"| C
-    C["<b>SWE-bench Scorer</b>"] -->|"score=0"| D
-    C -.->|"score=1 → record trace"| A
-    D["<b>Failure Analyzer</b><br/><i>sees: trace + patch + gold test names</i><br/><i>outputs: which step failed + abstract lesson</i>"] -->|"lessons"| E
-    E["<b>Config Reflector</b><br/><i>success traces + failure lessons</i><br/><i>→ rewrites all step prompts</i>"] -->|"new config"| F
-    F["<b>Adaptive Workspace</b><br/><i>champion vs challenger, head-to-head</i><br/><i>winner selected by issues solved</i>"] -->|"champion config"| A
+### 1. Training Loop (per issue)
 
-    style A fill:#1a1a2e,stroke:#e94560,color:#fff
-    style B fill:#1a1a2e,stroke:#0f3460,color:#fff
-    style C fill:#1a1a2e,stroke:#0f3460,color:#fff
-    style D fill:#1a1a2e,stroke:#e94560,color:#fff
-    style E fill:#1a1a2e,stroke:#e94560,color:#fff
-    style F fill:#1a1a2e,stroke:#16c79a,color:#fff
+Each episode takes one SWE-bench issue and runs it through the current DAG config:
+
+```mermaid
+flowchart LR
+    subgraph episode["Episode (one issue)"]
+        direction LR
+        A["Issue<br/>from SWE-bench"] --> B["ConfigMerger<br/><i>embed issue into<br/>step prompts</i>"]
+        B --> C["DAG Executor<br/><i>step 1 → step 2 → ... → step N</i><br/><i>StepJudge validates each</i>"]
+        C --> D["Patch"]
+        D --> E["SWE-bench<br/>Scorer"]
+        E --> F{pass?}
+        F -->|"score=1"| G["Record<br/>success trace"]
+        F -->|"score=0"| H["Record failure<br/>trace + patch +<br/>gold test names"]
+    end
+
+    style A fill:#0d1117,stroke:#58a6ff,color:#fff
+    style B fill:#0d1117,stroke:#58a6ff,color:#fff
+    style C fill:#0d1117,stroke:#58a6ff,color:#fff
+    style D fill:#0d1117,stroke:#58a6ff,color:#fff
+    style E fill:#0d1117,stroke:#58a6ff,color:#fff
+    style F fill:#0d1117,stroke:#f0883e,color:#fff
+    style G fill:#0d1117,stroke:#3fb950,color:#fff
+    style H fill:#0d1117,stroke:#f85149,color:#fff
 ```
 
-### How the loop works
+### 2. Config Evolution (every N episodes)
 
-| Step | What happens |
-|------|-------------|
-| **Train** | Pick an issue, merge it into the DAG step prompts, run in Docker |
-| **Execute** | Agent follows generated DAG steps. Text response = step done. StepJudge validates. |
-| **Score** | SWE-bench runs gold tests. Pass (1.0) or fail (0.0). |
-| **Analyze** | On failure: LLM sees full trace + agent's patch + gold test names. Identifies which step failed and extracts an abstract lesson. |
-| **Reflect** | Every N episodes: ConfigReflector sees all success + failure traces. Rewrites DAG prompts — lessons are condensed in, not appended. |
-| **Compete** | New config enters head-to-head against champion on fresh issues. Winner keeps its spot. |
+After N episodes, the accumulated traces trigger the evolution cycle — this is the **closed loop**:
+
+```mermaid
+flowchart TD
+    A["Accumulated Traces<br/><i>success traces + failure traces</i>"] --> B
+    B["Failure Analyzer<br/><i>for each failure:</i><br/><i>which step went wrong?</i><br/><i>what is the abstract lesson?</i>"] --> C
+    C["Config Reflector<br/><i>sees all traces + lessons</i><br/><i>rewrites DAG step prompts</i><br/><i>lessons condensed, not appended</i>"] --> D
+    D["New Config<br/>(candidate)"] --> E
+    E["Head-to-Head<br/><i>champion vs candidate</i><br/><i>run on same future issues</i>"] --> F
+    F{candidate wins?}
+    F -->|"yes"| G["Candidate becomes<br/>new champion"]
+    F -->|"no"| H["Keep current<br/>champion"]
+    G --> I["Next N episodes<br/><i>using improved config</i>"]
+    H --> I
+    I -->|"accumulate more traces"| A
+
+    style A fill:#0d1117,stroke:#58a6ff,color:#fff
+    style B fill:#0d1117,stroke:#f85149,color:#fff
+    style C fill:#0d1117,stroke:#f85149,color:#fff
+    style D fill:#0d1117,stroke:#f0883e,color:#fff
+    style E fill:#0d1117,stroke:#3fb950,color:#fff
+    style F fill:#0d1117,stroke:#f0883e,color:#fff
+    style G fill:#0d1117,stroke:#3fb950,color:#fff
+    style H fill:#0d1117,stroke:#58a6ff,color:#fff
+    style I fill:#0d1117,stroke:#58a6ff,color:#fff
+```
+
+The first diagram runs hundreds of times. The second diagram triggers periodically and feeds an improved config back into the first — forming the closed loop.
 
 ## Quick Start
 
