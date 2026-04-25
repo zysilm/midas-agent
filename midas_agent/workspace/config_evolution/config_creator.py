@@ -184,13 +184,17 @@ class ConfigCreator:
                     LLMRequest(messages=messages, model="default"),
                 )
             except Exception as e:
-                logger.warning("Config creation pass 2 failed: %s", e)
-                return None
+                logger.warning("Config creation pass 2 API error (attempt %d/%d): %s",
+                               attempt + 1, 1 + max_retries, e)
+                continue
 
             raw_yaml = _extract_yaml(resp.content or "")
             if not raw_yaml:
-                logger.warning("Config creation pass 2 returned empty response")
-                return None
+                messages.append({"role": "assistant", "content": resp.content or ""})
+                messages.append({"role": "user", "content": "You must output the YAML inside ```yaml fences. Please try again."})
+                logger.info("Config creation: no YAML in response, retrying (attempt %d/%d)",
+                            attempt + 1, 1 + max_retries)
+                continue
 
             config = _parse_config_yaml(raw_yaml)
             if config is None:
