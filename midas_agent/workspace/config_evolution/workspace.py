@@ -187,7 +187,6 @@ class ConfigEvolutionWorkspace(Workspace):
                     step_ids = [str(s.id) for s in self._workflow_config.steps]
                     analysis = analyzer.analyze(
                         issue_summary=self._last_issue.description,
-                        trace=full_trace,
                         step_ids=step_ids,
                         gold_test_names=self._last_issue.fail_to_pass or None,
                         patch=self._last_patch or None,

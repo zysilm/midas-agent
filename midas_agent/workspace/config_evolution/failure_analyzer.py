@@ -1,4 +1,4 @@
-"""Failure analyzer — extracts abstract failure reasons from failed traces."""
+"""Failure analyzer — extracts abstract failure reasons from failed patches."""
 from __future__ import annotations
 
 import logging
@@ -10,61 +10,32 @@ from midas_agent.llm.types import LLMRequest, LLMResponse
 logger = logging.getLogger(__name__)
 
 FAILURE_ANALYSIS_PROMPT = """\
-You are analyzing a failed coding agent trace. The agent attempted to fix \
+You are analyzing a failed coding agent patch. The agent attempted to fix \
 a GitHub issue but the gold-standard test failed (score=0).
 
 ## Issue summary
 {issue_summary}
 
-## Agent trace (actions with full parameters, results truncated)
-{trace}
+## Agent's patch (what the agent changed)
+{patch}
 
-## What the agent actually changed (str_replace edits)
-{patch_summary}
-
-## Gold test that failed
+## Gold test that must pass
 {gold_test_info}
 
 ## Gold test output (what the test actually checked)
 {test_output}
 
 ## Task
-1. Which DAG step went wrong? Choose from: {step_ids}
-2. What SPECIFICALLY did the agent do wrong in that step?
-3. What is the ABSTRACT lesson (no file/function names — must generalize \
+1. What SPECIFICALLY did the agent do wrong in the patch?
+2. What is the ABSTRACT lesson (no file/function names — must generalize \
 to other issues)?
 
 ## Format
 Respond in exactly this format:
-STEP: <step_id>
-MISTAKE: <what specifically went wrong>
+STEP: fix
+MISTAKE: <what specifically went wrong with the patch>
 LESSON: <one sentence abstract lesson for future runs>\
 """
-
-
-def _build_rich_trace(raw_trace: str, max_result_chars: int = 200) -> str:
-    """Keep full action names + params, truncate only tool results."""
-    lines = []
-    for line in raw_trace.split("\n"):
-        if "\u2192" in line:
-            parts = line.split("\u2192", 1)
-            prefix = parts[0]
-            result = parts[1].strip() if len(parts) > 1 else ""
-            if len(result) > max_result_chars:
-                result = result[:max_result_chars] + "..."
-            lines.append(f"{prefix}\u2192 {result}")
-        else:
-            lines.append(line)
-    return "\n".join(lines)
-
-
-def _extract_patch_summary(raw_trace: str) -> str:
-    """Extract str_replace edit actions from the trace."""
-    edits = []
-    for line in raw_trace.split("\n"):
-        if "str_replace_editor" in line and "str_replace" in line and "old_str=" in line:
-            edits.append(line)
-    return "\n".join(edits) if edits else "(no edits found in trace)"
 
 
 @dataclass
@@ -75,7 +46,7 @@ class FailureAnalysis:
 
 
 class FailureAnalyzer:
-    """Extract abstract failure reasons from failed agent traces."""
+    """Extract abstract failure reasons from failed agent patches."""
 
     def __init__(
         self,
@@ -86,44 +57,34 @@ class FailureAnalyzer:
     def analyze(
         self,
         issue_summary: str,
-        trace: str,
         step_ids: list[str],
         gold_test_names: list[str] | None = None,
         patch: str | None = None,
         test_output: str | None = None,
+        **kwargs,
     ) -> FailureAnalysis | None:
-        """Analyze a failed trace and return the step + mistake + lesson.
+        """Analyze a failed patch and return the mistake + lesson.
 
         Args:
             issue_summary: the issue description
-            trace: full execution trace (from format_trace)
             step_ids: list of step IDs in the DAG config
             gold_test_names: FAIL_TO_PASS test names from SWE-bench
-            patch: the agent's actual git diff (if available)
+            patch: the agent's actual git diff
             test_output: SWE-bench test output showing what failed and why
         """
-        rich_trace = _build_rich_trace(trace)
-        patch_summary = _extract_patch_summary(trace)
-
-        # Build gold test info
         if gold_test_names:
             gold_test_info = "Tests that must pass: " + ", ".join(gold_test_names)
         else:
             gold_test_info = "(gold test names not available)"
 
-        if patch:
-            gold_test_info += f"\n\nAgent's patch:\n{patch[:2000]}"
-
-        # Gold test output — shows exactly what the test asserted and why it failed
+        patch_section = patch[:3000] if patch else "(no patch produced)"
         test_output_section = test_output[:3000] if test_output else "(test output not available)"
 
         prompt = FAILURE_ANALYSIS_PROMPT.format(
             issue_summary=issue_summary[:1000],
-            trace=rich_trace,
-            patch_summary=patch_summary,
+            patch=patch_section,
             gold_test_info=gold_test_info,
             test_output=test_output_section,
-            step_ids=", ".join(step_ids),
         )
 
         max_retries = 3
@@ -142,12 +103,11 @@ class FailureAnalyzer:
             if result is not None:
                 return result
 
-            # Response didn't parse — ask to retry with correct format
             logger.info("Failure analysis: response didn't parse (attempt %d/%d), retrying", attempt, max_retries)
             messages.append({"role": "assistant", "content": resp.content or ""})
             messages.append({"role": "user", "content": (
                 "Your response could not be parsed. Please respond in EXACTLY this format:\n"
-                "STEP: <step_id>\n"
+                "STEP: fix\n"
                 "MISTAKE: <what went wrong>\n"
                 "LESSON: <abstract lesson>"
             )})
