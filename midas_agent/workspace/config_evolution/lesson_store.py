@@ -1,8 +1,11 @@
 """ExpeL-style lesson store — persists failure lessons with embedding-based retrieval.
 
 Stores concrete failure analyses as-is (no generalization). At merge time,
-retrieves similar lessons by issue embedding and injects them into step prompts.
+retrieves the most similar lesson by issue embedding and injects it into step prompts.
 Importance voting prunes unhelpful lessons over time.
+
+Embeddings are computed on-the-fly (not cached in JSON) for robustness
+across embedder changes and smaller persistence files.
 """
 from __future__ import annotations
 
@@ -10,7 +13,7 @@ import json
 import logging
 import os
 import uuid
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, asdict
 from typing import Callable
 
 logger = logging.getLogger(__name__)
@@ -26,18 +29,16 @@ class Lesson:
     lesson: str
     patch: str
     importance: int = 2
-    embedding: list[float] = field(default_factory=list)
 
 
 class LessonStore:
     """Persistent lesson store with embedding-based retrieval and importance voting."""
 
-    def __init__(self, store_path: str, top_k: int = 3) -> None:
+    def __init__(self, store_path: str, top_k: int = 1) -> None:
         self._store_path = store_path
         self._top_k = top_k
         self._lessons: list[Lesson] = []
         self._embedder: Callable | None = None
-        self._embedder_initialized = False
 
         if os.path.isfile(store_path):
             self.load()
@@ -46,15 +47,13 @@ class LessonStore:
         return len(self._lessons)
 
     # ------------------------------------------------------------------
-    # Embedding
+    # Embedding (computed on-the-fly, never cached)
     # ------------------------------------------------------------------
 
     def _get_embedder(self) -> Callable:
         """Lazy-init the embedding function."""
         if self._embedder is not None:
             return self._embedder
-
-        self._embedder_initialized = True
 
         # Try sentence-transformers first
         try:
@@ -70,7 +69,6 @@ class LessonStore:
         try:
             from sklearn.feature_extraction.text import TfidfVectorizer
             self._tfidf = TfidfVectorizer(max_features=768)
-            self._tfidf_fitted = False
 
             def tfidf_embed(text: str) -> list[float]:
                 corpus = [l.issue_summary for l in self._lessons] + [text]
@@ -86,12 +84,10 @@ class LessonStore:
         # Last resort: bag of words
         def bow_embed(text: str) -> list[float]:
             words = set(text.lower().split())
-            # Create a simple hash-based vector
             vec = [0.0] * 256
             for w in words:
                 idx = hash(w) % 256
                 vec[idx] += 1.0
-            # Normalize
             norm = sum(v * v for v in vec) ** 0.5
             if norm > 0:
                 vec = [v / norm for v in vec]
@@ -131,7 +127,6 @@ class LessonStore:
     ) -> str:
         """Add a lesson from a failure analysis. Returns lesson_id."""
         lesson_id = uuid.uuid4().hex[:12]
-        embedding = self._embed(issue_summary)
 
         new_lesson = Lesson(
             lesson_id=lesson_id,
@@ -142,7 +137,6 @@ class LessonStore:
             lesson=lesson,
             patch=patch[:2000],
             importance=2,
-            embedding=embedding,
         )
         self._lessons.append(new_lesson)
         self.save()
@@ -162,19 +156,16 @@ class LessonStore:
         if not self._lessons:
             return []
 
-        # Filter to positive-importance lessons
         active = [l for l in self._lessons if l.importance > 0]
         if not active:
             return []
 
         query_emb = self._embed(query_text)
 
-        # Score by cosine similarity
         scored = []
         for lesson in active:
-            if not lesson.embedding:
-                lesson.embedding = self._embed(lesson.issue_summary)
-            sim = self._cosine_similarity(query_emb, lesson.embedding)
+            lesson_emb = self._embed(lesson.issue_summary)
+            sim = self._cosine_similarity(query_emb, lesson_emb)
             scored.append((sim, lesson))
 
         scored.sort(key=lambda x: x[0], reverse=True)
@@ -182,8 +173,8 @@ class LessonStore:
 
         if results:
             logger.info(
-                "LessonStore: retrieved %d lessons (top sim=%.3f)",
-                len(results), scored[0][0] if scored else 0,
+                "LessonStore: retrieved %d lesson(s) (top sim=%.3f, from %s)",
+                len(results), scored[0][0], results[0].issue_id,
             )
         return results
 
@@ -213,13 +204,18 @@ class LessonStore:
         self.save()
 
     # ------------------------------------------------------------------
-    # Persistence
+    # Persistence (no embeddings stored — computed on-the-fly)
     # ------------------------------------------------------------------
 
     def save(self) -> None:
-        """Write all lessons to disk as JSON."""
+        """Write all lessons to disk as JSON (without embeddings)."""
         os.makedirs(os.path.dirname(self._store_path), exist_ok=True)
-        data = [asdict(l) for l in self._lessons]
+        data = []
+        for l in self._lessons:
+            d = asdict(l)
+            # Don't persist embeddings — recomputed on retrieval
+            d.pop("embedding", None)
+            data.append(d)
         tmp = self._store_path + ".tmp"
         with open(tmp, "w") as f:
             json.dump(data, f, indent=2)
