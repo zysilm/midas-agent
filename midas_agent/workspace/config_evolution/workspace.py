@@ -81,6 +81,10 @@ class ConfigEvolutionWorkspace(Workspace):
 
     def execute(self, issue: Issue) -> None:
         self.calls.append(("execute", {"issue_id": issue.issue_id}))
+        # Clear stale state from previous episode — prevents leaking
+        # old traces/patches when the current episode fails early.
+        self._last_result = None
+        self._last_patch = ""
         self._last_issue = issue
         if self._io is not None:
             self._dag_executor.set_io(self._io)

@@ -136,8 +136,7 @@ CONFIG_MERGE_PROMPT = """\
 You are a workflow configuration merger for a coding agent system.
 
 Given a BASE workflow DAG and a GitHub issue, rewrite ONLY the prompt field \
-of each step to embed the RELEVANT PARTS of the issue. Keep everything else \
-(meta, step IDs, tools, inputs, goals) EXACTLY as-is.
+of each step to embed the RELEVANT PARTS of the issue.
 
 ## Rules — distribute the issue across steps
 
@@ -163,22 +162,26 @@ needs to know what "fixed" looks like to verify properly.
 - Each step prompt = original step instruction + distributed issue context
 - End each prompt with: "When you complete this phase, stop calling tools \
 and state your findings as text."
-- Output the COMPLETE YAML with the same structure
-- Do NOT modify step IDs, tools, inputs, or goals
 - Every step prompt MUST be different from the base — you MUST embed issue \
 context into each one
 
-## Base DAG
+## Base DAG steps
 
-```yaml
-{base_config_yaml}
-```
+{steps_description}
 
 ## Issue
 
 {issue_description}
 
-Respond with ONLY the YAML inside ```yaml fences.\
+## Output format
+
+Output EXACTLY one section per step, using this delimiter format:
+
+=== STEP: <step_id> ===
+<the new prompt for this step>
+
+Output ALL steps. Do NOT output anything else — no explanation, no YAML, \
+no code fences.\
 """
 
 TASK_PROMPT_TEMPLATE = """\
