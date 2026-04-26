@@ -96,7 +96,7 @@ class ConfigEvolutionWorkspace(Workspace):
         if not self._is_default_config():
             # Retrieve relevant lessons from past failures
             retrieved_lessons = []
-            if self._lesson_store and len(self._lesson_store) > 0:
+            if self._lesson_store is not None and len(self._lesson_store) > 0:
                 retrieved_lessons = self._lesson_store.retrieve(issue.description)
                 self._last_retrieved_lesson_ids = [l.lesson_id for l in retrieved_lessons]
 
@@ -213,15 +213,20 @@ class ConfigEvolutionWorkspace(Workspace):
                             self.workspace_id, failure_reason,
                         )
                         # Store lesson for retrieval on future issues
-                        if self._lesson_store:
-                            self._lesson_store.add_lesson(
-                                issue_id=self._last_issue.issue_id,
-                                issue_summary=self._last_issue.description,
-                                step_id=analysis.step_id,
-                                mistake=analysis.mistake,
-                                lesson=analysis.lesson,
-                                patch=self._last_patch or "",
-                            )
+                        if self._lesson_store is not None:
+                            try:
+                                self._lesson_store.add_lesson(
+                                    issue_id=self._last_issue.issue_id,
+                                    issue_summary=self._last_issue.description,
+                                    step_id=analysis.step_id,
+                                    mistake=analysis.mistake,
+                                    lesson=analysis.lesson,
+                                    patch=self._last_patch or "",
+                                )
+                            except Exception as e:
+                                logger.error("Failed to add lesson: %s", e)
+                        else:
+                            logger.warning("No lesson store available")
 
                 # Record failure trace for data persistence
                 self._prompt_optimizer.record_failure(
@@ -233,7 +238,7 @@ class ConfigEvolutionWorkspace(Workspace):
                 )
 
         # -- Vote on retrieved lessons --
-        if self._lesson_store and self._last_retrieved_lesson_ids:
+        if self._lesson_store is not None and self._last_retrieved_lesson_ids:
             self._lesson_store.vote(
                 self._last_retrieved_lesson_ids,
                 upvote=(my_score >= 1.0),
