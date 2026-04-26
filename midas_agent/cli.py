@@ -78,6 +78,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         help="Run on a single issue by its 0-based index",
     )
     infer_parser.add_argument(
+        "--lessons",
+        default=None,
+        help="Path to lessons.json from training (enables lesson retrieval)",
+    )
+    infer_parser.add_argument(
         "--env",
         default="docker",
         help='Execution environment: "local" or "docker" (default: docker)',
@@ -246,6 +251,13 @@ def _infer_eval(args, dag_config, provider, budget, logger):
     from midas_agent.runtime.io_backend import DockerIO
     from midas_agent.evaluation.swebench_scorer import SWEBenchScorer
 
+    # Load lesson store if provided
+    lesson_store = None
+    if getattr(args, "lessons", None):
+        from midas_agent.workspace.config_evolution.lesson_store import LessonStore
+        lesson_store = LessonStore(store_path=args.lessons)
+        logger.info("Loaded %d lessons from %s", len(lesson_store), args.lessons)
+
     issues = load_swe_bench()
     if args.issue_index is not None:
         issues = [issues[args.issue_index]]
@@ -301,9 +313,15 @@ def _infer_eval(args, dag_config, provider, budget, logger):
                 system_llm=system_llm,
             )
 
-            # Merge issue into step prompts
+            # Retrieve lessons and merge issue into step prompts
+            retrieved_lessons = []
+            if lesson_store is not None and len(lesson_store) > 0:
+                retrieved_lessons = lesson_store.retrieve(issue.description)
+                if retrieved_lessons:
+                    logger.info("  Retrieved %d lessons", len(retrieved_lessons))
+
             merger = ConfigMerger(system_llm=system_llm)
-            merged = merger.merge(dag_config, issue)
+            merged = merger.merge(dag_config, issue, lessons=retrieved_lessons or None)
 
             t0 = time.time()
             result = executor.execute(merged, issue, call_llm,
