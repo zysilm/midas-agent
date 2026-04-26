@@ -97,10 +97,10 @@ def _parse_config_yaml(yaml_text: str) -> WorkflowConfig | None:
         steps: list[StepConfig] = []
         for s in data["steps"]:
             steps.append(StepConfig(
-                id=s.get("id", f"step_{len(steps)}"),
+                id=str(s.get("id", f"step_{len(steps)}")),
                 prompt=s.get("prompt", ""),
                 tools=s.get("tools", []),
-                inputs=s.get("inputs", []),
+                inputs=[str(i) for i in s.get("inputs", [])],
                 goal=s.get("goal", ""),
             ))
 
@@ -368,15 +368,17 @@ class ConfigMerger:
             return None
 
         # Match parsed IDs to base config IDs (fuzzy: LLM may slightly alter IDs)
-        base_ids = [s.id for s in base_config.steps]
+        # Convert to str — YAML may parse numeric IDs as int (e.g. id: 1)
+        base_ids = [str(s.id) for s in base_config.steps]
         matched: dict[str, str] = {}
         for parsed_id, prompt in prompts.items():
-            if parsed_id in base_ids:
-                matched[parsed_id] = prompt
+            pid = str(parsed_id)
+            if pid in base_ids:
+                matched[pid] = prompt
             else:
                 # Fuzzy match: find the closest base ID
                 for base_id in base_ids:
-                    if parsed_id in base_id or base_id in parsed_id:
+                    if pid in base_id or base_id in pid:
                         matched[base_id] = prompt
                         break
 
@@ -398,7 +400,7 @@ class ConfigMerger:
         """Graft parsed prompts onto base config, keeping structure intact."""
         new_steps = []
         for step in base.steps:
-            new_prompt = prompts.get(step.id, step.prompt)
+            new_prompt = prompts.get(str(step.id), step.prompt)
             new_steps.append(StepConfig(
                 id=step.id,
                 prompt=new_prompt,
