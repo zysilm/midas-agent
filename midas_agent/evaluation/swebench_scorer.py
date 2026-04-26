@@ -72,34 +72,49 @@ class SWEBenchScorer(ExecutionScorer):
         return self._parse_report(report, issue)
 
     def _read_test_log(self, instance_id: str) -> str:
-        """Read the test output log from SWE-bench evaluation."""
+        """Read test output from SWE-bench evaluation.
+
+        Prefers test_output.txt (has assertion details) over run_instance.log.
+        """
         import glob
         import os
 
-        pattern = f"logs/run_evaluation/{self._run_id}/midas-agent/{instance_id}/run_instance.log"
-        matches = glob.glob(pattern)
-        if not matches:
-            return ""
+        base = f"logs/run_evaluation/{self._run_id}/midas-agent/{instance_id}"
 
-        try:
-            with open(matches[0]) as f:
-                content = f.read()
-            # Extract the relevant test failure section
-            lines = content.split("\n")
-            failure_lines = []
-            capture = False
-            for line in lines:
-                if "FAILED" in line or "AssertionError" in line or "assert " in line:
-                    capture = True
-                if capture:
-                    failure_lines.append(line)
-                    if len(failure_lines) > 50:
-                        break
-                if capture and line.strip() == "":
-                    capture = False
-            return "\n".join(failure_lines) if failure_lines else content[-3000:]
-        except Exception:
-            return ""
+        # Try test_output.txt first — has the actual assertion failures
+        test_output_path = os.path.join(base, "test_output.txt")
+        if os.path.isfile(test_output_path):
+            try:
+                with open(test_output_path) as f:
+                    content = f.read()
+                # Extract failure sections
+                lines = content.split("\n")
+                failure_lines = []
+                capture = False
+                for line in lines:
+                    if any(k in line for k in ["FAILED", "AssertionError", "assert ", "Error", "raise "]):
+                        capture = True
+                    if capture:
+                        failure_lines.append(line)
+                        if len(failure_lines) > 80:
+                            break
+                    if capture and line.strip() == "" and len(failure_lines) > 3:
+                        capture = False
+                if failure_lines:
+                    return "\n".join(failure_lines)
+            except Exception:
+                pass
+
+        # Fallback to run_instance.log
+        log_path = os.path.join(base, "run_instance.log")
+        if os.path.isfile(log_path):
+            try:
+                with open(log_path) as f:
+                    return f.read()[-3000:]
+            except Exception:
+                pass
+
+        return ""
 
     # ------------------------------------------------------------------
     # Helpers
