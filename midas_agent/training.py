@@ -552,19 +552,19 @@ def run_training(
             if evicted:
                 logger.info("  Evicted: %s", evicted)
 
-            # 6. Post-episode (config creation / GEPA optimization)
+            # 6. Pass test output to workspaces for failure analysis
+            scorer = getattr(scheduler._evaluation_module, "_execution_scorer", None)
+            if scorer and hasattr(scorer, "last_test_output"):
+                for ws in workspaces:
+                    ws._last_test_output = scorer.last_test_output
+
+            # 7. Post-episode (config creation / GEPA optimization)
             eval_results_dict = {
                 ws_id: {"s_w": r.s_w, "s_exec": r.s_exec}
                 for ws_id, r in eval_results.items()
             }
             for ws in workspaces:
                 ws.post_episode(eval_results_dict, evicted_ids=evicted)
-
-            # 7. Pass test output to workspaces for failure analysis
-            scorer = getattr(scheduler._evaluation_module, "_execution_scorer", None)
-            if scorer and hasattr(scorer, "last_test_output"):
-                for ws in workspaces:
-                    ws._last_test_output = scorer.last_test_output
 
             # 8. Save SWE-bench submission artifacts
             _save_swebench_artifacts(

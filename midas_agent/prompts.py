@@ -40,10 +40,35 @@ findings and what you changed as text.\
 """
 
 DAG_SYSTEM_PROMPT = """\
-You are a coding agent working on a code repository. \
-I will guide you step by step. Focus ONLY on what the current step asks. \
-When you have completed the current step, stop calling tools and state \
-your findings as text.\
+You are a helpful assistant that can interact with a computer to solve tasks.\
+"""
+
+DAG_INSTANCE_TEMPLATE = """\
+<uploaded_files>
+/testbed
+</uploaded_files>
+I've uploaded a python code repository in the directory /testbed. Consider the following issue:
+
+<issue>
+{issue_description}
+</issue>
+
+Can you help me implement the necessary changes to the repository so that the \
+requirements specified in the <issue> are met?
+I've already taken care of all changes to any of the test files described in \
+the <issue>. This means you DON'T have to modify the testing logic or any of \
+the tests in any way!
+Your task is to make the minimal changes to non-tests files in the /testbed \
+directory to ensure the <issue> is satisfied.
+Follow these steps to resolve the issue:
+1. As a first step, it might be a good idea to find and read code relevant \
+to the <issue>
+2. Create a script to reproduce the error and execute it with \
+`python <filename.py>` using the bash tool, to confirm the error
+3. Edit the sourcecode of the repo to resolve the issue
+4. Rerun your reproduce script and confirm that the error is fixed!
+5. Think about edgecases and make sure your fix handles them as well
+Your thinking should be thorough and so it's fine if it's very long.\
 """
 
 # ---------------------------------------------------------------------------

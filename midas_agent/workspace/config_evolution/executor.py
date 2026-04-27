@@ -162,10 +162,11 @@ class DAGExecutor:
             system_llm=self._system_llm,
         ) if self._system_llm else None
 
-        # Build initial messages: DAG system prompt + first step prompt.
-        # Issue context is already embedded in each step's prompt via
-        # ConfigMerger — no separate issue injection needed.
-        from midas_agent.prompts import DAG_SYSTEM_PROMPT
+        # Build initial messages matching SWE-agent v1.0 architecture:
+        # 1. System prompt (one-liner)
+        # 2. Instance template (first user message with full issue)
+        # 3. First step prompt
+        from midas_agent.prompts import DAG_SYSTEM_PROMPT, DAG_INSTANCE_TEMPLATE
 
         system_prompt = DAG_SYSTEM_PROMPT
         if lessons:
@@ -175,8 +176,13 @@ class DAGExecutor:
                 lesson_lines.append(f"  Lesson: {lesson.lesson}")
             system_prompt += "\n".join(lesson_lines)
 
+        instance_msg = DAG_INSTANCE_TEMPLATE.format(
+            issue_description=issue.description,
+        )
+
         messages: list[dict] = [
             {"role": "system", "content": system_prompt},
+            {"role": "user", "content": instance_msg},
             {"role": "user", "content": (
                 f"**Current phase: {first_step.id}**\n\n{first_step.prompt}"
             )},
