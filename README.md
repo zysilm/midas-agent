@@ -141,7 +141,7 @@ Training run on 20 SWE-bench Verified issues (astropy subset) with MiniMax-M2.5.
 | 19 | [7606](https://github.com/astropy/astropy/issues/7606) | No | 31 | 217K | 13977 (sim=0.62) | Downvoted |
 | 20 | [7671](https://github.com/astropy/astropy/issues/7671) | **Yes** | 50 | 668K | 7606 (sim=0.53) | Upvoted |
 
-### Lesson Analysis
+#### Lesson Analysis
 
 Each lesson contains three fields: **mistake** (what went wrong), **lesson** (abstract rule), and **correct_approach** (what to do instead). Below is a per-injection analysis of whether the lesson content was actually relevant to the target issue.
 
@@ -169,7 +169,7 @@ Issue 7606 is about `Unit.__eq__(None)` raising `TypeError`. The 13977 lesson ab
 
 The 7606 lesson says: *"when fixing equality comparison with None, explicitly check for None before conversion."* Issue 7671 is about `LooseVersion` comparison failing with mixed int/string components — a version parsing problem, not an equality-with-None problem. The lesson is irrelevant despite the similarity score. The agent solved this independently. False-positive upvote.
 
-### Observations
+#### Observations
 
 **Lesson retrieval is noisy.** 6 lessons were injected across 20 episodes. Of these, 1 was directly relevant and likely helped (ep18: 13977→7336), 1 was relevant but the agent ignored it (ep19: 13977→7606), and 4 were irrelevant false matches from embedding similarity (both issues being in the same astropy submodule).
 
@@ -181,7 +181,7 @@ The 7606 lesson says: *"when fixing equality comparison with None, explicitly ch
 
 **`correct_approach` quality is high.** The extracted correct_approach fields contain specific, actionable strategies (e.g., "check for None before conversion", "normalize captured strings to uppercase after regex matching"). Whether the agent acts on them is a separate question.
 
-### Trained Artifacts
+#### Trained Artifacts
 
 The DAG config and lesson library from this run are stored in `artifacts/`:
 
