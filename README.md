@@ -116,7 +116,7 @@ Training run on 20 SWE-bench Verified issues (astropy subset) with MiniMax-M2.5.
 
 **Solve rate: 12/20 (60%)**
 
-### Episode Results
+### Training Episode Results
 
 | Ep | Issue | Solved | Iters | Tokens | Lesson Injected | Lesson Impact |
 |----|-------|--------|-------|--------|-----------------|---------------|
