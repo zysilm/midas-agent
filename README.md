@@ -143,43 +143,18 @@ Training run on 20 SWE-bench Verified issues (astropy subset) with MiniMax-M2.5.
 
 #### Lesson Analysis
 
-Each lesson contains three fields: **mistake** (what went wrong), **lesson** (abstract rule), and **correct_approach** (what to do instead). Below is a per-injection analysis of whether the lesson content was actually relevant to the target issue.
+6 lessons were injected across 20 episodes. Each lesson contains **mistake**, **lesson**, and **correct_approach** fields. We manually verified whether each injected lesson was actually relevant to the target issue:
 
-**Episode 5** — 13236 lesson → 13453 (sim=0.54) — **Solved, Upvoted**
+| Ep | Lesson Source → Target | Sim | Result | Relevant? | Notes |
+|----|----------------------|-----|--------|-----------|-------|
+| 5 | 13236 → 13453 | 0.54 | Solved, Upvoted | No | Both in `astropy.table` but unrelated problems (deprecation warnings vs column formatting). False-positive upvote. |
+| 9 | 13236 → 14182 | 0.53 | Failed, Downvoted | No | Deprecation lesson irrelevant to RST header rendering. Correct downvote. |
+| 10 | 13236 → 14309 | 0.54 | Solved, Upvoted | No | Fix is a simple guard (`if args`), unrelated to warnings. False-positive upvote. |
+| 18 | 13977 → 7336 | 0.53 | Solved, Upvoted | **Yes** | Lesson: "check types before conversion." Fix: check if return annotation is None before `.to()`. **Strongest case of lesson helping.** |
+| 19 | 13977 → 7606 | 0.62 | Failed, Downvoted | **Yes** | Lesson was directly relevant but agent ignored it — applied broad try/except instead of the None check the lesson recommended. |
+| 20 | 7606 → 7671 | 0.53 | Solved, Upvoted | No | Version parsing problem, not equality-with-None. False-positive upvote. |
 
-The 13236 lesson says: *"deprecation warnings must not break existing tests; distinguish user-initiated vs internal code paths."* Issue 13453 is about the HTML table writer ignoring user-supplied `formats` — an unrelated problem (column formatting, not warnings). Both issues involve `astropy.table`, which explains the embedding similarity, but the lesson content has no bearing on the fix. The agent solved this on its own. The upvote is a false positive — the lesson was present but did not contribute.
-
-**Episode 9** — 13236 lesson → 14182 (sim=0.53) — **Failed, Downvoted**
-
-Issue 14182 asks for `header_rows` support in the RST table writer. The 13236 lesson about deprecation warnings is irrelevant — the fix requires adding header row rendering to a writer class, not handling warnings. Correct downvote.
-
-**Episode 10** — 13236 lesson → 14309 (sim=0.54) — **Solved, Upvoted**
-
-Issue 14309 is an `IndexError` in `is_fits` when `args` is empty. The 13236 lesson about warnings is irrelevant — the fix is a simple guard (`if args` before `args[0]`). The agent solved this independently. Another false-positive upvote.
-
-**Episode 18** — 13977 lesson → 7336 (sim=0.53) — **Solved, Upvoted**
-
-The 13977 lesson says: *"only return NotImplemented for type incompatibility, not semantic errors."* Its correct_approach: *"distinguish type incompatibility (return NotImplemented) from unit incompatibility (propagate)."* Issue 7336 is about `@quantity_input` failing when the return annotation is `None` — the decorator tries to call `.to()` on `None`. Both issues involve the Quantity/unit system and require explicit None/type checks before attempting conversion. The lesson's guidance about explicit type checking before conversion is directly applicable. **This is the strongest case of a lesson actually helping** — the correct_approach's emphasis on checking types before conversion maps to the fix (check if return annotation is None before calling `.to()`).
-
-**Episode 19** — 13977 lesson → 7606 (sim=0.62) — **Failed, Downvoted**
-
-Issue 7606 is about `Unit.__eq__(None)` raising `TypeError`. The 13977 lesson about type-vs-semantic incompatibility is directly relevant — the fix is to check `if other is None: return False` before conversion. But the agent still applied an overly broad exception handler (catching all ValueError, UnitsError, TypeError), which is exactly the anti-pattern the lesson warned against. **The lesson was relevant but the agent ignored it.** The correct_approach said *"check if the input is a duck type and return NotImplemented only for type incompatibility"* — the agent should have added a None check, but instead wrapped everything in a broad try/except. This suggests the agent reads the lesson but doesn't internalize the constraint when the code is complex enough.
-
-**Episode 20** — 7606 lesson → 7671 (sim=0.53) — **Solved, Upvoted**
-
-The 7606 lesson says: *"when fixing equality comparison with None, explicitly check for None before conversion."* Issue 7671 is about `LooseVersion` comparison failing with mixed int/string components — a version parsing problem, not an equality-with-None problem. The lesson is irrelevant despite the similarity score. The agent solved this independently. False-positive upvote.
-
-#### Observations
-
-**Lesson retrieval is noisy.** 6 lessons were injected across 20 episodes. Of these, 1 was directly relevant and likely helped (ep18: 13977→7336), 1 was relevant but the agent ignored it (ep19: 13977→7606), and 4 were irrelevant false matches from embedding similarity (both issues being in the same astropy submodule).
-
-**Most solves happen without lessons.** 9 of the 12 solved episodes had no lesson injected. The DAG workflow (localize → reproduce → implement → validate) carries most of the value.
-
-**Importance voting has false positives.** When a lesson is injected and the agent solves the issue independently, the lesson gets upvoted despite not contributing. This inflates importance scores for irrelevant lessons. A more precise voting signal (e.g., comparing solve rate with and without the lesson) would help.
-
-**The similarity threshold (0.50) works well.** It blocked injection in 14 of 20 episodes where the top match was irrelevant. Without it, every episode would have received an irrelevant lesson from a different astropy submodule.
-
-**`correct_approach` quality is high.** The extracted correct_approach fields contain specific, actionable strategies (e.g., "check for None before conversion", "normalize captured strings to uppercase after regex matching"). Whether the agent acts on them is a separate question.
+**Summary**: 1/6 injections clearly helped (ep18), 1/6 was relevant but ignored (ep19), 4/6 were false matches from same-submodule embedding similarity. Most solves (9/12) happened without any lesson. The similarity threshold (0.50) blocked injection in 14/20 episodes where the top match was irrelevant. Importance voting suffers from false-positive upvotes when an irrelevant lesson is present during an independent solve.
 
 #### Trained Artifacts
 
