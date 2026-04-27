@@ -38,3 +38,5 @@ class MidasConfig:
     temperature: float = 0.0
     top_p: float = 1.0
     skill_evolution: bool = True
+    # Lesson retrieval: minimum cosine similarity to inject a lesson
+    lesson_similarity_threshold: float = 0.50

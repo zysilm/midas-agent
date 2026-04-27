@@ -7,7 +7,7 @@ A self-improving coding agent that learns from its own failures. Given a set of 
 Most coding agents use a fixed prompt and hope for the best. When they fail, the failure is discarded. Midas closes that loop:
 
 1. The agent solves issues using a **generated multi-step DAG** (e.g., localize → investigate → fix → validate)
-2. Failed attempts are **analyzed** — an LLM compares the agent's patch against the gold test expectations
+2. Failed attempts are **analyzed** — an LLM reflects on the agent's trajectory and patch to extract lessons (ExpeL-style)
 3. Concrete lessons are **stored** in a lesson library with semantic embeddings
 4. On new issues, **relevant lessons are retrieved** by similarity and injected into the fix step
 5. Lessons that help get **upvoted**; lessons that don't get **downvoted** and eventually pruned
@@ -31,23 +31,21 @@ For each SWE-bench issue, `ConfigMerger` embeds the issue into the DAG step prom
 
 ```mermaid
 flowchart LR
-    GS["<b>Gold Tests</b><br/><i>SWE-bench ground truth</i>"] --> FA
-    FA["<b>Failure Analyzer</b><br/><i>compares patch vs gold test</i><br/><i>expectations</i>"] -->|"lesson"| LS
+    DA["<b>DAG Agent</b><br/><i>runs issue</i>"] -->|"trajectory + patch"| FA
+    FA["<b>Failure Analyzer</b><br/><i>ExpeL-style self-reflection</i><br/><i>on trajectory + patch</i>"] -->|"lesson"| LS
     LS["<b>Lesson Store</b><br/><i>semantic embeddings</i><br/><i>importance voting</i>"] -->|"retrieve similar"| CM
     CM["<b>ConfigMerger</b><br/><i>inject lessons into</i><br/><i>fix step prompt</i>"] --> DA
-    DA["<b>DAG Agent</b><br/><i>runs next issue</i>"] -->|"patch"| SC
     SC["<b>SWE-bench Scorer</b>"] -->|"pass → upvote<br/>fail → downvote"| LS
     SC -->|"fail"| FA
 
-    style GS fill:#0d1117,stroke:#3fb950,color:#fff
+    style DA fill:#0d1117,stroke:#58a6ff,color:#fff
     style FA fill:#0d1117,stroke:#f85149,color:#fff
     style LS fill:#0d1117,stroke:#f0883e,color:#fff
     style CM fill:#0d1117,stroke:#58a6ff,color:#fff
-    style DA fill:#0d1117,stroke:#58a6ff,color:#fff
     style SC fill:#0d1117,stroke:#58a6ff,color:#fff
 ```
 
-The **gold tests** are what make this work. When an agent fails, the Failure Analyzer sees the agent's patch and the gold test output — it can pinpoint exactly what went wrong. Lessons are stored as-is (no generalization) and retrieved by semantic similarity when a similar issue appears.
+When an agent fails, the **Failure Analyzer** reflects on the agent's own trajectory (Thought → Action → Observation trace) and final patch — no gold test output is used (following ExpeL's principle of learning from the agent's own experience, not from evaluation feedback). Lessons are stored as-is and retrieved by semantic similarity when a similar issue appears.
 
 **Importance voting** ensures the library self-corrects: lessons that help the agent pass get upvoted, lessons that don't help get downvoted and eventually pruned (at importance <= -4).
 
@@ -105,7 +103,7 @@ midas infer --dag config.yaml
 - **Lesson library** — stores concrete failure analyses, retrieves by semantic similarity (sentence-transformers)
 - **Importance voting** — upvote lessons that help, downvote ones that don't, prune at <= -4
 - **DAG workflows** — multi-step plans generated from first successful trace
-- **Failure analyzer** — compares agent's patch against gold test output (no trace noise)
+- **Failure analyzer** — ExpeL-style self-reflection on trajectory + patch (no gold test output)
 - **ConfigMerger** — embeds issue + lessons into step prompts programmatically
 - **No task_done tool** — text response = done; unknown tool calls treated as termination
 - **Checkpoint & resume** — per-episode snapshots, lessons persist across runs

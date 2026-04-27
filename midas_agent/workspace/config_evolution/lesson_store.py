@@ -34,9 +34,10 @@ class Lesson:
 class LessonStore:
     """Persistent lesson store with embedding-based retrieval and importance voting."""
 
-    def __init__(self, store_path: str, top_k: int = 1) -> None:
+    def __init__(self, store_path: str, top_k: int = 1, similarity_threshold: float = 0.0) -> None:
         self._store_path = store_path
         self._top_k = top_k
+        self._similarity_threshold = similarity_threshold
         self._lessons: list[Lesson] = []
         self._embedder: Callable | None = None
 
@@ -165,13 +166,25 @@ class LessonStore:
             scored.append((sim, lesson))
 
         scored.sort(key=lambda x: x[0], reverse=True)
-        results = [lesson for _, lesson in scored[:k]]
 
-        if results:
-            logger.info(
-                "LessonStore: retrieved %d lesson(s) (top sim=%.3f, from %s)",
-                len(results), scored[0][0], results[0].issue_id,
-            )
+        # Apply similarity threshold gate
+        results = [
+            lesson for sim, lesson in scored[:k]
+            if sim >= self._similarity_threshold
+        ]
+
+        if scored:
+            top_sim = scored[0][0]
+            if results:
+                logger.info(
+                    "LessonStore: retrieved %d lesson(s) (top sim=%.3f, from %s)",
+                    len(results), top_sim, results[0].issue_id,
+                )
+            else:
+                logger.info(
+                    "LessonStore: no lessons above threshold %.2f (top sim=%.3f, from %s)",
+                    self._similarity_threshold, top_sim, scored[0][1].issue_id,
+                )
         return results
 
     def vote(self, lesson_ids: list[str], upvote: bool) -> None:

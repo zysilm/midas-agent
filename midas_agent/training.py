@@ -348,7 +348,10 @@ def run_training(
 
     if train_dir is None:
         name = train_dir_name or datetime.now().strftime("%Y%m%d_%H%M%S")
-        train_dir = os.path.join(".midas", "train", name)
+        if os.sep in (name or "") or name.startswith("."):
+            train_dir = name  # already a path
+        else:
+            train_dir = os.path.join(".midas", "train", name)
 
     os.makedirs(os.path.join(train_dir, "data"), exist_ok=True)
     os.makedirs(os.path.join(train_dir, "log", "configs"), exist_ok=True)

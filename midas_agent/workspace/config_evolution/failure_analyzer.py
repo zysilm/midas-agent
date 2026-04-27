@@ -1,7 +1,9 @@
 """Failure analyzer — extracts abstract failure reasons from failed patches."""
 from __future__ import annotations
 
+import json
 import logging
+import re
 from dataclasses import dataclass
 from typing import Callable
 
@@ -31,12 +33,42 @@ The agent's patch did NOT pass the gold test. Based on the trajectory and patch:
 2. What is the ABSTRACT lesson (no file/function names — must generalize \
 to other issues)?
 
-## Format
-Respond in exactly this format:
-STEP: fix
-MISTAKE: <what specifically went wrong with the patch>
-LESSON: <one sentence abstract lesson for future runs>\
+Analyze the failure, then call the submit_lesson tool with your findings.\
 """
+
+# Tool definition for submit_lesson (OpenAI function calling format)
+SUBMIT_LESSON_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "submit_lesson",
+        "description": (
+            "Submit your failure analysis as a structured lesson. "
+            "Call this exactly once with the step that failed, "
+            "what the agent did wrong, and the abstract lesson."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "step_id": {
+                    "type": "string",
+                    "description": "Which step failed (e.g. 'fix', 'localize', 'reproduce')",
+                },
+                "mistake": {
+                    "type": "string",
+                    "description": "What specifically the agent did wrong",
+                },
+                "lesson": {
+                    "type": "string",
+                    "description": (
+                        "One-sentence abstract lesson for future runs. "
+                        "No file or function names — must generalize to other issues."
+                    ),
+                },
+            },
+            "required": ["step_id", "mistake", "lesson"],
+        },
+    },
+}
 
 
 @dataclass
@@ -47,7 +79,11 @@ class FailureAnalysis:
 
 
 class FailureAnalyzer:
-    """Extract abstract failure reasons from failed agent patches."""
+    """Extract abstract failure reasons from failed agent patches.
+
+    Uses LLM tool calling (submit_lesson) for structured extraction —
+    LLMs are more reliable with tool calls than text format instructions.
+    """
 
     def __init__(
         self,
@@ -66,15 +102,8 @@ class FailureAnalyzer:
     ) -> FailureAnalysis | None:
         """Analyze a failed patch and return the mistake + lesson.
 
-        Uses the agent's own trajectory and patch (ExpeL-style) — no gold
-        test output to avoid leaking evaluation data into lessons.
-
-        Args:
-            issue_summary: the issue description
-            step_ids: list of step IDs in the DAG config
-            gold_test_names: FAIL_TO_PASS test names from SWE-bench
-            patch: the agent's actual git diff
-            trajectory: formatted trace of the agent's actions and observations
+        Uses LLM tool calling for reliable structured extraction.
+        ExpeL-style: trajectory + patch only, no gold test output.
         """
         if gold_test_names:
             gold_test_info = "Tests that must pass: " + ", ".join(gold_test_names)
@@ -85,7 +114,6 @@ class FailureAnalyzer:
         trajectory_section = trajectory if trajectory else "(trajectory not available)"
 
         # Strip HTML comments from issue description (GitHub boilerplate noise)
-        import re
         clean_summary = re.sub(r'<!--.*?-->', '', issue_summary, flags=re.DOTALL).strip()
 
         prompt = FAILURE_ANALYSIS_PROMPT.format(
@@ -95,59 +123,65 @@ class FailureAnalyzer:
             gold_test_info=gold_test_info,
         )
 
-        max_retries = 3
-        messages = [{"role": "user", "content": prompt}]
+        messages = [
+            {"role": "system", "content": "You are a failure analysis assistant. Analyze the failed attempt and submit a lesson using the submit_lesson tool."},
+            {"role": "user", "content": prompt},
+        ]
+        tools = [SUBMIT_LESSON_TOOL]
 
-        for attempt in range(1, max_retries + 1):
+        max_attempts = 3
+        for attempt in range(1, max_attempts + 1):
             try:
                 resp = self._system_llm(
-                    LLMRequest(messages=messages, model="default"),
+                    LLMRequest(messages=messages, model="default", tools=tools),
                 )
             except Exception as e:
-                logger.warning("Failure analysis API error (attempt %d/%d): %s", attempt, max_retries, e)
+                logger.warning("Failure analysis API error (attempt %d/%d): %s", attempt, max_attempts, e)
                 continue
 
-            result = self._parse_response(resp.content or "", step_ids)
-            if result is not None:
-                return result
+            # Check if LLM called submit_lesson
+            if resp.tool_calls:
+                for tc in resp.tool_calls:
+                    if tc.name == "submit_lesson":
+                        args = tc.arguments
+                        if isinstance(args, str):
+                            args = json.loads(args)
 
-            logger.info("Failure analysis: response didn't parse (attempt %d/%d), retrying", attempt, max_retries)
-            messages.append({"role": "assistant", "content": resp.content or ""})
+                        step_id = args.get("step_id", "").strip().lower()
+                        mistake = args.get("mistake", "").strip()
+                        lesson = args.get("lesson", "").strip()
+
+                        if not step_id or not lesson:
+                            logger.info("Failure analysis: empty step_id or lesson (attempt %d/%d)", attempt, max_attempts)
+                            break
+
+                        # Match to closest valid step_id
+                        if step_id not in step_ids:
+                            for sid in step_ids:
+                                if step_id in sid or sid in step_id:
+                                    step_id = sid
+                                    break
+                            else:
+                                step_id = step_ids[-1]
+
+                        return FailureAnalysis(
+                            step_id=step_id,
+                            mistake=mistake,
+                            lesson=lesson,
+                        )
+
+            # LLM responded with text or wrong tool — retry
+            logger.info(
+                "Failure analysis: no submit_lesson call (attempt %d/%d), retrying",
+                attempt, max_attempts,
+            )
+            # Append the bad response and a nudge to call the tool
+            if resp.content:
+                messages.append({"role": "assistant", "content": resp.content})
             messages.append({"role": "user", "content": (
-                "Your response could not be parsed. Please respond in EXACTLY this format:\n"
-                "STEP: fix\n"
-                "MISTAKE: <what went wrong>\n"
-                "LESSON: <abstract lesson>"
+                "You must call the submit_lesson tool to submit your analysis. "
+                "Do not respond with text — use the tool."
             )})
 
-        logger.warning("Failure analysis: exhausted %d retries", max_retries)
+        logger.warning("Failure analysis: exhausted %d attempts", max_attempts)
         return None
-
-    @staticmethod
-    def _parse_response(text: str, step_ids: list[str]) -> FailureAnalysis | None:
-        step_id = ""
-        mistake = ""
-        lesson = ""
-
-        for line in text.strip().split("\n"):
-            line = line.strip()
-            if line.upper().startswith("STEP:"):
-                step_id = line[5:].strip().lower()
-            elif line.upper().startswith("MISTAKE:"):
-                mistake = line[8:].strip()
-            elif line.upper().startswith("LESSON:"):
-                lesson = line[7:].strip()
-
-        if not step_id or not lesson:
-            return None
-
-        # Match to closest valid step_id
-        if step_id not in step_ids:
-            for sid in step_ids:
-                if step_id in sid or sid in step_id:
-                    step_id = sid
-                    break
-            else:
-                step_id = step_ids[-1]
-
-        return FailureAnalysis(step_id=step_id, mistake=mistake, lesson=lesson)

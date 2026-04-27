@@ -189,10 +189,24 @@ class StrReplaceEditorAction(Action):
 
     def _view(self, path: str, view_range: list[int] | None) -> str:
         if self._io:
-            # Docker mode: try to read as file; directories not accessible via IO
+            # Docker mode: try to read as file first
             try:
                 content = self._io.read_file(path)
             except FileNotFoundError:
+                # Could be a directory — check via bash
+                check = self._io.run_bash(f"test -d {path} && echo DIR || test -e {path} && echo FILE || echo MISSING")
+                check = check.strip()
+                if check == "DIR":
+                    if view_range:
+                        return "Error: the `view_range` parameter is not allowed when `path` points to a directory."
+                    # List directory contents via bash (matching local _view_directory style)
+                    listing = self._io.run_bash(
+                        f"find {path} -maxdepth 2 -not -path '*/\\.*' | sort"
+                    )
+                    return (
+                        f"Here's the files and directories up to 2 levels deep in {path}, "
+                        f"excluding hidden items:\n{listing}"
+                    )
                 return f"Error: the path {path} does not exist. Please provide a valid path."
             return self._view_file_content(path, content, view_range)
         else:

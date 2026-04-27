@@ -163,6 +163,7 @@ class WorkspaceManager:
         from midas_agent.workspace.config_evolution.lesson_store import LessonStore
         lesson_store = LessonStore(
             store_path=os.path.join(self._train_dir, "data", "lessons.json"),
+            similarity_threshold=self._config.lesson_similarity_threshold,
         )
 
         # Build workflow config from initial_config or use a default.

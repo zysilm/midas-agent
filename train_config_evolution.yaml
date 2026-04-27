@@ -7,3 +7,4 @@ max_tool_output_chars: 100000
 max_context_tokens: 32000
 adaptive_workspaces: true
 max_workspaces: 2
+lesson_similarity_threshold: 0.50
