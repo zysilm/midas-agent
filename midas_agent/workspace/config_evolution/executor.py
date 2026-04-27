@@ -68,6 +68,7 @@ class DAGExecutor:
         issue: Issue,
         call_llm: Callable[[LLMRequest], LLMResponse],
         balance_provider: Callable[[], int] | None = None,
+        lessons: list | None = None,
     ) -> ExecutionResult:
         # Validate DAG before execution.
         sorted_ids = self._topological_sort(config)
@@ -87,6 +88,7 @@ class DAGExecutor:
         # Multi-step: run one continuous conversation with phase transitions.
         return self._execute_multi_step(
             sorted_ids, steps_by_id, issue, call_llm, balance_provider,
+            lessons=lessons,
         )
 
     # ------------------------------------------------------------------
@@ -138,6 +140,7 @@ class DAGExecutor:
         issue: Issue,
         call_llm: Callable,
         balance_provider: Callable[[], int] | None,
+        lessons: list | None = None,
     ) -> ExecutionResult:
         from midas_agent.scheduler.resource_meter import BudgetExhaustedError
         from midas_agent.workspace.config_evolution.step_judge import StepJudge
@@ -164,8 +167,16 @@ class DAGExecutor:
         # ConfigMerger — no separate issue injection needed.
         from midas_agent.prompts import DAG_SYSTEM_PROMPT
 
+        system_prompt = DAG_SYSTEM_PROMPT
+        if lessons:
+            lesson_lines = ["\n\n## Lessons from similar past issues"]
+            for lesson in lessons:
+                lesson_lines.append(f"- Mistake: {lesson.mistake}")
+                lesson_lines.append(f"  Lesson: {lesson.lesson}")
+            system_prompt += "\n".join(lesson_lines)
+
         messages: list[dict] = [
-            {"role": "system", "content": DAG_SYSTEM_PROMPT},
+            {"role": "system", "content": system_prompt},
             {"role": "user", "content": (
                 f"**Current phase: {first_step.id}**\n\n{first_step.prompt}"
             )},

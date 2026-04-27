@@ -321,11 +321,12 @@ def _infer_eval(args, dag_config, provider, budget, logger):
                     logger.info("  Retrieved %d lessons", len(retrieved_lessons))
 
             merger = ConfigMerger(system_llm=system_llm)
-            merged = merger.merge(dag_config, issue, lessons=retrieved_lessons or None)
+            merged = merger.merge(dag_config, issue)
 
             t0 = time.time()
             result = executor.execute(merged, issue, call_llm,
-                                      balance_provider=lambda: budget)
+                                      balance_provider=lambda: budget,
+                                      lessons=retrieved_lessons or None)
             elapsed = time.time() - t0
 
             # Get patch

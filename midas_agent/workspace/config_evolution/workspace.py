@@ -97,15 +97,14 @@ class ConfigEvolutionWorkspace(Workspace):
         # Single-step (default) configs pass issue via ReactAgent context.
         exec_config = self._workflow_config
         self._last_retrieved_lesson_ids = []
+        retrieved_lessons = []
         if not self._is_default_config():
-            # Retrieve relevant lessons from past failures
-            retrieved_lessons = []
             if self._lesson_store is not None and len(self._lesson_store) > 0:
                 retrieved_lessons = self._lesson_store.retrieve(issue.description)
                 self._last_retrieved_lesson_ids = [l.lesson_id for l in retrieved_lessons]
 
             exec_config = self._config_merger.merge(
-                self._workflow_config, issue, lessons=retrieved_lessons or None,
+                self._workflow_config, issue,
             )
             logger.info(
                 "Workspace %s: merged issue '%s' into %d-step config (%d lessons)",
@@ -116,6 +115,7 @@ class ConfigEvolutionWorkspace(Workspace):
         self._last_result = self._dag_executor.execute(
             exec_config, issue, self._call_llm,
             balance_provider=lambda: self._budget,
+            lessons=retrieved_lessons if retrieved_lessons else None,
         )
 
     def submit_patch(self) -> None:

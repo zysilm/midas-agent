@@ -252,12 +252,8 @@ class ConfigMerger:
         self,
         base_config: WorkflowConfig,
         issue: Issue,
-        lessons: list | None = None,
     ) -> WorkflowConfig:
         """Merge issue context into base DAG step prompts.
-
-        Args:
-            lessons: optional list of Lesson objects to inject into the fix step.
 
         Raises RuntimeError if merging fails — there is no silent fallback.
         The agent cannot work without issue context in the step prompts.
@@ -330,10 +326,6 @@ class ConfigMerger:
                 "Config merged for issue '%s' (%d steps, attempt %d)",
                 issue.issue_id, len(merged.steps), attempt + 1,
             )
-
-            # Inject lessons into fix step (programmatic, not LLM)
-            if lessons:
-                merged = self._inject_lessons(merged, lessons)
 
             return merged
 
@@ -410,46 +402,3 @@ class ConfigMerger:
             ))
         return WorkflowConfig(meta=base.meta, steps=new_steps)
 
-    @staticmethod
-    def _inject_lessons(
-        config: WorkflowConfig,
-        lessons: list,
-    ) -> WorkflowConfig:
-        """Programmatically append lessons to the fix step's prompt.
-
-        Finds the step whose ID contains 'fix', 'patch', 'implement',
-        or 'apply'. Falls back to the second-to-last step.
-        Deterministic — no LLM call.
-        """
-        fix_keywords = ("fix", "patch", "implement", "apply", "edit")
-        fix_idx = None
-        for i, step in enumerate(config.steps):
-            if any(k in str(step.id).lower() for k in fix_keywords):
-                fix_idx = i
-                break
-        if fix_idx is None:
-            fix_idx = max(0, len(config.steps) - 2)
-
-        # Build lesson block
-        lines = ["\n\n## Lessons from similar past issues\n"]
-        for lesson in lessons:
-            lines.append(f"- Mistake: {lesson.mistake}")
-            lines.append(f"  Lesson: {lesson.lesson}\n")
-        lesson_block = "\n".join(lines)
-
-        # Append to the fix step
-        new_steps = list(config.steps)
-        old_step = new_steps[fix_idx]
-        new_steps[fix_idx] = StepConfig(
-            id=old_step.id,
-            prompt=old_step.prompt + lesson_block,
-            tools=old_step.tools,
-            inputs=old_step.inputs,
-            goal=old_step.goal,
-        )
-
-        logger.info(
-            "Injected %d lessons into step '%s' (%d chars added)",
-            len(lessons), old_step.id, len(lesson_block),
-        )
-        return WorkflowConfig(meta=config.meta, steps=new_steps)
