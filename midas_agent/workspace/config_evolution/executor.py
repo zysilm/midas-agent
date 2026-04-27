@@ -348,8 +348,9 @@ class DAGExecutor:
                             "  Compacted to %d messages (%d chars)",
                             len(messages), sum(len(str(m.get("content", ""))) for m in messages),
                         )
+                        # Restore the original system prompt (with lessons)
                         if not messages or messages[0].get("role") != "system":
-                            messages.insert(0, {"role": "system", "content": first_step.prompt})
+                            messages.insert(0, {"role": "system", "content": system_prompt})
 
                 # Stuck detection
                 if len(all_action_history) >= 3:
