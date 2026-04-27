@@ -10,23 +10,24 @@ from midas_agent.llm.types import LLMRequest, LLMResponse
 logger = logging.getLogger(__name__)
 
 FAILURE_ANALYSIS_PROMPT = """\
-You are analyzing a failed coding agent patch. The agent attempted to fix \
-a GitHub issue but the gold-standard test failed (score=0).
+You are analyzing a failed coding agent attempt. The agent attempted to fix \
+a GitHub issue but scored 0 (the fix was incorrect).
 
 ## Issue summary
 {issue_summary}
 
-## Agent's patch (what the agent changed)
+## Agent's trajectory (actions and observations during execution)
+{trajectory}
+
+## Agent's final patch
 {patch}
 
 ## Gold test that must pass
 {gold_test_info}
 
-## Gold test output (what the test actually checked)
-{test_output}
-
 ## Task
-1. What SPECIFICALLY did the agent do wrong in the patch?
+The agent's patch did NOT pass the gold test. Based on the trajectory and patch:
+1. What SPECIFICALLY did the agent do wrong?
 2. What is the ABSTRACT lesson (no file/function names — must generalize \
 to other issues)?
 
@@ -60,17 +61,20 @@ class FailureAnalyzer:
         step_ids: list[str],
         gold_test_names: list[str] | None = None,
         patch: str | None = None,
-        test_output: str | None = None,
+        trajectory: str | None = None,
         **kwargs,
     ) -> FailureAnalysis | None:
         """Analyze a failed patch and return the mistake + lesson.
+
+        Uses the agent's own trajectory and patch (ExpeL-style) — no gold
+        test output to avoid leaking evaluation data into lessons.
 
         Args:
             issue_summary: the issue description
             step_ids: list of step IDs in the DAG config
             gold_test_names: FAIL_TO_PASS test names from SWE-bench
             patch: the agent's actual git diff
-            test_output: SWE-bench test output showing what failed and why
+            trajectory: formatted trace of the agent's actions and observations
         """
         if gold_test_names:
             gold_test_info = "Tests that must pass: " + ", ".join(gold_test_names)
@@ -78,7 +82,7 @@ class FailureAnalyzer:
             gold_test_info = "(gold test names not available)"
 
         patch_section = patch if patch else "(no patch produced)"
-        test_output_section = test_output if test_output else "(test output not available)"
+        trajectory_section = trajectory if trajectory else "(trajectory not available)"
 
         # Strip HTML comments from issue description (GitHub boilerplate noise)
         import re
@@ -86,9 +90,9 @@ class FailureAnalyzer:
 
         prompt = FAILURE_ANALYSIS_PROMPT.format(
             issue_summary=clean_summary[:1000],
+            trajectory=trajectory_section,
             patch=patch_section,
             gold_test_info=gold_test_info,
-            test_output=test_output_section,
         )
 
         max_retries = 3
