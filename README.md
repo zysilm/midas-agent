@@ -33,7 +33,7 @@ For each SWE-bench issue, `ConfigMerger` embeds the issue into the DAG step prom
 flowchart LR
     DA["<b>DAG Agent</b><br/><i>runs issue</i>"] -->|"trajectory + patch"| FA
     FA["<b>Failure Analyzer</b><br/><i>ExpeL-style self-reflection</i><br/><i>on trajectory + patch</i>"] -->|"lesson"| LS
-    LS["<b>Lesson Store</b><br/><i>semantic embeddings</i><br/><i>importance voting</i>"] -->|"retrieve similar"| CM
+    LS["<b>Lesson Store</b><br/><i>semantic embeddings</i><br/><i>importance voting</i>"] -->|"retrieve by<br/>issue similarity"| CM
     CM["<b>ConfigMerger</b><br/><i>inject lessons into</i><br/><i>fix step prompt</i>"] --> DA
     SC["<b>SWE-bench Scorer</b>"] -->|"pass → upvote<br/>fail → downvote"| LS
     SC -->|"fail"| FA
@@ -45,7 +45,7 @@ flowchart LR
     style SC fill:#0d1117,stroke:#58a6ff,color:#fff
 ```
 
-When an agent fails, the **Failure Analyzer** reflects on the agent's own trajectory (Thought → Action → Observation trace) and final patch — no gold test output is used (following ExpeL's principle of learning from the agent's own experience, not from evaluation feedback). Lessons are stored as-is and retrieved by semantic similarity when a similar issue appears.
+When an agent fails, the **Failure Analyzer** reflects on the agent's own trajectory (Thought → Action → Observation trace) and final patch — no gold test output is used (following ExpeL's principle of learning from the agent's own experience, not from evaluation feedback). Each lesson is stored alongside the original issue description. At inference time, the current issue description is embedded and compared against stored issue descriptions — when a similar issue is found (cosine similarity ≥ 0.50), the corresponding lesson (mistake + guidance) is injected into the fix step prompt.
 
 **Importance voting** ensures the library self-corrects: lessons that help the agent pass get upvoted, lessons that don't help get downvoted and eventually pruned (at importance <= -4).
 

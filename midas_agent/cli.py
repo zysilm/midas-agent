@@ -83,6 +83,12 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         help="Path to lessons.json from training (enables lesson retrieval)",
     )
     infer_parser.add_argument(
+        "--lesson-threshold",
+        type=float,
+        default=0.50,
+        help="Minimum cosine similarity for lesson retrieval (default: 0.50)",
+    )
+    infer_parser.add_argument(
         "--env",
         default="docker",
         help='Execution environment: "local" or "docker" (default: docker)',
@@ -255,8 +261,9 @@ def _infer_eval(args, dag_config, provider, budget, logger):
     lesson_store = None
     if getattr(args, "lessons", None):
         from midas_agent.workspace.config_evolution.lesson_store import LessonStore
-        lesson_store = LessonStore(store_path=args.lessons)
-        logger.info("Loaded %d lessons from %s", len(lesson_store), args.lessons)
+        threshold = getattr(args, "lesson_threshold", 0.50)
+        lesson_store = LessonStore(store_path=args.lessons, similarity_threshold=threshold)
+        logger.info("Loaded %d lessons from %s (threshold=%.2f)", len(lesson_store), args.lessons, threshold)
 
     issues = load_swe_bench()
     if args.issue_index is not None:
