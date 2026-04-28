@@ -97,10 +97,11 @@ def _parse_config_yaml(yaml_text: str) -> WorkflowConfig | None:
         steps: list[StepConfig] = []
         for s in data["steps"]:
             steps.append(StepConfig(
-                id=s.get("id", f"step_{len(steps)}"),
+                id=str(s.get("id", f"step_{len(steps)}")),
                 prompt=s.get("prompt", ""),
                 tools=s.get("tools", []),
-                inputs=s.get("inputs", []),
+                inputs=[str(i) for i in s.get("inputs", [])],
+                goal=s.get("goal", ""),
             ))
 
         if not steps:
@@ -149,18 +150,22 @@ class ConfigCreator:
             tool_usage_summary=tool_summary,
         )
 
-        try:
-            resp = self._system_llm(
-                LLMRequest(messages=[{"role": "user", "content": summarize_prompt}],
-                           model="default"),
-            )
-        except Exception as e:
-            logger.warning("Config creation pass 1 failed: %s", e)
-            return None
+        summary = ""
+        for attempt in range(3):
+            try:
+                resp = self._system_llm(
+                    LLMRequest(messages=[{"role": "user", "content": summarize_prompt}],
+                               model="default"),
+                )
+                summary = (resp.content or "").strip()
+                if summary:
+                    break
+                logger.warning("Config creation pass 1 returned empty (attempt %d/3)", attempt + 1)
+            except Exception as e:
+                logger.warning("Config creation pass 1 API error (attempt %d/3): %s", attempt + 1, e)
 
-        summary = (resp.content or "").strip()
         if not summary:
-            logger.warning("Config creation pass 1 returned empty summary")
+            logger.warning("Config creation pass 1 failed after 3 attempts")
             return None
 
         logger.info("Config creation pass 1 done (%d chars)", len(summary))
@@ -183,13 +188,16 @@ class ConfigCreator:
                     LLMRequest(messages=messages, model="default"),
                 )
             except Exception as e:
-                logger.warning("Config creation pass 2 failed: %s", e)
-                return None
+                logger.warning("Config creation pass 2 API error (attempt %d/%d): %s",
+                               attempt + 1, 1 + max_retries, e)
+                continue
 
             raw_yaml = _extract_yaml(resp.content or "")
             if not raw_yaml:
-                logger.warning("Config creation pass 2 returned empty response")
-                return None
+                messages.append({"role": "assistant", "content": resp.content or ""})
+                messages.append({"role": "user", "content": "Output the YAML inside ```yaml fences."})
+                logger.info("Config creation: no YAML, retrying (attempt %d/%d)", attempt + 1, 1 + max_retries)
+                continue
 
             config = _parse_config_yaml(raw_yaml)
             if config is None:
@@ -247,72 +255,69 @@ class ConfigMerger:
     ) -> WorkflowConfig:
         """Merge issue context into base DAG step prompts.
 
-        Returns the merged config, or the original base config if
-        merging fails after retries.
+        Raises RuntimeError if merging fails — there is no silent fallback.
+        The agent cannot work without issue context in the step prompts.
         """
         from midas_agent.prompts import CONFIG_MERGE_PROMPT
-        from midas_agent.workspace.config_evolution.mutator import (
-            _config_to_yaml,
-            validate_config,
-        )
 
-        base_yaml = _config_to_yaml(base_config)
+        # Build a plain-text description of each step for the LLM
+        step_lines = []
+        for step in base_config.steps:
+            step_lines.append(f"=== STEP: {step.id} ===")
+            step_lines.append(step.prompt.strip())
+            step_lines.append("")
+        steps_description = "\n".join(step_lines)
+
         merge_prompt = CONFIG_MERGE_PROMPT.format(
-            base_config_yaml=base_yaml,
+            steps_description=steps_description,
             issue_description=issue.description,
         )
 
         messages = [{"role": "user", "content": merge_prompt}]
 
         for attempt in range(1 + MAX_MERGE_RETRIES):
-            try:
-                resp = self._system_llm(
-                    LLMRequest(messages=messages, model="default"),
-                )
-            except Exception as e:
-                logger.warning("Config merge failed: %s", e)
-                return base_config
+            resp = self._system_llm(
+                LLMRequest(messages=messages, model="default"),
+            )
 
-            raw_yaml = _extract_yaml(resp.content or "")
-            if not raw_yaml:
-                logger.warning("Config merge returned empty response")
-                return base_config
+            # Parse delimiter-formatted response: === STEP: <id> === sections
+            parsed_prompts = self._parse_delimiter_response(
+                resp.content or "", base_config,
+            )
 
-            merged = _parse_config_yaml(raw_yaml)
-            if merged is None:
+            if parsed_prompts is None:
                 messages.append({"role": "assistant", "content": resp.content or ""})
-                messages.append({"role": "user", "content": "That YAML failed to parse. Please output valid YAML."})
-                continue
-
-            # Validate basic config structure
-            validation_errors = validate_config(merged)
-            if validation_errors:
-                error_msg = (
-                    "The configuration has validation errors:\n"
-                    + "\n".join(f"- {e}" for e in validation_errors)
-                    + "\n\nPlease fix these errors and output the corrected YAML."
-                )
-                messages.append({"role": "assistant", "content": resp.content or ""})
-                messages.append({"role": "user", "content": error_msg})
+                messages.append({"role": "user", "content": (
+                    "Your response could not be parsed. Please use EXACTLY this format:\n\n"
+                    "=== STEP: <step_id> ===\n<the new prompt for this step>\n\n"
+                    "Output ALL steps. No explanation, no YAML, no code fences."
+                )})
                 logger.info(
-                    "Config merge: %d errors, retrying (attempt %d/%d)",
-                    len(validation_errors), attempt + 1, 1 + MAX_MERGE_RETRIES,
+                    "Config merge: parse failed, retrying (attempt %d/%d)",
+                    attempt + 1, 1 + MAX_MERGE_RETRIES,
                 )
                 continue
 
-            # Structural check: same step IDs, tools, inputs
-            if not self._structure_preserved(base_config, merged):
+            # Graft parsed prompts onto base config structure
+            merged = self._graft_prompts(base_config, parsed_prompts)
+
+            # Verify prompts actually changed — issue must be embedded
+            prompts_changed = any(
+                b.prompt != m.prompt
+                for b, m in zip(base_config.steps, merged.steps)
+            )
+            if not prompts_changed:
                 messages.append({"role": "assistant", "content": resp.content or ""})
                 messages.append({
                     "role": "user",
                     "content": (
-                        "The merged config changed the DAG structure (step IDs, tools, "
-                        "or inputs). You must keep these EXACTLY as the base config. "
-                        "Only rewrite the prompt fields. Please try again."
+                        "The prompts are IDENTICAL to the base config. You MUST rewrite "
+                        "each step's prompt to include the issue description. "
+                        "Please try again."
                     ),
                 })
                 logger.info(
-                    "Config merge: structure changed, retrying (attempt %d/%d)",
+                    "Config merge: prompts unchanged, retrying (attempt %d/%d)",
                     attempt + 1, 1 + MAX_MERGE_RETRIES,
                 )
                 continue
@@ -321,20 +326,79 @@ class ConfigMerger:
                 "Config merged for issue '%s' (%d steps, attempt %d)",
                 issue.issue_id, len(merged.steps), attempt + 1,
             )
+
             return merged
 
-        logger.warning("Config merge: exhausted retries, using base config")
-        return base_config
+        raise RuntimeError(
+            f"Config merge failed after {1 + MAX_MERGE_RETRIES} attempts "
+            f"for issue '{issue.issue_id}'. Cannot proceed without issue context."
+        )
 
     @staticmethod
-    def _structure_preserved(
+    def _parse_delimiter_response(
+        text: str,
+        base_config: WorkflowConfig,
+    ) -> dict[str, str] | None:
+        """Parse '=== STEP: <id> ===' delimited response into {step_id: prompt}.
+
+        Returns None if no steps could be parsed.
+        """
+        # Split on the delimiter pattern
+        parts = re.split(r"===\s*STEP:\s*(\S+)\s*===", text)
+        # parts[0] is preamble (ignored), then alternating (id, content) pairs
+        if len(parts) < 3:
+            return None
+
+        prompts: dict[str, str] = {}
+        for i in range(1, len(parts), 2):
+            step_id = parts[i].strip()
+            content = parts[i + 1].strip() if i + 1 < len(parts) else ""
+            if content:
+                prompts[step_id] = content
+
+        if not prompts:
+            return None
+
+        # Match parsed IDs to base config IDs (fuzzy: LLM may slightly alter IDs)
+        # Convert to str — YAML may parse numeric IDs as int (e.g. id: 1)
+        base_ids = [str(s.id) for s in base_config.steps]
+        matched: dict[str, str] = {}
+        for parsed_id, prompt in prompts.items():
+            pid = str(parsed_id)
+            if pid in base_ids:
+                matched[pid] = prompt
+            else:
+                # Fuzzy match: find the closest base ID
+                for base_id in base_ids:
+                    if pid in base_id or base_id in pid:
+                        matched[base_id] = prompt
+                        break
+
+        # Need at least one matched step
+        if not matched:
+            return None
+
+        logger.info(
+            "Config merge: parsed %d/%d steps from delimiter response",
+            len(matched), len(base_ids),
+        )
+        return matched
+
+    @staticmethod
+    def _graft_prompts(
         base: WorkflowConfig,
-        merged: WorkflowConfig,
-    ) -> bool:
-        """Check that merged config has same structure as base."""
-        if len(base.steps) != len(merged.steps):
-            return False
-        for b, m in zip(base.steps, merged.steps):
-            if b.id != m.id or b.tools != m.tools or b.inputs != m.inputs:
-                return False
-        return True
+        prompts: dict[str, str],
+    ) -> WorkflowConfig:
+        """Graft parsed prompts onto base config, keeping structure intact."""
+        new_steps = []
+        for step in base.steps:
+            new_prompt = prompts.get(str(step.id), step.prompt)
+            new_steps.append(StepConfig(
+                id=step.id,
+                prompt=new_prompt,
+                tools=step.tools,
+                inputs=step.inputs,
+                goal=step.goal,
+            ))
+        return WorkflowConfig(meta=base.meta, steps=new_steps)
+

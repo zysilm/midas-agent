@@ -32,6 +32,9 @@ class SWEBenchScorer(ExecutionScorer):
         self._run_id = f"midas-{uuid.uuid4().hex[:8]}"
 
     def score(self, patch: str, issue: Issue) -> float:
+        """Score a patch. Also stores test_output for failure analysis."""
+        self.last_test_output = ""
+
         if not patch or not patch.strip():
             return 0.0
 
@@ -59,10 +62,62 @@ class SWEBenchScorer(ExecutionScorer):
         )
 
         if result is None:
-            raise RuntimeError(f"SWE-bench evaluation returned None for {issue.issue_id}")
+            logger.warning("SWE-bench evaluation returned None for %s", issue.issue_id)
+            return 0.0
+
+        # Capture test output from run_instance log
+        self.last_test_output = self._read_test_log(issue.issue_id)
 
         instance_id, report = result
         return self._parse_report(report, issue)
+
+    def _read_test_log(self, instance_id: str) -> str:
+        """Read test output from SWE-bench evaluation.
+
+        Prefers test_output.txt (has assertion details) over run_instance.log.
+        Searches all run_ids (not just self._run_id) and picks the most recent.
+        """
+        import glob
+        import os
+
+        # Find test_output.txt across all run_ids, pick most recent
+        pattern = f"logs/run_evaluation/*/midas-agent/{instance_id}/test_output.txt"
+        matches = sorted(glob.glob(pattern), key=os.path.getmtime, reverse=True)
+        test_output_path = matches[0] if matches else None
+
+        if test_output_path and os.path.isfile(test_output_path):
+            try:
+                with open(test_output_path) as f:
+                    content = f.read()
+                # Extract failure sections
+                lines = content.split("\n")
+                failure_lines = []
+                capture = False
+                for line in lines:
+                    if any(k in line for k in ["FAILED", "AssertionError", "assert ", "Error", "raise "]):
+                        capture = True
+                    if capture:
+                        failure_lines.append(line)
+                        if len(failure_lines) > 80:
+                            break
+                    if capture and line.strip() == "" and len(failure_lines) > 3:
+                        capture = False
+                if failure_lines:
+                    return "\n".join(failure_lines)
+            except Exception:
+                pass
+
+        # Fallback to run_instance.log
+        log_pattern = f"logs/run_evaluation/*/midas-agent/{instance_id}/run_instance.log"
+        log_matches = sorted(glob.glob(log_pattern), key=os.path.getmtime, reverse=True)
+        if log_matches:
+            try:
+                with open(log_matches[0]) as f:
+                    return f.read()[-3000:]
+            except Exception:
+                pass
+
+        return ""
 
     # ------------------------------------------------------------------
     # Helpers

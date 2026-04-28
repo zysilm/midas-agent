@@ -14,6 +14,7 @@ class StepConfig:
     prompt: str
     tools: list[str] = field(default_factory=list)
     inputs: list[str] = field(default_factory=list)
+    goal: str = ""
 
 
 @dataclass

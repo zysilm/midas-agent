@@ -121,7 +121,6 @@ class WorkspaceManager:
         from midas_agent.stdlib.action import ActionRegistry
         from midas_agent.stdlib.actions.bash import BashAction
         from midas_agent.stdlib.actions.str_replace_editor import StrReplaceEditorAction
-        from midas_agent.stdlib.actions.task_done import TaskDoneAction
         from midas_agent.workspace.config_evolution.config_schema import (
             ConfigMeta,
             StepConfig,
@@ -142,7 +141,6 @@ class WorkspaceManager:
         all_actions = [
             BashAction(),
             StrReplaceEditorAction(),
-            TaskDoneAction(),
         ]
         all_tool_names = [a.name for a in all_actions]
         registry = ActionRegistry(all_actions)
@@ -160,6 +158,12 @@ class WorkspaceManager:
         config_merger = ConfigMerger(system_llm=self._system_llm_callback)
         snapshot_store = ConfigSnapshotStore(
             store_dir=os.path.join(self._train_dir, "log", "snapshots"),
+        )
+
+        from midas_agent.workspace.config_evolution.lesson_store import LessonStore
+        lesson_store = LessonStore(
+            store_path=os.path.join(self._train_dir, "data", "lessons.json"),
+            similarity_threshold=self._config.lesson_similarity_threshold,
         )
 
         # Build workflow config from initial_config or use a default.
@@ -203,6 +207,7 @@ class WorkspaceManager:
             config_creator=config_creator,
             config_merger=config_merger,
             snapshot_store=snapshot_store,
+            lesson_store=lesson_store,
         )
 
     def _create_graph_emergence_workspace(

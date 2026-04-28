@@ -1,0 +1,74 @@
+meta:
+  name: targeted-bug-fix-workflow
+  description: Iterative bug fixing with localized search, targeted validation, and
+    incremental test expansion
+steps:
+- id: localize
+  prompt: 'Search the codebase to identify the relevant source files and line ranges
+    related to the reported bug or feature request. Use grep, find, or similar search
+    tools to locate files that contain relevant code patterns, function names, or
+    error messages.
+
+    '
+  tools:
+  - bash
+  - str_replace_editor
+  inputs: []
+  goal: 'Identified specific source files and line ranges that are likely related
+    to the bug. Output a concise list of files with relevant code sections.
+
+    '
+- id: reproduce
+  prompt: 'Run targeted test commands or scripts to confirm the current behavior and
+    reproduce the bug. Execute specific test cases that directly exercise the identified
+    code paths. Avoid running broad test suites at this stage.
+
+    '
+  tools:
+  - bash
+  inputs:
+  - localize
+  goal: 'Confirmed reproduction of the bug or verified expected behavior through targeted
+    test output. Documented the specific test command and its result.
+
+    '
+- id: implement
+  prompt: 'Read the identified source files to understand the code structure, then
+    make a targeted code modification to fix the bug. Use the str_replace_editor to
+    edit the specific lines identified during localization.
+
+    '
+  tools:
+  - str_replace_editor
+  inputs:
+  - reproduce
+  goal: 'Code modification implemented and saved. The edit addresses the root cause
+    identified during reproduction.
+
+    '
+- id: validate_targeted
+  prompt: 'Run the same targeted test commands used during reproduction to verify
+    the fix works. Use the specific test case that directly exercises the fixed behavior.
+
+    '
+  tools:
+  - bash
+  inputs:
+  - implement
+  goal: 'Targeted tests pass, confirming the fix resolves the specific bug. Output
+    shows the test result.
+
+    '
+- id: validate_broad
+  prompt: 'Run broader test suites to ensure no regressions were introduced. Batch
+    multiple test files or test categories into combined runs to reduce overhead.
+
+    '
+  tools:
+  - bash
+  inputs:
+  - validate_targeted
+  goal: 'Broader test suites pass or failures are understood as unrelated to the fix.
+    Validation complete.
+
+    '

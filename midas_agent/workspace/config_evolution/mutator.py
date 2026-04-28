@@ -49,6 +49,7 @@ def _config_to_yaml(config: WorkflowConfig) -> str:
                 "prompt": s.prompt,
                 "tools": s.tools,
                 "inputs": s.inputs,
+                **({"goal": s.goal} if s.goal else {}),
             }
             for s in config.steps
         ],
@@ -56,12 +57,16 @@ def _config_to_yaml(config: WorkflowConfig) -> str:
     return yaml.dump(data, default_flow_style=False, allow_unicode=True, sort_keys=False)
 
 
-def validate_config(config: WorkflowConfig) -> list[str]:
+def validate_config(config: WorkflowConfig, *, skip_prompt_length: bool = False) -> list[str]:
     """Deterministic validation of a WorkflowConfig.
 
     Returns a list of error strings.  Empty list = valid.
     Checks: YAML structure, step IDs unique, tools legal, inputs
     reference existing steps, DAG is acyclic, prompts non-empty.
+
+    Args:
+        skip_prompt_length: if True, skip the per-step prompt size check.
+            Used for merged configs where issue text inflates prompts.
     """
     errors: list[str] = []
 
@@ -99,7 +104,7 @@ def validate_config(config: WorkflowConfig) -> list[str]:
             errors.append(f"Step '{step.id}': prompt is empty.")
 
         # Prompt size
-        if len(step.prompt) > MAX_STEP_PROMPT_CHARS:
+        if not skip_prompt_length and len(step.prompt) > MAX_STEP_PROMPT_CHARS:
             errors.append(
                 f"Step '{step.id}': prompt is {len(step.prompt)} chars "
                 f"(max {MAX_STEP_PROMPT_CHARS})."

@@ -35,14 +35,40 @@ for specific sections.
 (3-5 lines) to make `old_str` unique.
   - `insert`: Insert text after a specific line number.
   - `undo_edit`: Revert the last edit to a file.
-- **task_done**: Call this when you have completed your task or the current step.\
+When you have completed the task, stop calling tools and state your \
+findings and what you changed as text.\
 """
 
 DAG_SYSTEM_PROMPT = """\
-You are a coding agent working on a code repository. \
-I will guide you step by step. Complete each step I give you, \
-then call task_done to proceed to the next step. \
-Focus ONLY on what the current step asks — do not skip ahead.\
+You are a helpful assistant that can interact with a computer to solve tasks.\
+"""
+
+DAG_INSTANCE_TEMPLATE = """\
+<uploaded_files>
+/testbed
+</uploaded_files>
+I've uploaded a python code repository in the directory /testbed. Consider the following issue:
+
+<issue>
+{issue_description}
+</issue>
+
+Can you help me implement the necessary changes to the repository so that the \
+requirements specified in the <issue> are met?
+I've already taken care of all changes to any of the test files described in \
+the <issue>. This means you DON'T have to modify the testing logic or any of \
+the tests in any way!
+Your task is to make the minimal changes to non-tests files in the /testbed \
+directory to ensure the <issue> is satisfied.
+Follow these steps to resolve the issue:
+1. As a first step, it might be a good idea to find and read code relevant \
+to the <issue>
+2. Create a script to reproduce the error and execute it with \
+`python <filename.py>` using the bash tool, to confirm the error
+3. Edit the sourcecode of the repo to resolve the issue
+4. Rerun your reproduce script and confirm that the error is fixed!
+5. Think about edgecases and make sure your fix handles them as well
+Your thinking should be thorough and so it's fine if it's very long.\
 """
 
 # ---------------------------------------------------------------------------
@@ -87,7 +113,7 @@ a declarative YAML workflow configuration that captures the workflow pattern.
 - bash: Run shell commands (grep, find, python, pytest, etc.)
 - str_replace_editor: Read files (view command), create files (create command), \
 edit files (str_replace command)
-- task_done: Signal completion
+NOTE: there is NO task_done tool. Step completion is detected automatically.
 
 ## Configuration format
 ```yaml
@@ -98,19 +124,23 @@ meta:
 steps:
   - id: <step_id>
     prompt: |
-      <system prompt for this step — what to do and how>
+      <what the agent should do in this step>
+    goal: |
+      <completion criteria — how to know this step is done>
     tools: [<tool subset>]
     inputs: []  # [] = entry node, [dep_id] = depends on prior step
 ```
 
 ## Constraints
-- Each step runs as an independent agent with max 10 iterations
+- Each step has a `prompt` (what to do) and a `goal` (when it's done)
+- Goals must be concrete and verifiable (e.g., "identified source files and \
+line ranges" NOT "understood the code")
 - Steps communicate only via text output passed to dependent steps
-- Prompts must be GENERIC — applicable to any bug-fixing task, not specific to \
-any codebase or issue
-- Keep to 3-5 steps. Too many steps wastes budget on inter-step context loss
-- Every step that needs to read or edit code needs str_replace_editor in its tools
-- Every step that needs to run commands needs bash in its tools
+- Prompts and goals must be GENERIC — applicable to any bug-fixing task
+- Keep to 3-5 steps
+- Every step that needs to read or edit code needs str_replace_editor
+- Every step that needs to run commands needs bash
+- Do NOT include task_done in any step's tools
 
 ## Experience summary from a successful run (score={score})
 
@@ -131,57 +161,52 @@ CONFIG_MERGE_PROMPT = """\
 You are a workflow configuration merger for a coding agent system.
 
 Given a BASE workflow DAG and a GitHub issue, rewrite ONLY the prompt field \
-of each step to embed the relevant parts of the issue. Keep everything else \
-(meta, step IDs, tools, inputs) EXACTLY as-is.
+of each step to embed the RELEVANT PARTS of the issue.
 
-## Step 1: Extract the GOAL from the issue
+## Rules — distribute the issue across steps
 
-First, extract a one-sentence success criteria from the issue. This is what \
-"done" looks like. Examples:
-- "GOAL: `separability_matrix(Pix2Sky_TAN() & cm)` should return the same \
-diagonal result as the flat compound version."
-- "GOAL: Removing a required column from TimeSeries should raise a clear error \
-naming the missing column, not 'expected time but found time'."
-- "GOAL: `Table.write(format='html', formats=...)` should respect the formats \
-argument, producing formatted values like '1.24e-24' instead of full precision."
+Do NOT put the full issue in every step. Instead, give each step ONLY the \
+information it needs to do its specific job. This prevents the agent from \
+jumping ahead (e.g., trying to fix the code during localization).
 
-## Step 2: Embed the GOAL in EVERY step
-
-Include the extracted GOAL line at the TOP of every step prompt. The agent \
-may lose context over long conversations — the goal must always be visible.
-
-## Step 3: Split the remaining issue context across steps
-- **localize**: Include symptoms (error messages, unexpected behavior) to \
-search for. Do NOT include reproduction code or fix hints.
-- **investigate**: Include the reproduction code. Reference localize output.
-- **fix**: Include expected correct behavior. Reference investigate findings. \
-The fix+validate step should iterate: apply fix, run tests, if tests fail \
-adjust and retry.
-- **validate**: Include test expectations. If tests fail, go back and fix \
-the code — do not just report failure.
+How to distribute:
+- **localize/search steps**: Issue title + brief description of the symptom \
+(what module, what goes wrong). Do NOT include reproduction code or expected \
+fix details. The agent should search without knowing the answer yet.
+- **reproduce/investigate steps**: Issue title + the reproduction steps and \
+code snippets from the issue + expected vs actual behavior. The agent needs \
+to reproduce the bug, not fix it.
+- **fix/patch steps**: The FULL issue description — the agent needs complete \
+context to apply the correct fix. Include the expected behavior, actual \
+behavior, and reproduction code.
+- **validate/test steps**: Issue title + expected correct behavior. The agent \
+needs to know what "fixed" looks like to verify properly.
+- **cleanup steps**: Only the issue title for reference.
 
 ## Constraints
-- Each step prompt must be self-contained — the agent sees NOTHING else
-- The GOAL line must appear at the top of EVERY step prompt
-- Do NOT repeat the full issue in every step (only the goal + step-specific context)
-- Keep each prompt under 2000 characters
-- End each prompt with "Call task_done when complete."
-- Output the COMPLETE YAML with the same structure
-- IMPORTANT: Include in the fix and validate steps: "Do NOT modify test files. \
-Only change source code files to fix the issue. Test changes have already been \
-handled separately."
+- Each step prompt = original step instruction + distributed issue context
+- End each prompt with: "When you complete this phase, stop calling tools \
+and state your findings as text."
+- Every step prompt MUST be different from the base — you MUST embed issue \
+context into each one
 
-## Base DAG
+## Base DAG steps
 
-```yaml
-{base_config_yaml}
-```
+{steps_description}
 
 ## Issue
 
 {issue_description}
 
-Respond with ONLY the YAML inside ```yaml fences.\
+## Output format
+
+Output EXACTLY one section per step, using this delimiter format:
+
+=== STEP: <step_id> ===
+<the new prompt for this step>
+
+Output ALL steps. Do NOT output anything else — no explanation, no YAML, \
+no code fences.\
 """
 
 TASK_PROMPT_TEMPLATE = """\

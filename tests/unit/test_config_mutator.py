@@ -304,8 +304,9 @@ class TestGEPAConfigOptimizer:
             min_dataset_size=5,
         )
         config = _make_config(StepConfig(id="s1", prompt="Do.", tools=["bash"]))
-        result = opt.maybe_optimize(config)
+        result, changed = opt.maybe_optimize(config)
         assert result is config  # unchanged
+        assert changed is False
 
     def test_condense_prompt(self):
         """Condensation asks system_llm to shorten a prompt."""

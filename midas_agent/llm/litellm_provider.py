@@ -54,6 +54,8 @@ class LiteLLMProvider(LLMProvider):
         self._api_base = api_base
 
     def complete(self, request: LLMRequest) -> LLMResponse:
+        import os
+
         kwargs: dict = {
             "model": self._model,
             "messages": request.messages,
@@ -67,7 +69,14 @@ class LiteLLMProvider(LLMProvider):
             kwargs["max_tokens"] = request.max_tokens
         if request.tools is not None:
             kwargs["tools"] = request.tools
-            kwargs["tool_choice"] = "required"
+
+        # Pass extra headers (e.g. OpenRouter provider selection)
+        extra_headers_raw = os.environ.get("OPENROUTER_EXTRA_HEADERS")
+        if extra_headers_raw:
+            try:
+                kwargs["extra_headers"] = json.loads(extra_headers_raw)
+            except json.JSONDecodeError:
+                pass
 
         response = litellm.completion(**kwargs)
 

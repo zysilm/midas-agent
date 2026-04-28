@@ -1,0 +1,223 @@
+diff --git a/debug.py b/debug.py
+new file mode 100644
+index 000000000..ccc05d8df
+--- /dev/null
++++ b/debug.py
+@@ -0,0 +1,61 @@
++#!/usr/bin/env python
++"""Debug the double single-quote issue."""
++
++from astropy.io import fits
++
++# Case 1: n=65 - failing case
++n = 65
++print(f"=== Case n={n} ===")
++card1 = fits.Card('CONFIG', "x" * n + "''")
++print(f"Original value: {card1.value!r}")
++print(f"Original image: {str(card1)!r}")
++
++# Parse the image manually
++image = str(card1)
++print(f"\nImage length: {len(image)}")
++
++# Split into cards
++card1_img = image[:80]
++card2_img = image[80:] if len(image) > 80 else ""
++print(f"First card: {card1_img!r}")
++print(f"Second card: {card2_img!r}")
++
++# Look at value portion
++print(f"\nFirst card value portion (chars 10-80): {card1_img[10:]!r}")
++print(f"Second card value portion: {card2_img!r}")
++
++# Now let's see what's happening in _split
++from astropy.io.fits.card import Card
++c = Card.fromstring(image)
++print(f"\nManual _split result:")
++kw, vc = c._split()
++print(f"  keyword: {kw!r}")
++print(f"  valuecomment: {vc!r}")
++
++# Now test the regex
++import re
++from astropy.io.fits.card import Card
++strg_comment_re = Card._strg_comment_RE
++print(f"\nMatching each card:")
++m1 = strg_comment_re.match(card1_img[10:].strip())
++m2 = strg_comment_re.match(card2_img[10:].strip()) if card2_img else None
++print(f"  Card 1 match: {m1.groups() if m1 else None}")
++print(f"  Card 2 match: {m2.groups() if m2 else None}")
++
++# Get value portion from each match
++if m1:
++    val1 = m1.group("strg") or ""
++    print(f"  Card 1 strg (before replace): {val1!r}")
++    val1 = val1.rstrip().replace("''", "'")
++    print(f"  Card 1 strg (after replace): {val1!r}")
++if m2:
++    val2 = m2.group("strg") or ""
++    print(f"  Card 2 strg (before replace): {val2!r}")
++    val2 = val2.rstrip().replace("''", "'")
++    print(f"  Card 2 strg (after replace): {val2!r}")
++
++# Now join
++print(f"\nJoined values: {val1!r} + {val2!r}")
++joined = val1 + val2
++print(f"Result: {joined!r}")
++print(f"Expected: {('x' * n + chr(39) + chr(39))!r}")
+\ No newline at end of file
+diff --git a/debug2.py b/debug2.py
+new file mode 100644
+index 000000000..571d1cd81
+--- /dev/null
++++ b/debug2.py
+@@ -0,0 +1,32 @@
++#!/usr/bin/env python
++"""Debug test to confirm the fix."""
++
++# Simulating what happens now vs. what should happen
++
++# Case n=65:
++# After splitting:
++val1 = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx''&"
++val2 = "''"
++
++print("Current behavior (applying replace to each fragment separately):")
++# Step 1: rstrip then replace on each fragment
++val1_fixed = val1.rstrip().replace("''", "'")
++if val1_fixed and val1_fixed[-1] == "&":
++    val1_fixed = val1_fixed[:-1]
++val2_fixed = val2.rstrip().replace("''", "'")
++print(f"  val1_fixed: {val1_fixed!r}")
++print(f"  val2_fixed: {val2_fixed!r}")
++result_current = val1_fixed + val2_fixed
++print(f"  joined: {result_current!r}")
++
++print("\nCorrect behavior (joining FIRST, then applying replace):")
++combined = val1.rstrip() + val2
++print(f"  combined (before strip &): {combined!r}")
++combined_fixed = combined.replace("''", "'")
++# Then remove the & if present
++if combined_fixed and combined_fixed[-1] == "&":
++    combined_fixed = combined_fixed[:-1]
++print(f"  combined (after replace): {combined_fixed!r}")
++
++print("\nExpected:")
++print(f"  expected: {('x' * 65 + chr(39) + chr(39))!r}")
+\ No newline at end of file
+diff --git a/debug3.py b/debug3.py
+new file mode 100644
+index 000000000..dd7c3cf2d
+--- /dev/null
++++ b/debug3.py
+@@ -0,0 +1,74 @@
++#!/usr/bin/env python
++"""Debug test to confirm the fix - trace through full flow."""
++
++# Original value
++original_value = "x" * 65 + "''"
++print(f"Original value: {original_value!r}")
++print(f"Original value len: {len(original_value)}")
++
++# What happens in _format_long_image:
++# Step 1: Escape quotes
++escaped_value = original_value.replace("'", "''")
++print(f"\nAfter escaping quotes: {escaped_value!r}")
++print(f"Escaped value len: {len(escaped_value)}")
++
++# Step 2: _words_group with value_length=67
++from astropy.io.fits.util import _words_group
++chunks = _words_group(escaped_value, 67)
++print(f"\nChunks from _words_group: {chunks}")
++print(f"Chunk lens: {[len(c) for c in chunks]}")
++
++# Step 3: Each chunk is wrapped in quotes with & for continuation
++# Let's see what card images would be created
++for idx, chunk in enumerate(chunks):
++    if idx == 0:
++        headstr = "CONFIG  = "
++    else:
++        headstr = "CONTINUE  "
++    
++    # If this is the final CONTINUE remove the '&'
++    if idx == len(chunks) - 1:
++        value_format = "'{}'"
++    else:
++        value_format = "'{}&'"
++    
++    card_value = value_format.format(chunk)
++    card_image = headstr + card_value
++    print(f"\nCard {idx}: {card_image!r}")
++    print(f"  Length: {len(card_image)}")
++
++# Now let's trace what happens in _split (current buggy behavior)
++print("\n\n=== Current _split behavior ===")
++# Each card is processed separately
++# Card 0:
++value0 = "xxxxxxxx...xx''&"  # 65 x's + ''& (before final quote)
++m0_strg = "xxxxxxxx...xx''&"  # strg group from regex (includes the closing quote)
++# Current code does:
++value0_fixed = m0_strg.rstrip().replace("''", "'")  # This replaces ALL '' with '
++if value0_fixed and value0_fixed[-1] == "&":
++    value0_fixed = value0_fixed[:-1]
++# This gives: "xxxxxxxx...x'" (the '' was replaced with ')
++print(f"Card 0 fixed: {value0_fixed!r}")
++
++# Card 1:
++value1_fixed = "''".rstrip().replace("''", "'")  # This becomes "'"
++print(f"Card 1 fixed: {value1_fixed!r}")
++
++# Joined: "xxxxxxxx...x'" + "'" = "xxxxxxxx...x''"
++print(f"Joined: {value0_fixed + value1_fixed!r}")
++
++# What it SHOULD be:
++# First, join the raw strg values (not unescaped yet!)
++raw0 = "xxxxxxxx...xx''&"  # From card 0 (but wait, the actual strg captured is different!)
++raw1 = "''"  # From card 1
++
++# Combined raw:
++combined_raw = raw0.rstrip() + raw1  # (rstrip before combining)
++print(f"\nCombined raw: {combined_raw!r}")
++
++# Then unescape quotes:
++final = combined_raw.replace("''", "'")
++if final and final[-1] == "&":
++    final = final[:-1]
++print(f"Final after unescape: {final!r}")
++# This should give us back the original value
+\ No newline at end of file
+diff --git a/reproduce.py b/reproduce.py
+new file mode 100644
+index 000000000..471b96dee
+--- /dev/null
++++ b/reproduce.py
+@@ -0,0 +1,28 @@
++#!/usr/bin/env python
++"""Reproduce the double single-quote issue."""
++
++from astropy.io import fits
++
++print("Testing the issue:")
++for n in range(60, 70):
++    card1 = fits.Card('CONFIG', "x" * n + "''")
++    card2 = fits.Card.fromstring(str(card1))
++    result = card1.value == card2.value
++    print(f"n={n}, len(card1.value)={len(card1.value)}, equal={result}")
++    if not result:
++        print(f"  card1.value: {card1.value!r}")
++        print(f"  card2.value: {card2.value!r}")
++        print(f"  card1 image: {str(card1)!r}")
++        print()
++
++print("\n\nTesting with more context:")
++for n in range(50, 70):
++    card1 = fits.Card('CONFIG', "x" * n + "''" + "x" * 10)
++    card2 = fits.Card.fromstring(str(card1))
++    result = card1.value == card2.value
++    print(f"n={n}, len(card1.value)={len(card1.value)}, equal={result}")
++    if not result:
++        print(f"  card1.value: {card1.value!r}")
++        print(f"  card2.value: {card2.value!r}")
++        print(f"  card1 image: {str(card1)!r}")
++        print()
+\ No newline at end of file

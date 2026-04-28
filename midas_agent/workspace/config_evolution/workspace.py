@@ -35,6 +35,7 @@ class ConfigEvolutionWorkspace(Workspace):
         config_creator: ConfigCreator,
         config_merger: ConfigMerger,
         snapshot_store: ConfigSnapshotStore,
+        lesson_store=None,
     ) -> None:
         super().__init__(workspace_id, call_llm, system_llm)
         self._workflow_config = workflow_config
@@ -45,9 +46,11 @@ class ConfigEvolutionWorkspace(Workspace):
         self._config_creator = config_creator
         self._config_merger = config_merger
         self._snapshot_store = snapshot_store
+        self._lesson_store = lesson_store
         self._budget = 0
         self._last_result: ExecutionResult | None = None
         self._last_issue: Issue | None = None
+        self._last_retrieved_lesson_ids: list[str] = []
         self._episode_count = 0
         self._io = None  # Set by training.py for Docker execution mode
 
@@ -78,6 +81,10 @@ class ConfigEvolutionWorkspace(Workspace):
 
     def execute(self, issue: Issue) -> None:
         self.calls.append(("execute", {"issue_id": issue.issue_id}))
+        # Clear stale state from previous episode — prevents leaking
+        # old traces/patches when the current episode fails early.
+        self._last_result = None
+        self._last_patch = ""
         self._last_issue = issue
         if self._io is not None:
             self._dag_executor.set_io(self._io)
@@ -86,17 +93,29 @@ class ConfigEvolutionWorkspace(Workspace):
         elif self.work_dir:
             self._dag_executor.set_work_dir(self.work_dir)
 
-        # Merge issue into config for multi-step DAGs.
-        # The base config has generic prompts; the merged config has
-        # issue-specific context embedded in each step prompt.
+        # Merge issue context into step prompts for multi-step DAGs.
+        # Single-step (default) configs pass issue via ReactAgent context.
+        exec_config = self._workflow_config
+        self._last_retrieved_lesson_ids = []
+        retrieved_lessons = []
         if not self._is_default_config():
-            exec_config = self._config_merger.merge(self._workflow_config, issue)
-        else:
-            exec_config = self._workflow_config
+            if self._lesson_store is not None and len(self._lesson_store) > 0:
+                retrieved_lessons = self._lesson_store.retrieve(issue.description)
+                self._last_retrieved_lesson_ids = [l.lesson_id for l in retrieved_lessons]
+
+            exec_config = self._config_merger.merge(
+                self._workflow_config, issue,
+            )
+            logger.info(
+                "Workspace %s: merged issue '%s' into %d-step config (%d lessons)",
+                self.workspace_id, issue.issue_id, len(exec_config.steps),
+                len(retrieved_lessons),
+            )
 
         self._last_result = self._dag_executor.execute(
             exec_config, issue, self._call_llm,
             balance_provider=lambda: self._budget,
+            lessons=retrieved_lessons if retrieved_lessons else None,
         )
 
     def submit_patch(self) -> None:
@@ -160,21 +179,74 @@ class ConfigEvolutionWorkspace(Workspace):
             and self._last_result.action_history
         )
 
-        # -- Record successful episodes for GEPA (before config creation) --
-        if (
-            my_score >= 1.0
-            and has_trace
-            and self._last_issue is not None
-        ):
+        # -- Record episode for GEPA (success and failure) --
+        if has_trace and self._last_issue is not None:
             from midas_agent.workspace.config_evolution.config_creator import (
                 format_trace,
             )
             full_trace = format_trace(self._last_result.action_history)
-            self._prompt_optimizer.record_episode(
-                task_input=self._last_issue.description,
-                action_summary=full_trace,
-                score=my_score,
-                issue_id=self._last_issue.issue_id,
+
+            if my_score >= 1.0:
+                self._prompt_optimizer.record_episode(
+                    task_input=self._last_issue.description,
+                    action_summary=full_trace,
+                    score=my_score,
+                    issue_id=self._last_issue.issue_id,
+                )
+            else:
+                # Analyze failure → store lesson in lesson store
+                failure_reason = None
+                if not self._is_default_config() and self._system_llm:
+                    from midas_agent.workspace.config_evolution.failure_analyzer import FailureAnalyzer
+                    analyzer = FailureAnalyzer(self._system_llm)
+                    step_ids = [str(s.id) for s in self._workflow_config.steps]
+                    analysis = analyzer.analyze(
+                        issue_summary=self._last_issue.description,
+                        step_ids=step_ids,
+                        gold_test_names=self._last_issue.fail_to_pass or None,
+                        patch=self._last_patch or None,
+                        trajectory=full_trace,
+                    )
+                    if analysis:
+                        failure_reason = (
+                            f"[{analysis.step_id}] {analysis.mistake} "
+                            f"— Lesson: {analysis.lesson}"
+                        )
+                        logger.info(
+                            "Workspace %s: failure analysis — %s",
+                            self.workspace_id, failure_reason,
+                        )
+                        # Store lesson for retrieval on future issues
+                        if self._lesson_store is not None:
+                            try:
+                                self._lesson_store.add_lesson(
+                                    issue_id=self._last_issue.issue_id,
+                                    issue_summary=self._last_issue.description,
+                                    step_id=analysis.step_id,
+                                    mistake=analysis.mistake,
+                                    lesson=analysis.lesson,
+                                    patch=self._last_patch or "",
+                                    correct_approach=analysis.correct_approach,
+                                )
+                            except Exception as e:
+                                logger.error("Failed to add lesson: %s", e)
+                        else:
+                            logger.warning("No lesson store available")
+
+                # Record failure trace for data persistence
+                self._prompt_optimizer.record_failure(
+                    task_input=self._last_issue.description,
+                    action_summary=full_trace,
+                    score=my_score,
+                    failure_reason=failure_reason,
+                    issue_id=self._last_issue.issue_id,
+                )
+
+        # -- Vote on retrieved lessons --
+        if self._lesson_store is not None and self._last_retrieved_lesson_ids:
+            self._lesson_store.vote(
+                self._last_retrieved_lesson_ids,
+                upvote=(my_score >= 1.0),
             )
 
         # -- Config creation on first success --
@@ -202,20 +274,8 @@ class ConfigEvolutionWorkspace(Workspace):
 
         # -- Normal post-episode flow --
         if self.workspace_id in evicted_ids:
-            # Evicted: nothing to do.  The scheduler will replace this
-            # workspace with a new one seeded from the best-η config.
             return None
-        else:
-            # Survived: GEPA optimization (runs every N episodes when
-            # enough data has accumulated).  Skip for the default
-            # single-step config — it awaits config creation on first
-            # success, not incremental mutation.
-            if not self._is_default_config():
-                new_config = self._prompt_optimizer.maybe_optimize(
-                    self._workflow_config,
-                )
-                self._workflow_config = new_config
-            # else: keep current config as-is (default config)
+        # No GEPA config mutation — lessons are stored and retrieved per-issue
 
         # -- Save snapshot for export --
         self._episode_count += 1

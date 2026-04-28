@@ -68,6 +68,7 @@ class DAGExecutor:
         issue: Issue,
         call_llm: Callable[[LLMRequest], LLMResponse],
         balance_provider: Callable[[], int] | None = None,
+        lessons: list | None = None,
     ) -> ExecutionResult:
         # Validate DAG before execution.
         sorted_ids = self._topological_sort(config)
@@ -87,6 +88,7 @@ class DAGExecutor:
         # Multi-step: run one continuous conversation with phase transitions.
         return self._execute_multi_step(
             sorted_ids, steps_by_id, issue, call_llm, balance_provider,
+            lessons=lessons,
         )
 
     # ------------------------------------------------------------------
@@ -138,29 +140,51 @@ class DAGExecutor:
         issue: Issue,
         call_llm: Callable,
         balance_provider: Callable[[], int] | None,
+        lessons: list | None = None,
     ) -> ExecutionResult:
         from midas_agent.scheduler.resource_meter import BudgetExhaustedError
+        from midas_agent.workspace.config_evolution.step_judge import StepJudge
 
         first_step = steps_by_id[sorted_ids[0]]
         actions = list(self._action_registry._actions.values())
         actions_by_name = {a.name: a for a in actions}
 
-        # Set task_done description to current step
-        task_done_action = actions_by_name.get("task_done")
-        if task_done_action and hasattr(task_done_action, "set_step"):
-            task_done_action.set_step(first_step.prompt.strip()[:200])
+        # Remove task_done from DAG tools — judge handles step transitions
+        dag_actions = [a for a in actions if a.name != "task_done"]
+        dag_actions_by_name = {a.name: a for a in dag_actions}
 
         tools = ReactAgent(
-            system_prompt="", actions=actions, call_llm=call_llm,
+            system_prompt="", actions=dag_actions, call_llm=call_llm,
         )._build_tools()
 
-        # Build initial messages: DAG system prompt + first step prompt.
-        # The issue context is already embedded in the step prompts by
-        # ConfigMerger — no separate issue injection needed.
-        from midas_agent.prompts import DAG_SYSTEM_PROMPT
+        # Step judge validates agent's completion claims
+        judge = StepJudge(
+            system_llm=self._system_llm,
+        ) if self._system_llm else None
+
+        # Build initial messages matching SWE-agent v1.0 architecture:
+        # 1. System prompt (one-liner)
+        # 2. Instance template (first user message with full issue)
+        # 3. First step prompt
+        from midas_agent.prompts import DAG_SYSTEM_PROMPT, DAG_INSTANCE_TEMPLATE
+
+        system_prompt = DAG_SYSTEM_PROMPT
+        if lessons:
+            lesson_lines = ["\n\n## Lessons from similar past issues"]
+            for lesson in lessons:
+                lesson_lines.append(f"- Mistake: {lesson.mistake}")
+                lesson_lines.append(f"  Lesson: {lesson.lesson}")
+                if lesson.correct_approach:
+                    lesson_lines.append(f"  Correct approach: {lesson.correct_approach}")
+            system_prompt += "\n".join(lesson_lines)
+
+        instance_msg = DAG_INSTANCE_TEMPLATE.format(
+            issue_description=issue.description,
+        )
 
         messages: list[dict] = [
-            {"role": "system", "content": DAG_SYSTEM_PROMPT},
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": instance_msg},
             {"role": "user", "content": (
                 f"**Current phase: {first_step.id}**\n\n{first_step.prompt}"
             )},
@@ -168,14 +192,63 @@ class DAGExecutor:
 
         step_outputs: dict[str, str] = {}
         all_action_history: list[ActionRecord] = []
+        step_action_start = 0  # index into all_action_history for current step
         current_step_idx = 0
         current_step_id = sorted_ids[0]
+        current_step = first_step
         iterations = 0
+        step_iterations = 0  # iterations within current step
         total_tokens = 0
         aborted = False
         abort_step: str | None = None
 
         logger.info("  [step 1/%d] %s", len(sorted_ids), current_step_id)
+
+        def _advance_to_next_step(output_text: str) -> bool:
+            """Advance to next step, keeping full conversation history.
+
+            Returns True if there are more steps.
+            """
+            nonlocal current_step_idx, current_step_id, current_step
+            nonlocal step_iterations, step_action_start, tools
+
+            step_outputs[current_step_id] = output_text
+            logger.info(
+                "  [step %d/%d] %s done at iter %d (%d tokens).",
+                current_step_idx + 1, len(sorted_ids),
+                current_step_id, iterations, total_tokens,
+            )
+
+            current_step_idx += 1
+            if current_step_idx >= len(sorted_ids):
+                logger.info("  All %d steps complete.", len(sorted_ids))
+                return False
+
+            current_step_id = sorted_ids[current_step_idx]
+            current_step = steps_by_id[current_step_id]
+            step_iterations = 0
+            step_action_start = len(all_action_history)
+
+            logger.info(
+                "  [step %d/%d] %s",
+                current_step_idx + 1, len(sorted_ids), current_step_id,
+            )
+
+            # Rebuild tools (same set, no task_done)
+            tools = ReactAgent(
+                system_prompt="", actions=dag_actions, call_llm=call_llm,
+            )._build_tools()
+
+            # Inject next step prompt into the same conversation
+            messages.append({
+                "role": "user",
+                "content": (
+                    f"**Current phase: {current_step_id}**\n\n"
+                    f"{current_step.prompt}\n\n"
+                    f"Focus ONLY on this phase."
+                ),
+            })
+            return True
 
         while True:
             # LLM call
@@ -189,6 +262,7 @@ class DAGExecutor:
                 break
 
             iterations += 1
+            step_iterations += 1
             if response.usage:
                 total_tokens += response.usage.input_tokens + response.usage.output_tokens
 
@@ -211,9 +285,9 @@ class DAGExecutor:
                 messages.append(assistant_msg)
 
                 for tool_call in response.tool_calls:
-                    action = actions_by_name.get(tool_call.name)
+                    action = dag_actions_by_name.get(tool_call.name)
                     if action is None:
-                        available = ", ".join(sorted(actions_by_name.keys()))
+                        available = ", ".join(sorted(dag_actions_by_name.keys()))
                         result = (
                             f"Error: tool '{tool_call.name}' is not available. "
                             f"Available tools: {available}"
@@ -251,56 +325,9 @@ class DAGExecutor:
                         "content": tool_content,
                     })
 
-                    # task_done: advance to next step or finish
-                    if tool_call.name == "task_done":
-                        step_outputs[current_step_id] = result
-                        logger.info(
-                            "  [step %d/%d] %s done at iter %d (%d tokens).",
-                            current_step_idx + 1, len(sorted_ids),
-                            current_step_id, iterations, total_tokens,
-                        )
-
-                        current_step_idx += 1
-                        if current_step_idx >= len(sorted_ids):
-                            # Last step — actually done
-                            logger.info("  All %d steps complete.", len(sorted_ids))
-                            return ExecutionResult(
-                                step_outputs=step_outputs,
-                                patch=result,
-                                aborted=False,
-                                abort_step=None,
-                                action_history=all_action_history,
-                            )
-
-                        # Inject next step prompt and continue
-                        current_step_id = sorted_ids[current_step_idx]
-                        next_step = steps_by_id[current_step_id]
-                        logger.info(
-                            "  [step %d/%d] %s",
-                            current_step_idx + 1, len(sorted_ids), current_step_id,
-                        )
-
-                        # Update task_done description + rebuild tools
-                        if task_done_action and hasattr(task_done_action, "set_step"):
-                            task_done_action.set_step(next_step.prompt.strip()[:200])
-                        tools = ReactAgent(
-                            system_prompt="", actions=actions, call_llm=call_llm,
-                        )._build_tools()
-
-                        messages.append({
-                            "role": "user",
-                            "content": (
-                                f"**Current phase: {current_step_id}**\n\n"
-                                f"{next_step.prompt}\n\n"
-                                f"Focus ONLY on this phase. Call task_done when complete."
-                            ),
-                        })
-                        break  # break inner tool_call loop, continue outer LLM loop
-
                 # Compaction check
                 if self._max_context_tokens and self._system_llm:
                     total_chars = sum(len(str(m.get("content", ""))) for m in messages)
-                    # Also count tool call arguments
                     for m in messages:
                         for tc in m.get("tool_calls", []):
                             args = tc.get("function", {}).get("arguments", "")
@@ -331,9 +358,65 @@ class DAGExecutor:
                         messages.append({"role": "user", "content": stuck_msg})
 
             elif response.content:
-                # Text response without tool call — continue (don't terminate)
-                logger.info("  [iter %d] Response: %s", iterations, response.content[:200])
-                messages.append({"role": "assistant", "content": response.content})
+                # Text response = agent claims step is done.
+                # Validate with judge (trust agent by default).
+                logger.info("  [iter %d] Response (text): %s", iterations, response.content[:200])
+
+                if judge and current_step.goal:
+                    step_actions = all_action_history[step_action_start:]
+                    trace_text = StepJudge.format_trace_for_judge(
+                        step_actions, len(step_actions),
+                    )
+                    verdict = judge.validate_completion(
+                        current_step.goal, trace_text, response.content,
+                    )
+                    logger.info(
+                        "  [judge] step '%s': %s — %s",
+                        current_step_id,
+                        "ACCEPT" if verdict.done else "REJECT",
+                        verdict.reason,
+                    )
+
+                    if verdict.done:
+                        # Agent is done, advance
+                        has_more = _advance_to_next_step(
+                            response.content or verdict.reason,
+                        )
+                        if not has_more:
+                            return ExecutionResult(
+                                step_outputs=step_outputs,
+                                patch=None,
+                                aborted=False,
+                                abort_step=None,
+                                action_history=all_action_history,
+                            )
+                        continue
+                    else:
+                        # Judge rejected — agent skipped the step
+                        # Tell agent to keep working
+                        messages.append({"role": "assistant", "content": response.content})
+                        messages.append({
+                            "role": "user",
+                            "content": (
+                                f"You haven't completed this step yet. "
+                                f"The goal is: {current_step.goal}\n"
+                                f"Please continue working on it."
+                            ),
+                        })
+                        continue
+                else:
+                    # No judge or no goal — text response = step done
+                    has_more = _advance_to_next_step(response.content)
+                    if not has_more:
+                        return ExecutionResult(
+                            step_outputs=step_outputs,
+                            patch=None,
+                            aborted=False,
+                            abort_step=None,
+                            action_history=all_action_history,
+                        )
+                    continue
+
             else:
                 # Empty response — terminate
                 aborted = True

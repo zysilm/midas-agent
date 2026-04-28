@@ -5,8 +5,8 @@ from dataclasses import dataclass
 @dataclass(frozen=True)
 class MidasConfig:
     initial_budget: int
-    workspace_count: int
     runtime_mode: str
+    workspace_count: int = 1
     score_floor: float = 0.01
     multiplier_mode: str = "adaptive"
     multiplier_init: float = 1.0
@@ -15,7 +15,10 @@ class MidasConfig:
     mult_min: float = 0.5
     mult_max: float = 50.0
     beta: float = 0.3
-    n_evict: int = 1
+    n_evict: int = 0
+    # Adaptive workspace mode: 1 workspace normally, 2 during head-to-head
+    adaptive_workspaces: bool = False
+    max_workspaces: int = 2
     max_iterations_free_agent: int = 50
     storage_backend: str = "sqlite"
     # Task execution LLM (empty model = stub)
@@ -35,3 +38,5 @@ class MidasConfig:
     temperature: float = 0.0
     top_p: float = 1.0
     skill_evolution: bool = True
+    # Lesson retrieval: minimum cosine similarity to inject a lesson
+    lesson_similarity_threshold: float = 0.50

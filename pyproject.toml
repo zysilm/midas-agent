@@ -12,6 +12,7 @@ pyyaml = "^6.0"
 datasets = "^3.0"
 litellm = "^1.0"
 swebench = {version = "^3.0", optional = true}
+sentence-transformers = "^5.4.1"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0"

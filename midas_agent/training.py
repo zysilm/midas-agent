@@ -7,6 +7,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 
 from midas_agent.config import MidasConfig
@@ -120,6 +121,34 @@ def clone_repo(repo: str, base_commit: str, dest: str) -> None:
         )
 
 
+def _setup_and_execute_workspace(ws, repo_dir, config, issue, ws_repo_dirs, containers):
+    """Setup Docker + execute for one workspace. Runs in a thread."""
+    if os.path.isdir(os.path.join(repo_dir, ".git")):
+        ws_repo = os.path.join(repo_dir + "_workspaces", ws.workspace_id)
+        shutil.copytree(repo_dir, ws_repo)
+        ws.work_dir = ws_repo
+        ws_repo_dirs.append(ws_repo)
+
+    if config.execution_env == "docker":
+        try:
+            from midas_agent.docker.container_manager import ContainerManager
+            from midas_agent.runtime.io_backend import DockerIO
+
+            cm = ContainerManager()
+            image = _resolve_swebench_image(issue)
+            cid = cm.start(image=image, host_workspace=None, install_cmd=None)
+            containers.append(cm)
+            docker_io = DockerIO(container_id=cid, workdir="/testbed")
+            if hasattr(ws, "_io"):
+                ws._io = docker_io
+            logger.info("  %s: Docker container %s", ws.workspace_id, cid)
+        except Exception as e:
+            logger.warning("  %s: Docker setup failed (%s), falling back to local", ws.workspace_id, e)
+
+    ws.execute(issue)
+    return ws.workspace_id
+
+
 def collect_patches(workspaces, patches_base_dir: str = "") -> dict[str, str]:
     """Read patches from workspace objects (authoritative source)."""
     return {ws.workspace_id: ws._last_patch for ws in workspaces}
@@ -143,6 +172,7 @@ def _save_checkpoint(
     processed_issue_ids: list[str],
     workspaces: list,
     scheduler,
+    adaptive_ctrl=None,
 ) -> None:
     """Save checkpoint after a completed episode."""
     # Map workspace → latest config YAML filename
@@ -174,6 +204,11 @@ def _save_checkpoint(
         "gepa_episodes_since_optimization": gepa_counter,
         "timestamp": datetime.now().isoformat(),
     }
+
+    # Save adaptive workspace controller state
+    if adaptive_ctrl:
+        checkpoint["adaptive_controller"] = adaptive_ctrl.to_dict()
+
     _atomic_write_json(os.path.join(train_dir, "checkpoint.json"), checkpoint)
     logger.info("Checkpoint saved: episode %d", episode_idx)
 
@@ -212,15 +247,21 @@ def _save_swebench_artifacts(
 
     patch = getattr(best_ws, "_last_patch", "") or ""
 
-    # Append to all_preds.jsonl
+    # Write to all_preds.jsonl (upsert: replace existing entry for this issue)
     preds_path = os.path.join(train_dir, "all_preds.jsonl")
     pred = {
         "instance_id": issue.issue_id,
         "model_name_or_path": "midas-agent",
         "model_patch": patch,
     }
-    with open(preds_path, "a") as f:
-        f.write(json.dumps(pred) + "\n")
+    existing = []
+    if os.path.isfile(preds_path):
+        with open(preds_path) as f:
+            existing = [json.loads(l) for l in f if json.loads(l)["instance_id"] != issue.issue_id]
+    existing.append(pred)
+    with open(preds_path, "w") as f:
+        for p in existing:
+            f.write(json.dumps(p) + "\n")
 
     # Save reasoning trace
     trajs_dir = os.path.join(train_dir, "trajs")
@@ -307,7 +348,10 @@ def run_training(
 
     if train_dir is None:
         name = train_dir_name or datetime.now().strftime("%Y%m%d_%H%M%S")
-        train_dir = os.path.join(".midas", "train", name)
+        if os.sep in (name or "") or name.startswith("."):
+            train_dir = name  # already a path
+        else:
+            train_dir = os.path.join(".midas", "train", name)
 
     os.makedirs(os.path.join(train_dir, "data"), exist_ok=True)
     os.makedirs(os.path.join(train_dir, "log", "configs"), exist_ok=True)
@@ -316,7 +360,6 @@ def run_training(
     # Save training config into train_dir for resume
     saved_config = os.path.join(train_dir, "train_config.yaml")
     if config_path and not os.path.isfile(saved_config):
-        import shutil
         shutil.copy2(config_path, saved_config)
 
     # -- Wire up all components --
@@ -397,15 +440,27 @@ def run_training(
 
     patches_base_dir = os.path.join(train_dir, "log", "patches")
 
-    # -- Create workspaces once --
+    # -- Create workspace --
     scheduler.create_workspaces()
 
     # -- Resume from checkpoint if available --
     processed_issue_ids: list[str] = []
     checkpoint = _load_checkpoint(train_dir) if not fresh else None
     if checkpoint:
-        processed_ids_set = set(checkpoint["processed_issue_ids"])
-        processed_issue_ids = list(checkpoint["processed_issue_ids"])
+        # Filter out failed episodes (empty patch) — retry them
+        all_processed = checkpoint["processed_issue_ids"]
+        preds_path = os.path.join(train_dir, "all_preds.jsonl")
+        failed_ids = set()
+        if os.path.isfile(preds_path):
+            with open(preds_path) as f:
+                for line in f:
+                    pred = json.loads(line)
+                    if not pred.get("model_patch"):
+                        failed_ids.add(pred["instance_id"])
+        if failed_ids:
+            logger.info("Retrying %d failed episodes: %s", len(failed_ids), failed_ids)
+        processed_ids_set = set(all_processed) - failed_ids
+        processed_issue_ids = [iid for iid in all_processed if iid not in failed_ids]
 
         # Restore workspace configs from saved YAML
         workspaces = scheduler.get_workspaces()
@@ -444,11 +499,13 @@ def run_training(
         )
 
     # -- Episode loop --
+    initial_processed = len(processed_issue_ids)
+    total_episodes = initial_processed + len(issues)
     for episode_idx, issue in enumerate(issues):
-        global_idx = len(processed_issue_ids) + episode_idx
+        global_idx = initial_processed + episode_idx
         logger.info(
             "Episode %d/%d: %s (%s)",
-            global_idx + 1, global_idx + len(issues), issue.issue_id, issue.repo,
+            global_idx + 1, total_episodes, issue.issue_id, issue.repo,
         )
 
         # 1. Clone repo
@@ -465,50 +522,17 @@ def run_training(
             scheduler.allocate_budgets()
 
             # 3. Setup and execute all workspaces in parallel
-            from concurrent.futures import ThreadPoolExecutor, as_completed
-
             workspaces = scheduler.get_workspaces()
             ws_repo_dirs: list[str] = []
-            containers: list = []  # ContainerManager instances to clean up
+            containers: list = []
 
-            def _setup_and_execute(ws):
-                """Setup Docker + execute for one workspace. Runs in a thread."""
-                if os.path.isdir(os.path.join(repo_dir, ".git")):
-                    ws_repo = os.path.join(repo_dir + "_workspaces", ws.workspace_id)
-                    shutil.copytree(repo_dir, ws_repo)
-                    ws.work_dir = ws_repo
-                    ws_repo_dirs.append(ws_repo)
-
-                # Docker mode: start container, set IO backend
-                if config.execution_env == "docker":
-                    try:
-                        from midas_agent.docker.container_manager import ContainerManager
-                        from midas_agent.runtime.io_backend import DockerIO
-
-                        cm = ContainerManager()
-                        image = _resolve_swebench_image(issue)
-                        cid = cm.start(
-                            image=image,
-                            host_workspace=None,
-                            install_cmd=None,
-                        )
-                        containers.append(cm)
-                        docker_io = DockerIO(container_id=cid, workdir="/testbed")
-                        if hasattr(ws, "_io"):
-                            ws._io = docker_io
-                        logger.info("  %s: Docker container %s", ws.workspace_id, cid)
-                    except Exception as e:
-                        logger.warning(
-                            "  %s: Docker setup failed (%s), falling back to local",
-                            ws.workspace_id, e,
-                        )
-
-                ws.execute(issue)
-                return ws.workspace_id
-
-            # Run all workspaces in parallel
             with ThreadPoolExecutor(max_workers=len(workspaces)) as executor:
-                futures = {executor.submit(_setup_and_execute, ws): ws for ws in workspaces}
+                futures = {}
+                for ws in workspaces:
+                    futures[executor.submit(
+                        _setup_and_execute_workspace,
+                        ws, repo_dir, config, issue, ws_repo_dirs, containers,
+                    )] = ws
                 for future in as_completed(futures):
                     ws = futures[future]
                     try:
@@ -538,9 +562,6 @@ def run_training(
             }
             for ws in workspaces:
                 ws.post_episode(eval_results_dict, evicted_ids=evicted)
-
-            # 7. Replace evicted workspaces (seeded with best-η config)
-            scheduler.replace_evicted()
 
             # 8. Save SWE-bench submission artifacts
             _save_swebench_artifacts(

@@ -297,17 +297,18 @@ Respond with ONLY the condensed prompt, no explanation.\
 
 
 class GEPAConfigOptimizer:
-    """Runs GEPA prompt optimization on DAG step prompts.
+    """Config optimizer using whole-config reflection on real execution traces.
 
-    Replaces the old ``ConfigMutator.reflective_self_rewrite()``.
+    Replaces the old per-step DSPy GEPA with a reflection-based approach
+    that sees both success and failure traces with real outcomes.
 
     Flow:
-      1. Workspace calls ``record_episode()`` after each successful episode
-      2. Workspace calls ``maybe_optimize()`` after each episode
-      3. If enough episodes accumulated (>= interval), GEPA runs on
-         each step prompt using the sliding window dataset
-      4. Constraint gating: size limit (with condensation) + holdout check
-      5. Returns optimized config or original if gating rejects
+      1. Workspace calls ``record_episode()`` for successes
+      2. Workspace calls ``record_failure()`` for failures (with reason)
+      3. Workspace calls ``tick_episode()`` every episode
+      4. Workspace calls ``maybe_optimize()`` after each episode
+      5. If interval reached: ConfigReflector proposes improved config
+      6. Returns new config or original if nothing changed
     """
 
     def __init__(
@@ -322,6 +323,7 @@ class GEPAConfigOptimizer:
         self._gepa_interval = gepa_interval
         self._min_dataset_size = min_dataset_size
         self._dataset = ConfigDatasetBuilder(max_window=window_size)
+        self._traces: list[dict] = []  # all traces (success + failure)
         self._episodes_since_last_optimization = 0
         self._data_dir = data_dir
         if data_dir:
@@ -332,10 +334,7 @@ class GEPAConfigOptimizer:
         return self._dataset
 
     def load_dataset_from_dir(self, data_dir: str) -> None:
-        """Reload GEPA dataset from persisted JSON files on disk.
-
-        Used when resuming training from a checkpoint.
-        """
+        """Reload dataset from persisted JSON files on disk."""
         if not os.path.isdir(data_dir):
             return
         for f in sorted(os.listdir(data_dir)):
@@ -344,11 +343,29 @@ class GEPAConfigOptimizer:
             path = os.path.join(data_dir, f)
             with open(path) as fh:
                 data = json.load(fh)
-            self._dataset.add_episode(
-                data["issue_description"], data["trace"], data["score"],
-            )
-        if self._dataset.size > 0:
-            logger.info("GEPA: reloaded %d episodes from %s", self._dataset.size, data_dir)
+            if not isinstance(data, dict):
+                continue
+            score = data.get("score", 0.0)
+            if score >= 1.0:
+                self._dataset.add_episode(
+                    data["issue_description"], data["trace"], score,
+                )
+            self._traces.append({
+                "issue_summary": data.get("issue_description", "")[:200],
+                "trace_summary": data.get("trace", "")[:500],
+                "score": score,
+                "failure_reason": data.get("failure_reason"),
+            })
+        if self._traces:
+            logger.info("GEPA: reloaded %d traces (%d success) from %s",
+                        len(self._traces), self._dataset.size, data_dir)
+
+    def tick_episode(self) -> None:
+        """Count an episode toward the GEPA trigger interval.
+
+        Called every episode (success or failure).
+        """
+        self._episodes_since_last_optimization += 1
 
     def record_episode(
         self,
@@ -357,16 +374,15 @@ class GEPAConfigOptimizer:
         score: float,
         issue_id: str = "",
     ) -> None:
-        """Record a successful episode's data for future GEPA optimization.
-
-        Only called for episodes with s_exec >= 1.0.  The action_summary
-        should be the full execution trace (from format_trace), not a
-        stats string.
-        """
+        """Record a successful episode for GEPA optimization."""
         self._dataset.add_episode(task_input, action_summary, score)
-        self._episodes_since_last_optimization += 1
+        self._traces.append({
+            "issue_summary": task_input[:200],
+            "trace_summary": action_summary[:500],
+            "score": score,
+            "failure_reason": None,
+        })
 
-        # Persist to disk for cross-run reuse
         if self._data_dir:
             ep_num = self._dataset.size
             filename = f"ep{ep_num}_{issue_id}.json" if issue_id else f"ep{ep_num}.json"
@@ -375,259 +391,51 @@ class GEPAConfigOptimizer:
                 "issue_description": task_input,
                 "trace": action_summary,
                 "score": score,
+                "failure_reason": None,
             }
             path = os.path.join(self._data_dir, filename)
             with open(path, "w") as f:
                 json.dump(data, f, indent=2)
-            logger.info("GEPA: saved episode data to %s", path)
+            logger.info("GEPA: saved success episode to %s", path)
+
+    def record_failure(
+        self,
+        task_input: str,
+        action_summary: str,
+        score: float,
+        failure_reason: str | None = None,
+        issue_id: str = "",
+    ) -> None:
+        """Record a failed episode with optional failure reason."""
+        self._traces.append({
+            "issue_summary": task_input[:200],
+            "trace_summary": action_summary[:500],
+            "score": score,
+            "failure_reason": failure_reason,
+        })
+
+        if self._data_dir:
+            total = len(self._traces)
+            filename = f"fail{total}_{issue_id}.json" if issue_id else f"fail{total}.json"
+            data = {
+                "issue_id": issue_id,
+                "issue_description": task_input,
+                "trace": action_summary,
+                "score": score,
+                "failure_reason": failure_reason,
+            }
+            path = os.path.join(self._data_dir, filename)
+            with open(path, "w") as f:
+                json.dump(data, f, indent=2)
+            logger.info("GEPA: saved failure episode to %s", path)
 
     def should_optimize(self) -> bool:
-        """Check whether it's time to run GEPA."""
+        """Check whether it's time to run optimization."""
         return (
             self._episodes_since_last_optimization >= self._gepa_interval
-            and self._dataset.size >= self._min_dataset_size
+            and len(self._traces) >= 1
         )
 
-    def maybe_optimize(self, config: WorkflowConfig) -> WorkflowConfig:
-        """Run GEPA if conditions are met, otherwise return config as-is."""
-        if not self.should_optimize():
-            return config
-        return self.optimize(config)
-
-    def optimize(self, config: WorkflowConfig) -> WorkflowConfig:
-        """Run GEPA on each step prompt in the config.
-
-        For each step:
-          1. Wrap prompt as StepPromptModule
-          2. Run GEPA with LLM-as-judge metric + trainset + valset
-          3. Constraint gate: size check (with condensation) + holdout
-          4. Accept or keep original
-
-        Returns a new WorkflowConfig with optimized prompts.
-        """
-        if not HAS_DSPY:
-            logger.warning("DSPy not installed — skipping GEPA optimization")
-            return config
-
-        train, val, holdout = self._dataset.build()
-        if not train:
-            logger.info("GEPA: no training data, skipping")
-            return config
-
-        logger.info(
-            "GEPA optimization starting: %d train, %d val, %d holdout examples",
-            len(train), len(val), len(holdout),
-        )
-
-        # Configure DSPy LM for GEPA's reflection calls
-        system_lm = self._make_dspy_lm()
-
-        # Create LLM-as-judge metric
-        metric = make_judge_metric(self._system_llm)
-
-        from midas_agent.workspace.config_evolution.config_schema import (
-            ConfigMeta,
-            StepConfig,
-        )
-
-        optimized_steps: list[StepConfig] = []
-        any_changed = False
-
-        for step in config.steps:
-            new_prompt = self._optimize_step(
-                step_id=step.id,
-                step_prompt=step.prompt,
-                train=train,
-                val=val,
-                holdout=holdout,
-                system_lm=system_lm,
-                metric=metric,
-            )
-
-            if new_prompt != step.prompt:
-                any_changed = True
-                logger.info(
-                    "GEPA: step '%s' prompt updated (%d → %d chars)",
-                    step.id, len(step.prompt), len(new_prompt),
-                )
-
-            optimized_steps.append(StepConfig(
-                id=step.id,
-                prompt=new_prompt,
-                tools=list(step.tools),
-                inputs=list(step.inputs),
-            ))
-
-        if any_changed:
-            new_config = WorkflowConfig(
-                meta=ConfigMeta(
-                    name=config.meta.name,
-                    description=config.meta.description,
-                ),
-                steps=optimized_steps,
-            )
-            # Final validation — reject if invalid
-            errors = validate_config(new_config)
-            if errors:
-                logger.warning(
-                    "GEPA: optimized config failed validation (%s), keeping original",
-                    errors,
-                )
-                return config
-
-            self._episodes_since_last_optimization = 0
-            return new_config
-        else:
-            logger.info("GEPA: no step prompts changed, keeping original")
-            self._episodes_since_last_optimization = 0
-            return config
-
-    def _optimize_step(
-        self,
-        step_id: str,
-        step_prompt: str,
-        train: list,
-        val: list,
-        holdout: list,
-        system_lm,
-        metric,
-    ) -> str:
-        """Optimize a single step prompt using GEPA.
-
-        Returns the optimized prompt, or the original if gating rejects.
-        """
-        module = StepPromptModule(step_prompt=step_prompt, step_id=step_id)
-
-        try:
-            optimizer = dspy.GEPA(
-                metric=metric,
-                reflection_lm=system_lm,
-                max_metric_calls=60,
-                candidate_selection_strategy="pareto",
-                num_threads=16,
-            )
-            optimized_module = optimizer.compile(
-                module,
-                trainset=train,
-                valset=val if val else None,
-            )
-        except Exception as e:
-            logger.warning("GEPA failed for step '%s': %s", step_id, e)
-            return step_prompt
-
-        # Extract the optimized prompt
-        new_prompt = getattr(optimized_module, "step_prompt", step_prompt)
-
-        # --- Constraint gating ---
-
-        # 1. Size check — condense if too large
-        if len(new_prompt) > MAX_OPTIMIZED_PROMPT_CHARS:
-            logger.info(
-                "GEPA: step '%s' prompt too large (%d chars), condensing...",
-                step_id, len(new_prompt),
-            )
-            new_prompt = self._condense_prompt(new_prompt, MAX_OPTIMIZED_PROMPT_CHARS)
-            if len(new_prompt) > MAX_OPTIMIZED_PROMPT_CHARS:
-                logger.info(
-                    "GEPA: step '%s' rejected — condensation failed (%d chars)",
-                    step_id, len(new_prompt),
-                )
-                return step_prompt
-
-        # 2. Non-empty check
-        if not new_prompt.strip():
-            logger.info("GEPA: step '%s' rejected — empty prompt", step_id)
-            return step_prompt
-
-        # 3. Holdout regression check
-        if holdout and not self._passes_holdout_check(
-            module, optimized_module, holdout, metric
-        ):
-            logger.info(
-                "GEPA: step '%s' rejected — holdout regression", step_id
-            )
-            return step_prompt
-
-        return new_prompt
-
-    def _condense_prompt(self, prompt: str, max_chars: int) -> str:
-        """Ask system_llm to condense a prompt that exceeds the size limit."""
-        condense_prompt = CONDENSE_PROMPT_TEMPLATE.format(
-            max_chars=max_chars,
-            prompt=prompt,
-        )
-        try:
-            resp = self._system_llm(
-                LLMRequest(
-                    messages=[{"role": "user", "content": condense_prompt}],
-                    model="default",
-                )
-            )
-            condensed = (resp.content or "").strip()
-            if condensed:
-                logger.info(
-                    "GEPA: condensed prompt from %d to %d chars",
-                    len(prompt), len(condensed),
-                )
-                return condensed
-        except Exception as e:
-            logger.warning("GEPA: condensation failed: %s", e)
-        return prompt  # fallback to original
-
-    def _passes_holdout_check(
-        self,
-        original_module: StepPromptModule,
-        optimized_module: StepPromptModule,
-        holdout: list,
-        metric,
-    ) -> bool:
-        """Check that the optimized module doesn't regress on the holdout set.
-
-        Returns True if the optimized module scores >= original on average.
-        """
-        def _avg_score(mod: StepPromptModule, data: list) -> float:
-            total = 0.0
-            count = 0
-            for example in data:
-                try:
-                    pred = mod.forward(task_input=example.task_input)
-                    result = metric(example, pred)
-                    # Extract score from dspy.Prediction or dict
-                    if hasattr(result, "score"):
-                        total += result.score
-                    elif isinstance(result, dict):
-                        total += result.get("score", 0.0)
-                    count += 1
-                except Exception:
-                    continue
-            return total / count if count > 0 else 0.0
-
-        original_score = _avg_score(original_module, holdout)
-        optimized_score = _avg_score(optimized_module, holdout)
-
-        logger.info(
-            "Holdout check: original=%.3f, optimized=%.3f",
-            original_score, optimized_score,
-        )
-        return optimized_score >= original_score
-
-    def _make_dspy_lm(self):
-        """Create a DSPy LM for GEPA's reflection calls.
-
-        Reads model/api_key from the same sources as the rest of Midas
-        (env vars → .midas/config.yaml).
-        """
-        try:
-            from midas_agent.resolver import resolve_llm_config
-            llm_config = resolve_llm_config()
-            kwargs = {"model": llm_config.model}
-            if llm_config.api_key:
-                kwargs["api_key"] = llm_config.api_key
-            if llm_config.api_base:
-                kwargs["api_base"] = llm_config.api_base
-            lm = dspy.LM(**kwargs)
-            dspy.configure(lm=lm)
-            return lm
-        except Exception as e:
-            logger.warning("Could not create DSPy LM: %s", e)
-            return None
+    # NOTE: maybe_optimize() and optimize() removed.
+    # Config evolution now uses LessonStore (ExpeL-style retrieval)
+    # instead of ConfigReflector-based prompt rewriting.
