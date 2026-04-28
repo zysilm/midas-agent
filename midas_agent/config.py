@@ -18,7 +18,7 @@ class MidasConfig:
     n_evict: int = 0
     # Adaptive workspace mode: 1 workspace normally, 2 during head-to-head
     adaptive_workspaces: bool = False
-    max_workspaces: int = 2
+    max_workspaces: int = 1
     max_iterations_free_agent: int = 50
     storage_backend: str = "sqlite"
     # Task execution LLM (empty model = stub)
