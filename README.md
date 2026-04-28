@@ -23,11 +23,12 @@ Over episodes, the lesson library accumulates battle-tested guidance like *"when
 ```
 Issue → ConfigMerger → DAG Executor → Patch → SWE-bench Scorer → Record
                │              │
-        embed issue     step 1 → step 2 → ... → step N
-        + inject lessons   (StepJudge validates each transition)
+        embed issue     retrieve lessons + inject into system prompt
+        into steps      step 1 → step 2 → ... → step N
+                          (StepJudge validates each transition)
 ```
 
-For each SWE-bench issue, `ConfigMerger` embeds the issue into the DAG step prompts and injects relevant lessons from past failures. The agent executes each step in sequence — when it stops calling tools and produces text, `StepJudge` validates the claim and advances to the next step.
+For each SWE-bench issue, `ConfigMerger` embeds the issue description into the DAG step prompts. The `DAG Executor` retrieves relevant lessons from the lesson store and injects them into the system prompt, then executes each step in sequence — when the agent stops calling tools and produces text, `StepJudge` validates the claim and advances to the next step.
 
 ### 2. Learning from Failures
 
@@ -35,21 +36,19 @@ For each SWE-bench issue, `ConfigMerger` embeds the issue into the DAG step prom
 flowchart LR
     DA["<b>DAG Agent</b><br/><i>runs issue</i>"] -->|"trajectory + patch"| FA
     FA["<b>Failure Analyzer</b><br/><i>ExpeL-style self-reflection</i><br/><i>on trajectory + patch</i>"] -->|"lesson"| LS
-    LS["<b>Lesson Store</b><br/><i>semantic embeddings</i><br/><i>importance voting</i>"] -->|"retrieve by<br/>issue similarity"| CM
-    CM["<b>ConfigMerger</b><br/><i>inject lessons into</i><br/><i>fix step prompt</i>"] --> DA
+    LS["<b>Lesson Store</b><br/><i>semantic embeddings</i><br/><i>importance voting</i>"] -->|"retrieve by<br/>issue similarity"| EX
+    EX["<b>DAG Executor</b><br/><i>inject lessons into</i><br/><i>system prompt</i>"] --> DA
     SC["<b>SWE-bench Scorer</b>"] -->|"pass → upvote<br/>fail → downvote"| LS
     SC -->|"fail"| FA
-
-    style DA fill:#0d1117,stroke:#58a6ff,color:#fff
-    style FA fill:#0d1117,stroke:#f85149,color:#fff
-    style LS fill:#0d1117,stroke:#f0883e,color:#fff
-    style CM fill:#0d1117,stroke:#58a6ff,color:#fff
-    style SC fill:#0d1117,stroke:#58a6ff,color:#fff
+    DA -->|"first success"| CC["<b>Config Creator</b><br/><i>generate DAG from</i><br/><i>successful trace</i>"]
+    CC -->|"multi-step DAG"| EX
 ```
 
-When an agent fails, the **Failure Analyzer** reflects on the agent's own trajectory (Thought → Action → Observation trace) and final patch — no gold test output is used (following ExpeL's principle of learning from the agent's own experience, not from evaluation feedback). Each lesson is stored alongside the original issue description. At inference time, the current issue description is embedded and compared against stored issue descriptions — when a similar issue is found (cosine similarity ≥ 0.50), the corresponding lesson (mistake + guidance) is injected into the fix step prompt.
+When an agent fails, the **Failure Analyzer** reflects on the agent's own trajectory (Thought → Action → Observation trace) and final patch — no gold test output is used (following ExpeL's principle of learning from the agent's own experience, not from evaluation feedback). Each lesson is stored alongside the original issue description. At inference time, the current issue description is embedded and compared against stored issue descriptions — when a similar issue is found (cosine similarity ≥ 0.50), the corresponding lesson (mistake + guidance) is injected into the **system prompt** (available to all DAG steps, not just a single step).
 
-**Importance voting** ensures the library self-corrects: lessons that help the agent pass get upvoted, lessons that don't help get downvoted and eventually pruned (at importance <= -4).
+On the first successful episode, the **Config Creator** generates a multi-step DAG workflow from the agent's action history, replacing the default single-step config with a structured plan (e.g., localize → reproduce → implement → validate).
+
+**Importance voting** ensures the library self-corrects: lessons that help the agent pass get upvoted, lessons that don't help get downvoted and eventually pruned (at importance <= -10).
 
 ### Inspiration
 
@@ -103,10 +102,11 @@ midas infer --dag config.yaml
 ## Key Features
 
 - **Lesson library** — stores concrete failure analyses, retrieves by semantic similarity (sentence-transformers)
-- **Importance voting** — upvote lessons that help, downvote ones that don't, prune at <= -4
+- **Importance voting** — upvote lessons that help, downvote ones that don't, prune at <= -10
 - **DAG workflows** — multi-step plans generated from first successful trace
 - **Failure analyzer** — ExpeL-style self-reflection on trajectory + patch (no gold test output)
-- **ConfigMerger** — embeds issue + lessons into step prompts programmatically
+- **ConfigMerger** — embeds issue context into step prompts programmatically
+- **Config Creator** — generates multi-step DAG from first successful trace
 - **No task_done tool** — text response = done; unknown tool calls treated as termination
 - **Checkpoint & resume** — per-episode snapshots, lessons persist across runs
 
