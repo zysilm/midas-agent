@@ -69,6 +69,8 @@ class LiteLLMProvider(LLMProvider):
             kwargs["max_tokens"] = request.max_tokens
         if request.tools is not None:
             kwargs["tools"] = request.tools
+        if request.reasoning_effort is not None:
+            kwargs["reasoning_effort"] = request.reasoning_effort
 
         # Pass extra headers (e.g. OpenRouter provider selection)
         extra_headers_raw = os.environ.get("OPENROUTER_EXTRA_HEADERS")
