@@ -300,7 +300,11 @@ class DAGExecutor:
                             ", ".join(f"{k}={repr(v)[:80]}" for k, v in tool_call.arguments.items()),
                             total_tokens,
                         )
-                        result = action.execute(**tool_call.arguments)
+                        try:
+                            result = action.execute(**tool_call.arguments)
+                        except (KeyError, TypeError) as e:
+                            result = f"Error: malformed tool call — {e}"
+                            logger.warning("  [iter %d] Malformed tool call: %s", iterations, e)
                         logger.info("    → %s", result[:200] if result else "(empty)")
 
                     # Truncate large output

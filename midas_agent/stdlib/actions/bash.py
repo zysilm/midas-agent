@@ -30,7 +30,9 @@ class BashAction(Action):
         }
 
     def execute(self, **kwargs) -> str:
-        command = kwargs["command"]
+        command = kwargs.get("command")
+        if not command:
+            return "Error: 'command' argument is required."
         timeout = kwargs.get("timeout", 120)
         try:
             if self._io is not None:
