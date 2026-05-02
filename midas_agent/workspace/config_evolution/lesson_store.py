@@ -25,10 +25,10 @@ class Lesson:
     issue_id: str
     issue_summary: str
     step_id: str
-    mistake: str
+    agent_intent: str
+    strategy_flaw: str
     lesson: str
     patch: str
-    correct_approach: str = ""
     importance: int = 2
 
 
@@ -123,10 +123,10 @@ class LessonStore:
         issue_id: str,
         issue_summary: str,
         step_id: str,
-        mistake: str,
+        agent_intent: str,
+        strategy_flaw: str,
         lesson: str,
         patch: str,
-        correct_approach: str = "",
     ) -> str:
         """Add a lesson from a failure analysis. Returns lesson_id."""
         lesson_id = uuid.uuid4().hex[:12]
@@ -136,10 +136,10 @@ class LessonStore:
             issue_id=issue_id,
             issue_summary=issue_summary[:500],
             step_id=step_id,
-            mistake=mistake,
+            agent_intent=agent_intent,
+            strategy_flaw=strategy_flaw,
             lesson=lesson,
             patch=patch,
-            correct_approach=correct_approach,
             importance=2,
         )
         self._lessons.append(new_lesson)

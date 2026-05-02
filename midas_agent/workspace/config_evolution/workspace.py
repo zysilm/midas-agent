@@ -209,7 +209,7 @@ class ConfigEvolutionWorkspace(Workspace):
                     )
                     if analysis:
                         failure_reason = (
-                            f"[{analysis.step_id}] {analysis.mistake} "
+                            f"[{analysis.step_id}] {analysis.strategy_flaw} "
                             f"— Lesson: {analysis.lesson}"
                         )
                         logger.info(
@@ -223,10 +223,10 @@ class ConfigEvolutionWorkspace(Workspace):
                                     issue_id=self._last_issue.issue_id,
                                     issue_summary=self._last_issue.description,
                                     step_id=analysis.step_id,
-                                    mistake=analysis.mistake,
+                                    agent_intent=analysis.agent_intent,
+                                    strategy_flaw=analysis.strategy_flaw,
                                     lesson=analysis.lesson,
                                     patch=self._last_patch or "",
-                                    correct_approach=analysis.correct_approach,
                                 )
                             except Exception as e:
                                 logger.error("Failed to add lesson: %s", e)

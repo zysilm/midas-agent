@@ -28,14 +28,28 @@ a GitHub issue but scored 0 (the fix was incorrect).
 {gold_test_info}
 
 ## Task
-The agent's patch did NOT pass the gold test. Based on the trajectory and patch:
-1. What SPECIFICALLY did the agent do wrong?
-2. What is the ABSTRACT lesson (no file/function names — must generalize \
-to other issues)?
-3. What SHOULD the agent do instead? Describe the CORRECT approach — \
-a specific, actionable strategy (not just "avoid the mistake").
+The agent's patch did NOT pass the gold test. Analyze the failure in three \
+structured steps — complete each step before moving to the next:
 
-Analyze the failure, then call the submit_lesson tool with your findings.\
+### Step 1: Reconstruct the agent's strategy
+What was the agent TRYING to do? Infer its implicit plan from the trajectory: \
+what did it hypothesize as the root cause, what approach did it choose, and \
+what was its intended fix? Do not judge yet — just reconstruct its reasoning.
+
+### Step 2: Critique the strategy
+Was the agent's strategy fundamentally sound, or was it flawed from the start? \
+Did it misidentify the root cause? Did it edit the wrong layer of the system? \
+Did it get stuck in a loop? Focus on WHERE the reasoning went wrong, not on \
+what the correct answer is.
+
+### Step 3: Extract the lesson
+Based on steps 1-2, formulate a high-level lesson about what TYPE of strategic \
+mistake the agent made. The lesson must:
+- Be abstract (no file names, function names, or repo-specific details)
+- Describe the FLAW IN REASONING, not the correct solution
+- Generalize to other issues where an agent might make the same kind of mistake
+
+After completing all three steps, call the submit_lesson tool.\
 """
 
 # Tool definition for submit_lesson (OpenAI function calling format)
@@ -45,9 +59,7 @@ SUBMIT_LESSON_TOOL = {
         "name": "submit_lesson",
         "description": (
             "Submit your failure analysis as a structured lesson. "
-            "Call this exactly once with the step that failed, "
-            "what the agent did wrong, the abstract lesson, "
-            "and the correct approach."
+            "Call this exactly once after completing all three analysis steps."
         ),
         "parameters": {
             "type": "object",
@@ -56,27 +68,32 @@ SUBMIT_LESSON_TOOL = {
                     "type": "string",
                     "description": "Which step failed (e.g. 'fix', 'localize', 'reproduce')",
                 },
-                "mistake": {
+                "agent_intent": {
                     "type": "string",
-                    "description": "What specifically the agent did wrong",
+                    "description": (
+                        "What the agent was TRYING to do — its inferred strategy, "
+                        "hypothesis about the root cause, and intended fix approach. "
+                        "Reconstruct, do not judge."
+                    ),
+                },
+                "strategy_flaw": {
+                    "type": "string",
+                    "description": (
+                        "WHERE the agent's reasoning went wrong — did it misidentify "
+                        "the root cause, edit the wrong layer, get stuck in a loop, etc. "
+                        "Focus on the flaw in reasoning, not the correct answer."
+                    ),
                 },
                 "lesson": {
                     "type": "string",
                     "description": (
-                        "One-sentence abstract lesson for future runs. "
-                        "No file or function names — must generalize to other issues."
-                    ),
-                },
-                "correct_approach": {
-                    "type": "string",
-                    "description": (
-                        "What the agent SHOULD do instead — a specific, actionable "
-                        "strategy to fix this type of issue correctly. "
-                        "No file or function names — must generalize."
+                        "One-sentence abstract lesson about the TYPE of strategic mistake. "
+                        "No file or function names — must generalize to other issues. "
+                        "Describe the reasoning flaw, not the correct solution."
                     ),
                 },
             },
-            "required": ["step_id", "mistake", "lesson", "correct_approach"],
+            "required": ["step_id", "agent_intent", "strategy_flaw", "lesson"],
         },
     },
 }
@@ -85,9 +102,9 @@ SUBMIT_LESSON_TOOL = {
 @dataclass
 class FailureAnalysis:
     step_id: str
-    mistake: str
+    agent_intent: str
+    strategy_flaw: str
     lesson: str
-    correct_approach: str = ""
 
 
 class FailureAnalyzer:
@@ -160,9 +177,9 @@ class FailureAnalyzer:
                             args = json.loads(args)
 
                         step_id = args.get("step_id", "").strip().lower()
-                        mistake = args.get("mistake", "").strip()
+                        agent_intent = args.get("agent_intent", "").strip()
+                        strategy_flaw = args.get("strategy_flaw", "").strip()
                         lesson = args.get("lesson", "").strip()
-                        correct_approach = args.get("correct_approach", "").strip()
 
                         if not step_id or not lesson:
                             logger.info("Failure analysis: empty step_id or lesson (attempt %d/%d)", attempt, max_attempts)
@@ -179,9 +196,9 @@ class FailureAnalyzer:
 
                         return FailureAnalysis(
                             step_id=step_id,
-                            mistake=mistake,
+                            agent_intent=agent_intent,
+                            strategy_flaw=strategy_flaw,
                             lesson=lesson,
-                            correct_approach=correct_approach,
                         )
 
             # LLM responded with text or wrong tool — retry
