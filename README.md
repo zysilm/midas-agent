@@ -53,6 +53,7 @@ On the first successful episode, the **Config Creator** generates a multi-step D
 ### Inspiration
 
 - [**ExpeL**](https://arxiv.org/abs/2308.10144) (AAAI 2024) — experiential learning with lesson library and importance voting. Midas adapts ExpeL's dual-mode learning (specific trajectories + extracted insights) to coding agents on SWE-bench.
+- [**SAGE**](https://arxiv.org/abs/2502.10346) (2025) — structured 3-step failure analysis (agent intent → strategy flaw → lesson). Midas uses SAGE's reflection framework in its Failure Analyzer to extract lessons from failed trajectories.
 - [**GEPA**](https://arxiv.org/abs/2506.08056) (ICLR 2026) — Guided Evolutionary Prompt Adaptation from [DSPy](https://dspy.ai/). Midas explored GEPA-style prompt reflection before discovering that storing specific lessons outperforms generalizing them into prompt rewrites.
 
 ## Quick Start
