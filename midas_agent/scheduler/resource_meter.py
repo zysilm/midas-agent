@@ -4,8 +4,7 @@ from midas_agent.llm.types import LLMRequest, LLMResponse
 from midas_agent.scheduler.training_log import TrainingLog
 
 
-class BudgetExhaustedError(Exception):
-    pass
+from llm_agent_toolkit.types import BudgetExhaustedError  # noqa: F401
 
 
 class ResourceMeter:

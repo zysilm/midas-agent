@@ -59,6 +59,13 @@ On the first successful episode, the **Config Creator** generates a multi-step D
 ## Quick Start
 
 ```bash
+# Clone with submodules (llm-agent-toolkit is a git submodule)
+git clone --recursive https://github.com/zysilm/midas-agent.git
+cd midas-agent
+
+# If you already cloned without --recursive:
+git submodule update --init --recursive
+
 poetry install
 ```
 

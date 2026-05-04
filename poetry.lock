@@ -1442,6 +1442,25 @@ semantic-router = ["semantic-router (>=0.1.12)"]
 utils = ["numpydoc"]
 
 [[package]]
+name = "llm-agent-toolkit"
+version = "0.1.0"
+description = "Reusable infrastructure for LLM-based coding agents: tool-calling loops, Docker execution, context management"
+optional = false
+python-versions = "^3.11"
+files = []
+develop = true
+
+[package.dependencies]
+litellm = "^1.0"
+
+[package.extras]
+swebench = ["swebench (>=3.0,<4.0)"]
+
+[package.source]
+type = "directory"
+url = "llm-agent-toolkit"
+
+[[package]]
 name = "markdown-it-py"
 version = "4.0.0"
 description = "Python port of markdown-it. Markdown parsing, done right!"
@@ -4379,4 +4398,4 @@ swebench = ["swebench"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.11"
-content-hash = "8807f855db90f58419231b57a983aceb5df9f43ce8c563d38074314c99cb27e7"
+content-hash = "a1a26ba65380e51792f7016aeac8fb1677e66e351ac5d1399adbd50cafbdb456"

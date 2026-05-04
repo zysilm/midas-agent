@@ -1,17 +1,12 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Callable
 
 from midas_agent.llm.types import LLMRequest, LLMResponse
 from midas_agent.stdlib.action import Action
 
 
-@dataclass
-class ActionEvent:
-    action_name: str
-    arguments: dict
-    result: str
+from llm_agent_toolkit.types import ActionEvent  # noqa: F401
 
 
 class TUI:

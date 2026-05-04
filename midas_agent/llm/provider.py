@@ -1,10 +1,2 @@
-"""LLM provider abstract base class."""
-from abc import ABC, abstractmethod
-
-from midas_agent.llm.types import LLMRequest, LLMResponse
-
-
-class LLMProvider(ABC):
-    @abstractmethod
-    def complete(self, request: LLMRequest) -> LLMResponse:
-        raise NotImplementedError
+"""LLM provider ABC — re-exported from llm-agent-toolkit."""
+from llm_agent_toolkit.llm.provider import LLMProvider  # noqa: F401

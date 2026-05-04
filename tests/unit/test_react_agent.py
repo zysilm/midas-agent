@@ -281,7 +281,7 @@ class TestReactAgent:
         second_call_msgs = captured_messages[1]
         tool_msg = [m for m in second_call_msgs if m.get("role") == "tool"]
         assert len(tool_msg) == 1
-        assert "[当前余额: 42000]" in tool_msg[0]["content"]
+        assert "[Balance: 42000]" in tool_msg[0]["content"]
 
     def test_no_balance_when_provider_is_none(self):
         """When balance_provider is None, tool results are not modified."""
