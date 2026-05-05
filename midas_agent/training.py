@@ -144,6 +144,9 @@ def _setup_and_execute_workspace(ws, repo_dir, config, issue, ws_repo_dirs, cont
             logger.info("  %s: Docker container %s", ws.workspace_id, cid)
         except Exception as e:
             logger.warning("  %s: Docker setup failed (%s), falling back to local", ws.workspace_id, e)
+            # Reset IO so we don't use a stale container from a previous episode
+            if hasattr(ws, "_io"):
+                ws._io = None
 
     ws.execute(issue)
     return ws.workspace_id
