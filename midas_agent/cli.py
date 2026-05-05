@@ -59,6 +59,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         default=None,
         help="Custom training directory name (default: auto-generated timestamp)",
     )
+    train_parser.add_argument(
+        "--dag",
+        default=None,
+        help="Path to initial DAG config YAML (seeds all workspaces with this workflow)",
+    )
 
     # -- infer subcommand --
     infer_parser = subparsers.add_parser("infer", help="Run inference with a DAG config")
@@ -184,10 +189,18 @@ def _cmd_train(args: argparse.Namespace) -> None:
         issues = [issues[args.issue_index]]
 
     train_dir_name = getattr(args, "train_dir", None)
+    dag_path = getattr(args, "dag", None)
+    initial_dag = None
+    if dag_path:
+        with open(dag_path) as f:
+            initial_dag = yaml.safe_load(f)
+        print(f"Using initial DAG from {dag_path}")
+
     print(f"Training: {len(issues)} issues, budget={config.initial_budget}")
     run_training(
         config, issues=issues, fresh=fresh, resume_dir=resume,
         config_path=config_path, train_dir_name=train_dir_name,
+        initial_dag=initial_dag,
     )
 
 

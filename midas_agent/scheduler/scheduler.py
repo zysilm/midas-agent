@@ -157,10 +157,12 @@ class Scheduler:
         """Return all active workspaces."""
         return self._workspace_manager.list_workspaces()
 
-    def create_workspaces(self) -> None:
+    def create_workspaces(self, initial_config: dict | None = None) -> None:
         """Create the initial set of workspaces defined by config."""
         for i in range(self._config.workspace_count):
-            self._workspace_manager.create(workspace_id=f"ws-{i}")
+            self._workspace_manager.create(
+                workspace_id=f"ws-{i}", initial_config=initial_config,
+            )
 
     def get_mid_episode_evictions(self) -> list[str]:
         """Return workspace IDs evicted mid-episode via budget exhaustion."""

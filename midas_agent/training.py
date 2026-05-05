@@ -75,7 +75,7 @@ def _resolve_swebench_image(issue: Issue) -> str:
     """Resolve the SWE-bench Docker image name for an issue.
 
     Uses swebench's make_test_spec to get the correct env image key,
-    then prepends the DockerHub namespace.
+    then forces x86_64 architecture (available for all issues on DockerHub).
     """
     try:
         from swebench.harness.test_spec.test_spec import make_test_spec
@@ -87,10 +87,11 @@ def _resolve_swebench_image(issue: Issue) -> str:
         for row in ds:
             if row["instance_id"] == issue.issue_id:
                 spec = make_test_spec(dict(row), namespace="swebench")
-                # Use the instance (eval) image — it has the repo installed
-                # with all dependencies. The env image is not on DockerHub.
-                # instance_image_key already includes the namespace prefix.
-                return spec.instance_image_key
+                # Force x86_64 — all issues have x86_64 images on DockerHub.
+                # ARM64 images are incomplete. Docker runs x86_64 via QEMU.
+                image_key = spec.instance_image_key
+                image_key = image_key.replace(".arm64.", ".x86_64.")
+                return image_key
     except Exception as e:
         logger.warning("Could not resolve SWE-bench image: %s", e)
 
@@ -324,6 +325,7 @@ def run_training(
     resume_dir: str | None = None,
     config_path: str | None = None,
     train_dir_name: str | None = None,
+    initial_dag: dict | None = None,
 ) -> None:
     """Run the full training loop.
 
@@ -444,7 +446,7 @@ def run_training(
     patches_base_dir = os.path.join(train_dir, "log", "patches")
 
     # -- Create workspace --
-    scheduler.create_workspaces()
+    scheduler.create_workspaces(initial_config=initial_dag)
 
     # -- Resume from checkpoint if available --
     processed_issue_ids: list[str] = []
