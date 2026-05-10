@@ -43,6 +43,10 @@ class SWEBenchScorer(ExecutionScorer):
 
         instance = self._load_instance(issue.issue_id)
         test_spec = make_test_spec(instance, namespace="swebench")
+        # On ARM Macs, swebench returns arm64 image keys but many ARM64
+        # images don't exist on DockerHub.  Force x86_64 to match the
+        # --platform linux/amd64 flag used by ContainerManager.
+        test_spec.arch = "x86_64"
         client = docker.from_env()
 
         prediction = {

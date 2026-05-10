@@ -90,6 +90,9 @@ def _resolve_swebench_image(issue: Issue) -> str:
                 # Use the instance (eval) image — it has the repo installed
                 # with all dependencies. The env image is not on DockerHub.
                 # instance_image_key already includes the namespace prefix.
+                # On ARM Macs, swebench returns arm64 image keys but
+                # ContainerManager forces --platform linux/amd64.
+                spec.arch = "x86_64"
                 return spec.instance_image_key
     except Exception as e:
         logger.warning("Could not resolve SWE-bench image: %s", e)
