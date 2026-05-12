@@ -2,8 +2,8 @@
 from abc import ABC, abstractmethod
 from typing import Callable
 
-from midas_agent.llm.types import LLMRequest, LLMResponse
-from midas_agent.types import Issue
+from llm_agent_toolkit.llm.types import LLMRequest, LLMResponse
+from llm_agent_toolkit.types import Issue
 
 
 class Workspace(ABC):

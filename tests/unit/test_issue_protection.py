@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pytest
 
-from midas_agent.context.compaction import build_compacted_history, should_compact
+from llm_agent_toolkit.context.compaction import build_compacted_history, should_compact
 
 
 ISSUE_TEXT = (
@@ -120,10 +120,10 @@ class TestIssueProtectionInReactAgent:
 
     def test_issue_survives_compaction_in_agent(self):
         """Run agent with small context window; after compaction, issue is still in messages."""
-        from midas_agent.llm.types import LLMResponse, TokenUsage, ToolCall
-        from midas_agent.stdlib.actions.task_done import TaskDoneAction
-        from midas_agent.stdlib.react_agent import ReactAgent
-        from midas_agent.stdlib.action import Action
+        from llm_agent_toolkit.llm.types import LLMResponse, TokenUsage, ToolCall
+        from llm_agent_toolkit.stdlib.actions.task_done import TaskDoneAction
+        from llm_agent_toolkit.stdlib.react_agent import ReactAgent
+        from llm_agent_toolkit.stdlib.action import Action
 
         # A fake action that returns a large result to fill up context fast
         class VerboseBashAction(Action):

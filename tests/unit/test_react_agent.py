@@ -1,8 +1,8 @@
 """Unit tests for ReactAgent, AgentResult, and ActionRecord."""
 import pytest
 
-from midas_agent.stdlib.react_agent import ReactAgent, AgentResult, ActionRecord
-from midas_agent.llm.types import LLMRequest, LLMResponse, TokenUsage
+from llm_agent_toolkit.stdlib.react_agent import ReactAgent, AgentResult, ActionRecord
+from llm_agent_toolkit.llm.types import LLMRequest, LLMResponse, TokenUsage
 
 
 def _dummy_call_llm(req: LLMRequest) -> LLMResponse:
@@ -136,8 +136,8 @@ class TestReactAgent:
 
     def test_passes_tools_to_llm_request(self):
         """run() passes action definitions as tools in the LLMRequest."""
-        from midas_agent.stdlib.actions.bash import BashAction
-        from midas_agent.stdlib.actions.task_done import TaskDoneAction
+        from llm_agent_toolkit.stdlib.actions.bash import BashAction
+        from llm_agent_toolkit.stdlib.actions.task_done import TaskDoneAction
 
         requests_log: list[LLMRequest] = []
 
@@ -165,7 +165,7 @@ class TestReactAgent:
 
     def test_tools_have_correct_schema(self):
         """Tools passed to LLM follow the OpenAI function calling format."""
-        from midas_agent.stdlib.actions.bash import BashAction
+        from llm_agent_toolkit.stdlib.actions.bash import BashAction
 
         requests_log: list[LLMRequest] = []
 
@@ -215,8 +215,8 @@ class TestReactAgent:
 
     def test_executes_tool_call_and_returns_result(self):
         """Agent executes tool calls from LLM and feeds results back."""
-        from midas_agent.stdlib.actions.bash import BashAction
-        from midas_agent.llm.types import ToolCall
+        from llm_agent_toolkit.stdlib.actions.bash import BashAction
+        from llm_agent_toolkit.llm.types import ToolCall
 
         call_count = 0
 
@@ -248,8 +248,8 @@ class TestReactAgent:
 
     def test_balance_injected_after_tool_result(self):
         """When balance_provider is set, current balance is appended to tool results."""
-        from midas_agent.stdlib.actions.bash import BashAction
-        from midas_agent.llm.types import ToolCall
+        from llm_agent_toolkit.stdlib.actions.bash import BashAction
+        from llm_agent_toolkit.llm.types import ToolCall
 
         call_count = 0
         captured_messages: list[list[dict]] = []
@@ -285,8 +285,8 @@ class TestReactAgent:
 
     def test_no_balance_when_provider_is_none(self):
         """When balance_provider is None, tool results are not modified."""
-        from midas_agent.stdlib.actions.bash import BashAction
-        from midas_agent.llm.types import ToolCall
+        from llm_agent_toolkit.stdlib.actions.bash import BashAction
+        from llm_agent_toolkit.llm.types import ToolCall
 
         call_count = 0
         captured_messages: list[list[dict]] = []
@@ -320,8 +320,8 @@ class TestReactAgent:
 
     def test_terminates_on_task_done(self):
         """When TaskDoneAction is invoked, termination_reason is 'done'."""
-        from midas_agent.stdlib.actions.task_done import TaskDoneAction
-        from midas_agent.llm.types import ToolCall
+        from llm_agent_toolkit.stdlib.actions.task_done import TaskDoneAction
+        from llm_agent_toolkit.llm.types import ToolCall
 
         def llm_that_calls_task_done(req: LLMRequest) -> LLMResponse:
             return LLMResponse(

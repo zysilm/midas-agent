@@ -152,7 +152,7 @@ class TestBuildActionSet:
 
     def test_returns_list_of_actions(self, tmp_path):
         """Returns a list, not an ActionRegistry."""
-        from midas_agent.stdlib.action import Action
+        from llm_agent_toolkit.stdlib.action import Action
 
         actions = build_action_set(cwd=str(tmp_path), env="local")
         assert isinstance(actions, list)

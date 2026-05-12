@@ -2,7 +2,7 @@
 import pytest
 
 from midas_agent.inference.production_meter import ProductionResourceMeter
-from midas_agent.llm.types import LLMRequest, LLMResponse, TokenUsage
+from llm_agent_toolkit.llm.types import LLMRequest, LLMResponse, TokenUsage
 from midas_agent.scheduler.resource_meter import BudgetExhaustedError
 
 

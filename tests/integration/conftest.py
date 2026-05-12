@@ -10,12 +10,12 @@ from typing import Callable
 import pytest
 
 from midas_agent.config import MidasConfig
-from midas_agent.evaluation.execution_scorer import ExecutionScorer
-from midas_agent.llm.provider import LLMProvider
-from midas_agent.llm.types import LLMRequest, LLMResponse, TokenUsage
+from llm_agent_toolkit.evaluation.execution_scorer import ExecutionScorer
+from llm_agent_toolkit.llm.provider import LLMProvider
+from llm_agent_toolkit.llm.types import LLMRequest, LLMResponse, TokenUsage
 from midas_agent.scheduler.storage import LogFilter, StorageBackend
 from midas_agent.scheduler.training_log import HookSet, LogEntry
-from midas_agent.types import Issue
+from llm_agent_toolkit.types import Issue
 
 
 # ---------------------------------------------------------------------------

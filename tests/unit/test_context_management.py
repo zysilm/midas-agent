@@ -6,14 +6,14 @@ Tests define expected behavior for the two context management layers:
 """
 import pytest
 
-from midas_agent.stdlib.react_agent import ReactAgent, AgentResult
+from llm_agent_toolkit.stdlib.react_agent import ReactAgent, AgentResult
 
 
 # ===========================================================================
 # Helper: truncation function (to be implemented)
 # ===========================================================================
 
-from midas_agent.context.truncation import truncate_output
+from llm_agent_toolkit.context.truncation import truncate_output
 
 
 # ===========================================================================
@@ -139,8 +139,8 @@ class TestReactAgentTruncation:
     def test_tool_output_truncated_in_messages(self):
         """Tool results exceeding max_tool_output_chars are truncated
         before being added to the conversation history."""
-        from midas_agent.llm.types import LLMRequest, LLMResponse, TokenUsage, ToolCall
-        from midas_agent.stdlib.action import Action
+        from llm_agent_toolkit.llm.types import LLMRequest, LLMResponse, TokenUsage, ToolCall
+        from llm_agent_toolkit.stdlib.action import Action
 
         class BigOutputAction(Action):
             @property
@@ -201,8 +201,8 @@ class TestReactAgentTruncation:
 
     def test_small_output_not_truncated(self):
         """Tool results under the limit are passed through unchanged."""
-        from midas_agent.llm.types import LLMRequest, LLMResponse, TokenUsage, ToolCall
-        from midas_agent.stdlib.action import Action
+        from llm_agent_toolkit.llm.types import LLMRequest, LLMResponse, TokenUsage, ToolCall
+        from llm_agent_toolkit.stdlib.action import Action
 
         class SmallAction(Action):
             @property
@@ -263,7 +263,7 @@ class TestReactAgentTruncation:
 # ===========================================================================
 
 
-from midas_agent.context.compaction import (
+from llm_agent_toolkit.context.compaction import (
     should_compact,
     build_compaction_prompt,
     build_compacted_history,

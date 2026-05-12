@@ -14,7 +14,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
-from midas_agent.llm.types import LLMRequest, LLMResponse, TokenUsage
+from llm_agent_toolkit.llm.types import LLMRequest, LLMResponse, TokenUsage
 from midas_agent.scheduler.resource_meter import BudgetExhaustedError, ResourceMeter
 from midas_agent.scheduler.serial_queue import SerialQueue
 from midas_agent.scheduler.storage import LogFilter

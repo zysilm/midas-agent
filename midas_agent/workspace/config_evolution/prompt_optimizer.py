@@ -20,7 +20,7 @@ import re
 from types import SimpleNamespace
 from typing import Callable
 
-from midas_agent.llm.types import LLMRequest, LLMResponse
+from llm_agent_toolkit.llm.types import LLMRequest, LLMResponse
 from midas_agent.workspace.config_evolution.config_schema import (
     WorkflowConfig,
 )

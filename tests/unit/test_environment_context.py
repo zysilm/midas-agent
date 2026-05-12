@@ -8,7 +8,7 @@ class TestEnvironmentContextSerialization:
 
     def test_serialize_to_xml_all_fields(self):
         """All fields present → full XML block with all tags."""
-        from midas_agent.context.environment import EnvironmentContext
+        from llm_agent_toolkit.context.environment import EnvironmentContext
 
         ctx = EnvironmentContext(
             cwd="/testbed",
@@ -35,7 +35,7 @@ class TestEnvironmentContextSerialization:
 
     def test_serialize_to_xml_minimal(self):
         """Only cwd set → no empty tags for missing fields."""
-        from midas_agent.context.environment import EnvironmentContext
+        from llm_agent_toolkit.context.environment import EnvironmentContext
 
         ctx = EnvironmentContext(cwd="/testbed")
         xml = ctx.serialize_to_xml()
@@ -48,7 +48,7 @@ class TestEnvironmentContextSerialization:
 
     def test_serialize_to_xml_no_agents(self):
         """Empty available_agents list → tag omitted."""
-        from midas_agent.context.environment import EnvironmentContext
+        from llm_agent_toolkit.context.environment import EnvironmentContext
 
         ctx = EnvironmentContext(
             cwd="/testbed",

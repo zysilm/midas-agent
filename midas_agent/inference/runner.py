@@ -4,17 +4,17 @@ from __future__ import annotations
 import json
 from datetime import date
 
-from midas_agent.context.environment import EnvironmentContext
+from llm_agent_toolkit.context.environment import EnvironmentContext
 from midas_agent.inference.frozen_pricing import FrozenPricingEngine
 from midas_agent.inference.production_meter import ProductionResourceMeter
 from midas_agent.inference.schemas import GraphEmergenceArtifact
-from midas_agent.llm.provider import LLMProvider
-from midas_agent.llm.types import LLMRequest, LLMResponse
-from midas_agent.stdlib.action import ActionRegistry
-from midas_agent.stdlib.actions.task_done import TaskDoneAction
-from midas_agent.stdlib.plan_execute_agent import PlanExecuteAgent
-from midas_agent.stdlib.react_agent import AgentResult
-from midas_agent.types import Issue
+from llm_agent_toolkit.llm.provider import LLMProvider
+from llm_agent_toolkit.llm.types import LLMRequest, LLMResponse
+from llm_agent_toolkit.stdlib.action import ActionRegistry
+from llm_agent_toolkit.stdlib.actions.task_done import TaskDoneAction
+from llm_agent_toolkit.stdlib.plan_execute_agent import PlanExecuteAgent
+from llm_agent_toolkit.stdlib.react_agent import AgentResult
+from llm_agent_toolkit.types import Issue
 from midas_agent.workspace.config_evolution.config_schema import (
     ConfigMeta,
     StepConfig,

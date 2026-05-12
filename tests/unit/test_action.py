@@ -1,7 +1,7 @@
 """Unit tests for Action ABC and ActionRegistry."""
 import pytest
 
-from midas_agent.stdlib.action import Action, ActionRegistry, ActionNotFoundError
+from llm_agent_toolkit.stdlib.action import Action, ActionRegistry, ActionNotFoundError
 
 
 # -- Helpers --

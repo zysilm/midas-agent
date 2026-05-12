@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from midas_agent.stdlib.action import Action
+from llm_agent_toolkit.stdlib.action import Action
 
 LESSON_SENTINEL = "<<LESSON_SUBMITTED>>"
 

@@ -13,9 +13,9 @@ from typing import Callable
 
 import yaml
 
-from midas_agent.llm.types import LLMRequest, LLMResponse
-from midas_agent.stdlib.react_agent import ActionRecord
-from midas_agent.types import Issue
+from llm_agent_toolkit.llm.types import LLMRequest, LLMResponse
+from llm_agent_toolkit.stdlib.react_agent import ActionRecord
+from llm_agent_toolkit.types import Issue
 from midas_agent.workspace.config_evolution.config_schema import (
     ConfigMeta,
     StepConfig,

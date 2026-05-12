@@ -22,7 +22,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from midas_agent.cli import parse_args
-from midas_agent.types import Issue
+from llm_agent_toolkit.types import Issue
 
 
 # ===================================================================

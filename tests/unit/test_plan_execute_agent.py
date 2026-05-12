@@ -1,9 +1,9 @@
 """Unit tests for PlanExecuteAgent."""
 import pytest
 
-from midas_agent.stdlib.plan_execute_agent import PlanExecuteAgent
-from midas_agent.stdlib.react_agent import AgentResult, ReactAgent
-from midas_agent.llm.types import LLMRequest, LLMResponse, TokenUsage
+from llm_agent_toolkit.stdlib.plan_execute_agent import PlanExecuteAgent
+from llm_agent_toolkit.stdlib.react_agent import AgentResult, ReactAgent
+from llm_agent_toolkit.llm.types import LLMRequest, LLMResponse, TokenUsage
 
 
 def _dummy_call_llm(req: LLMRequest) -> LLMResponse:
@@ -17,7 +17,7 @@ def _dummy_call_llm(req: LLMRequest) -> LLMResponse:
 
 def _scripted_call_llm() -> callable:
     """Create a scripted LLM callback for plan+execute phases."""
-    from midas_agent.llm.types import ToolCall
+    from llm_agent_toolkit.llm.types import ToolCall
 
     responses = [
         LLMResponse(content="Plan: analyze and fix.", tool_calls=None, usage=TokenUsage(10, 5)),
@@ -57,7 +57,7 @@ class TestPlanExecuteAgent:
 
     def test_run_returns_agent_result(self):
         """run() returns an AgentResult instance."""
-        from midas_agent.stdlib.actions.task_done import TaskDoneAction
+        from llm_agent_toolkit.stdlib.actions.task_done import TaskDoneAction
 
         agent = PlanExecuteAgent(
             system_prompt="You are a planning agent.",
@@ -70,7 +70,7 @@ class TestPlanExecuteAgent:
 
     def test_plan_phase_uses_env_context(self):
         """env_context_xml is injected during the planning phase."""
-        from midas_agent.stdlib.actions.task_done import TaskDoneAction
+        from llm_agent_toolkit.stdlib.actions.task_done import TaskDoneAction
 
         agent = PlanExecuteAgent(
             system_prompt="You are a planning agent.",
@@ -84,7 +84,7 @@ class TestPlanExecuteAgent:
 
     def test_execute_phase_follows_plan(self):
         """After planning, the agent enters the standard ReAct loop for execution."""
-        from midas_agent.stdlib.actions.task_done import TaskDoneAction
+        from llm_agent_toolkit.stdlib.actions.task_done import TaskDoneAction
 
         agent = PlanExecuteAgent(
             system_prompt="You are a planning agent.",

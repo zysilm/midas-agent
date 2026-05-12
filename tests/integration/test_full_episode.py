@@ -30,7 +30,7 @@ from midas_agent.config import MidasConfig
 from midas_agent.evaluation.criteria_cache import CriteriaCache
 from midas_agent.evaluation.llm_judge import LLMJudge
 from midas_agent.evaluation.module import EvalResult, EvaluationModule
-from midas_agent.llm.types import LLMRequest, LLMResponse, TokenUsage
+from llm_agent_toolkit.llm.types import LLMRequest, LLMResponse, TokenUsage
 from midas_agent.scheduler.budget_allocator import AdaptiveMultiplier, BudgetAllocator
 from midas_agent.scheduler.resource_meter import BudgetExhaustedError, ResourceMeter
 from midas_agent.scheduler.scheduler import Scheduler

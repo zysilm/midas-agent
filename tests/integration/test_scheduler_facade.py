@@ -13,7 +13,7 @@ from unittest.mock import MagicMock
 
 from midas_agent.config import MidasConfig
 from midas_agent.evaluation.module import EvaluationModule, EvalResult
-from midas_agent.llm.types import LLMRequest, LLMResponse, TokenUsage
+from llm_agent_toolkit.llm.types import LLMRequest, LLMResponse, TokenUsage
 from midas_agent.scheduler.budget_allocator import AdaptiveMultiplier, BudgetAllocator
 from midas_agent.scheduler.resource_meter import ResourceMeter
 from midas_agent.scheduler.scheduler import Scheduler

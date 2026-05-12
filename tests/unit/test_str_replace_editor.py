@@ -7,7 +7,7 @@ import os
 
 import pytest
 
-from midas_agent.stdlib.actions.str_replace_editor import StrReplaceEditorAction
+from llm_agent_toolkit.stdlib.actions.str_replace_editor import StrReplaceEditorAction
 
 
 # ===========================================================================

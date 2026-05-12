@@ -10,8 +10,8 @@ Tests the scorer's behavior:
 import pytest
 from unittest.mock import patch, MagicMock
 
-from midas_agent.evaluation.swebench_scorer import SWEBenchScorer
-from midas_agent.types import Issue
+from llm_agent_toolkit.evaluation.swebench_scorer import SWEBenchScorer
+from llm_agent_toolkit.types import Issue
 
 
 def _make_issue(**kwargs) -> Issue:
@@ -30,7 +30,7 @@ def _make_issue(**kwargs) -> Issue:
 @pytest.mark.unit
 class TestSWEBenchScorer:
     def test_inherits_from_execution_scorer(self):
-        from midas_agent.evaluation.execution_scorer import ExecutionScorer
+        from llm_agent_toolkit.evaluation.execution_scorer import ExecutionScorer
         scorer = SWEBenchScorer()
         assert isinstance(scorer, ExecutionScorer)
 

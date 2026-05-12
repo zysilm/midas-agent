@@ -5,8 +5,8 @@ import pytest
 
 from midas_agent.training import run_training, collect_patches, load_swe_bench
 from midas_agent.config import MidasConfig
-from midas_agent.llm.types import LLMResponse, TokenUsage, ToolCall
-from midas_agent.types import Issue
+from llm_agent_toolkit.llm.types import LLMResponse, TokenUsage, ToolCall
+from llm_agent_toolkit.types import Issue
 
 
 # ---------------------------------------------------------------------------

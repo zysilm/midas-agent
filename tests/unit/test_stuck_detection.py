@@ -12,7 +12,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from midas_agent.stdlib.react_agent import ActionRecord, ReactAgent
+from llm_agent_toolkit.stdlib.react_agent import ActionRecord, ReactAgent
 
 
 def _record(name: str, args: dict | None = None, result: str = "ok") -> ActionRecord:
@@ -146,9 +146,9 @@ class TestStuckWarningInjection:
 
     def test_warning_injected_after_stuck(self):
         """After 3 edits to same file, the LLM receives a warning in messages."""
-        from midas_agent.llm.types import LLMResponse, TokenUsage, ToolCall
-        from midas_agent.stdlib.actions.task_done import TaskDoneAction
-        from midas_agent.stdlib.action import Action
+        from llm_agent_toolkit.llm.types import LLMResponse, TokenUsage, ToolCall
+        from llm_agent_toolkit.stdlib.actions.task_done import TaskDoneAction
+        from llm_agent_toolkit.stdlib.action import Action
 
         class FakeEditAction(Action):
             @property

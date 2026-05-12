@@ -11,17 +11,17 @@ from unittest.mock import MagicMock
 import pytest
 
 from midas_agent.config import MidasConfig
-from midas_agent.llm.types import LLMRequest, LLMResponse, TokenUsage, ToolCall
-from midas_agent.stdlib.actions.task_done import TaskDoneAction
-from midas_agent.stdlib.action import Action
-from midas_agent.stdlib.plan_execute_agent import PlanExecuteAgent
-from midas_agent.stdlib.react_agent import ReactAgent
+from llm_agent_toolkit.llm.types import LLMRequest, LLMResponse, TokenUsage, ToolCall
+from llm_agent_toolkit.stdlib.actions.task_done import TaskDoneAction
+from llm_agent_toolkit.stdlib.action import Action
+from llm_agent_toolkit.stdlib.plan_execute_agent import PlanExecuteAgent
+from llm_agent_toolkit.stdlib.react_agent import ReactAgent
 from midas_agent.workspace.graph_emergence.agent import Agent, Soul
 from midas_agent.workspace.graph_emergence.free_agent_manager import FreeAgentManager
 from midas_agent.workspace.graph_emergence.pricing import PricingEngine
 from midas_agent.workspace.graph_emergence.skill import SkillReviewer
 from midas_agent.workspace.graph_emergence.workspace import GraphEmergenceWorkspace
-from midas_agent.types import Issue
+from llm_agent_toolkit.types import Issue
 
 from tests.integration.conftest import (
     FakeLLMProvider,
@@ -262,7 +262,7 @@ class TestCompactionInAgentLoop:
     def test_compaction_triggers_when_context_fills(self):
         """After many iterations, when estimated tokens exceed 90% of
         max_context_tokens, compaction should fire and compress history."""
-        from midas_agent.stdlib.action import Action
+        from llm_agent_toolkit.stdlib.action import Action
 
         class FillContextAction(Action):
             """Returns medium output to gradually fill context."""

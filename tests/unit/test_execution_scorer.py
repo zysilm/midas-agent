@@ -1,8 +1,8 @@
 """Unit tests for ExecutionScorer."""
 import pytest
 
-from midas_agent.evaluation.execution_scorer import ExecutionScorer
-from midas_agent.types import Issue
+from llm_agent_toolkit.evaluation.execution_scorer import ExecutionScorer
+from llm_agent_toolkit.types import Issue
 
 
 @pytest.mark.unit

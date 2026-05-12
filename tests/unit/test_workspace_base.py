@@ -2,7 +2,7 @@
 import pytest
 
 from midas_agent.workspace.base import Workspace
-from midas_agent.types import Issue
+from llm_agent_toolkit.types import Issue
 
 
 @pytest.mark.unit

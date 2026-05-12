@@ -7,8 +7,8 @@ import subprocess
 import uuid
 from typing import Callable
 
-from midas_agent.llm.types import LLMRequest, LLMResponse
-from midas_agent.types import Issue
+from llm_agent_toolkit.llm.types import LLMRequest, LLMResponse
+from llm_agent_toolkit.types import Issue
 from midas_agent.workspace.base import Workspace
 from midas_agent.workspace.config_evolution.config_creator import ConfigCreator, ConfigMerger
 from midas_agent.workspace.config_evolution.config_schema import WorkflowConfig

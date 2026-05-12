@@ -1,9 +1,8 @@
-initial_budget: 2000000
-workspace_count: 1
-runtime_mode: graph_emergence
-n_evict: 0
+initial_budget: 1500000
+runtime_mode: config_evolution
 score_floor: 0.01
-multiplier_mode: adaptive
-multiplier_init: 1.0
 beta: 0.3
 execution_env: docker
+max_tool_output_chars: 100000
+max_context_tokens: 32000
+lesson_similarity_threshold: 0.50

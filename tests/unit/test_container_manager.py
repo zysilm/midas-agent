@@ -4,7 +4,7 @@ import subprocess
 
 import pytest
 
-from midas_agent.docker.container_manager import ContainerManager
+from llm_agent_toolkit.docker.container_manager import ContainerManager
 
 
 @pytest.mark.unit

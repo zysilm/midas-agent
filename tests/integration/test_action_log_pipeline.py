@@ -7,10 +7,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from midas_agent.llm.types import LLMRequest, LLMResponse, TokenUsage, ToolCall
-from midas_agent.stdlib.action import Action
-from midas_agent.stdlib.actions.task_done import TaskDoneAction
-from midas_agent.types import Issue
+from llm_agent_toolkit.llm.types import LLMRequest, LLMResponse, TokenUsage, ToolCall
+from llm_agent_toolkit.stdlib.action import Action
+from llm_agent_toolkit.stdlib.actions.task_done import TaskDoneAction
+from llm_agent_toolkit.types import Issue
 from midas_agent.workspace.graph_emergence.agent import Agent, Soul
 from midas_agent.workspace.graph_emergence.skill import SkillReviewer
 

@@ -5,7 +5,7 @@ import argparse
 import os
 import sys
 
-from midas_agent.stdlib.action import Action
+from llm_agent_toolkit.stdlib.action import Action
 
 
 def _nonneg_int(value: str) -> int:
@@ -109,8 +109,8 @@ def build_action_set(cwd: str, env: str = "local") -> list[Action]:
     backend differs. For docker mode, the IO backend is set later at
     runtime when a container is available.
     """
-    from midas_agent.stdlib.actions.bash import BashAction
-    from midas_agent.stdlib.actions.str_replace_editor import StrReplaceEditorAction
+    from llm_agent_toolkit.stdlib.actions.bash import BashAction
+    from llm_agent_toolkit.stdlib.actions.str_replace_editor import StrReplaceEditorAction
 
     return [
         BashAction(cwd=cwd),
@@ -239,7 +239,7 @@ def _cmd_infer(args: argparse.Namespace) -> None:
 
     logger.info("DAG: %s (%d steps)", dag_config.meta.name, len(dag_config.steps))
 
-    from midas_agent.llm.litellm_provider import LiteLLMProvider
+    from llm_agent_toolkit.llm.litellm_provider import LiteLLMProvider
 
     provider = LiteLLMProvider(
         model=llm_config.model,
@@ -261,14 +261,14 @@ def _infer_eval(args, dag_config, provider, budget, logger):
     """Run DAG config on SWE-bench issues with scoring (frozen config)."""
     import time
     from midas_agent.training import load_swe_bench, _resolve_swebench_image
-    from midas_agent.stdlib.action import ActionRegistry
-    from midas_agent.stdlib.actions.bash import BashAction
-    from midas_agent.stdlib.actions.str_replace_editor import StrReplaceEditorAction
+    from llm_agent_toolkit.stdlib.action import ActionRegistry
+    from llm_agent_toolkit.stdlib.actions.bash import BashAction
+    from llm_agent_toolkit.stdlib.actions.str_replace_editor import StrReplaceEditorAction
     from midas_agent.workspace.config_evolution.executor import DAGExecutor
     from midas_agent.workspace.config_evolution.config_creator import ConfigMerger
-    from midas_agent.docker.container_manager import ContainerManager
-    from midas_agent.runtime.io_backend import DockerIO
-    from midas_agent.evaluation.swebench_scorer import SWEBenchScorer
+    from llm_agent_toolkit.docker.container_manager import ContainerManager
+    from llm_agent_toolkit.runtime.io_backend import DockerIO
+    from llm_agent_toolkit.evaluation.swebench_scorer import SWEBenchScorer
 
     # Load lesson store if provided
     lesson_store = None

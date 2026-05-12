@@ -1,7 +1,7 @@
 """Unit tests for LLM request/response data types."""
 import pytest
 
-from midas_agent.llm.types import LLMRequest, LLMResponse, TokenUsage, ToolCall
+from llm_agent_toolkit.llm.types import LLMRequest, LLMResponse, TokenUsage, ToolCall
 
 
 @pytest.mark.unit

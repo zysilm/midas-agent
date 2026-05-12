@@ -13,14 +13,14 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from midas_agent.llm.types import LLMResponse, TokenUsage, ToolCall
+from llm_agent_toolkit.llm.types import LLMResponse, TokenUsage, ToolCall
 from midas_agent.scheduler.resource_meter import BudgetExhaustedError
-from midas_agent.stdlib.action import ActionRegistry
-from midas_agent.stdlib.actions.bash import BashAction
-from midas_agent.stdlib.actions.str_replace_editor import StrReplaceEditorAction
-from midas_agent.stdlib.actions.task_done import TaskDoneAction
-from midas_agent.stdlib.react_agent import ActionRecord, AgentResult, ReactAgent
-from midas_agent.types import Issue
+from llm_agent_toolkit.stdlib.action import ActionRegistry
+from llm_agent_toolkit.stdlib.actions.bash import BashAction
+from llm_agent_toolkit.stdlib.actions.str_replace_editor import StrReplaceEditorAction
+from llm_agent_toolkit.stdlib.actions.task_done import TaskDoneAction
+from llm_agent_toolkit.stdlib.react_agent import ActionRecord, AgentResult, ReactAgent
+from llm_agent_toolkit.types import Issue
 from midas_agent.workspace.config_evolution.config_creator import (
     ConfigCreator,
     ConfigMerger,

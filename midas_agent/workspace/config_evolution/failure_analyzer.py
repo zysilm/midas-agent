@@ -7,7 +7,7 @@ import re
 from dataclasses import dataclass
 from typing import Callable
 
-from midas_agent.llm.types import LLMRequest, LLMResponse
+from llm_agent_toolkit.llm.types import LLMRequest, LLMResponse
 
 logger = logging.getLogger(__name__)
 

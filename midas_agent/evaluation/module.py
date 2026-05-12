@@ -3,9 +3,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from midas_agent.evaluation.execution_scorer import ExecutionScorer
+from llm_agent_toolkit.evaluation.execution_scorer import ExecutionScorer
 from midas_agent.evaluation.llm_judge import LLMJudge
-from midas_agent.types import Issue
+from llm_agent_toolkit.types import Issue
 
 
 @dataclass(frozen=True)

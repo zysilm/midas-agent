@@ -23,8 +23,8 @@ import pytest
 from midas_agent.evaluation.criteria_cache import CriteriaCache
 from midas_agent.evaluation.llm_judge import LLMJudge
 from midas_agent.evaluation.module import EvalResult, EvaluationModule
-from midas_agent.llm.types import LLMResponse, TokenUsage
-from midas_agent.types import Issue
+from llm_agent_toolkit.llm.types import LLMResponse, TokenUsage
+from llm_agent_toolkit.types import Issue
 
 from tests.integration.conftest import (
     FAKE_ISSUE,

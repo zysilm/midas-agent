@@ -8,7 +8,7 @@ import os
 import pytest
 from unittest.mock import MagicMock, patch, call
 
-from midas_agent.stdlib.actions.str_replace_editor import StrReplaceEditorAction
+from llm_agent_toolkit.stdlib.actions.str_replace_editor import StrReplaceEditorAction
 
 
 class FakeIO:

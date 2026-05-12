@@ -7,7 +7,7 @@ import pytest
 from unittest.mock import MagicMock, patch
 
 from midas_agent.scheduler.resource_meter import ResourceMeter, BudgetExhaustedError
-from midas_agent.llm.types import LLMRequest, LLMResponse, TokenUsage
+from llm_agent_toolkit.llm.types import LLMRequest, LLMResponse, TokenUsage
 from midas_agent.scheduler.training_log import TrainingLog
 
 

@@ -5,8 +5,8 @@ from typing import Callable, TYPE_CHECKING
 
 from pydantic import BaseModel
 
-from midas_agent.llm.types import LLMRequest, LLMResponse
-from midas_agent.stdlib.react_agent import ActionRecord
+from llm_agent_toolkit.llm.types import LLMRequest, LLMResponse
+from llm_agent_toolkit.stdlib.react_agent import ActionRecord
 
 try:
     import dspy

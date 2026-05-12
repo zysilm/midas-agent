@@ -19,7 +19,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from midas_agent.inference.schemas import GraphEmergenceArtifact
-from midas_agent.llm.types import LLMResponse, TokenUsage, ToolCall
+from llm_agent_toolkit.llm.types import LLMResponse, TokenUsage, ToolCall
 from midas_agent.workspace.graph_emergence.agent import Agent, Soul
 from midas_agent.workspace.graph_emergence.skill import Skill
 
@@ -113,7 +113,7 @@ class TestInferWithDefaultArtifact:
         """Default agent, given full actions, can execute and return a result."""
         from midas_agent.cli import build_action_set
         from midas_agent.resolver import resolve_artifact_path
-        from midas_agent.stdlib.plan_execute_agent import PlanExecuteAgent
+        from llm_agent_toolkit.stdlib.plan_execute_agent import PlanExecuteAgent
 
         artifact_path = resolve_artifact_path(cwd=str(tmp_path))
         with open(artifact_path) as f:
@@ -409,7 +409,7 @@ class TestActionInjection:
     def test_full_infer_agent_has_all_tools(self, tmp_path):
         """PlanExecuteAgent built for inference has all expected tools available."""
         from midas_agent.cli import build_action_set
-        from midas_agent.stdlib.plan_execute_agent import PlanExecuteAgent
+        from llm_agent_toolkit.stdlib.plan_execute_agent import PlanExecuteAgent
 
         actions = build_action_set(cwd=str(tmp_path), env="local")
         call_llm = MagicMock(return_value=_task_done_response("done"))

@@ -8,7 +8,7 @@ import inspect
 import pytest
 
 from midas_agent.scheduler.system_llm import SystemLLM
-from midas_agent.llm.types import LLMRequest, LLMResponse, TokenUsage
+from llm_agent_toolkit.llm.types import LLMRequest, LLMResponse, TokenUsage
 
 
 # ---------------------------------------------------------------------------

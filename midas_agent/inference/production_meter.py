@@ -1,6 +1,6 @@
 """Production resource meter — budget cap without TrainingLog."""
-from midas_agent.llm.provider import LLMProvider
-from midas_agent.llm.types import LLMRequest, LLMResponse
+from llm_agent_toolkit.llm.provider import LLMProvider
+from llm_agent_toolkit.llm.types import LLMRequest, LLMResponse
 from midas_agent.scheduler.resource_meter import BudgetExhaustedError
 
 

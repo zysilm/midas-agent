@@ -11,11 +11,11 @@ from datetime import datetime
 
 from midas_agent.config import MidasConfig
 from midas_agent.evaluation.criteria_cache import CriteriaCache
-from midas_agent.evaluation.execution_scorer import ExecutionScorer
+from llm_agent_toolkit.evaluation.execution_scorer import ExecutionScorer
 from midas_agent.evaluation.llm_judge import LLMJudge
 from midas_agent.evaluation.module import EvaluationModule
-from midas_agent.llm.provider import LLMProvider
-from midas_agent.llm.types import LLMRequest, LLMResponse, TokenUsage
+from llm_agent_toolkit.llm.provider import LLMProvider
+from llm_agent_toolkit.llm.types import LLMRequest, LLMResponse, TokenUsage
 from midas_agent.scheduler.budget_allocator import AdaptiveMultiplier, BudgetAllocator
 from midas_agent.scheduler.resource_meter import ResourceMeter
 from midas_agent.scheduler.scheduler import Scheduler
@@ -24,7 +24,7 @@ from midas_agent.scheduler.serial_queue import SerialQueue
 from midas_agent.scheduler.system_llm import SystemLLM
 from midas_agent.scheduler.training_log import HookSet, TrainingLog
 from midas_agent.scheduler.storage import InMemoryStorageBackend, LogFilter
-from midas_agent.types import Issue
+from llm_agent_toolkit.types import Issue
 from midas_agent.workspace.manager import WorkspaceManager
 
 logger = logging.getLogger(__name__)
@@ -37,7 +37,7 @@ def _make_llm_provider(model: str, api_key: str, api_base: str) -> LLMProvider:
             "No LLM model configured.  Set MIDAS_MODEL environment variable "
             "or add 'model' to .midas/config.yaml."
         )
-    from midas_agent.llm.litellm_provider import LiteLLMProvider
+    from llm_agent_toolkit.llm.litellm_provider import LiteLLMProvider
     return LiteLLMProvider(
         model=model,
         api_key=api_key or None,
@@ -194,7 +194,7 @@ def run_training(
         config.eval_api_key or config.api_key,
         config.eval_api_base or config.api_base,
     )
-    from midas_agent.evaluation.swebench_scorer import SWEBenchScorer
+    from llm_agent_toolkit.evaluation.swebench_scorer import SWEBenchScorer
     execution_scorer = SWEBenchScorer(timeout=1800)
     criteria_cache = CriteriaCache(
         cache_dir=os.path.join(train_dir, "log", "criteria_cache"),
@@ -264,8 +264,8 @@ def run_training(
                 # Docker mode: start container, set IO backend
                 if config.execution_env == "docker":
                     try:
-                        from midas_agent.docker.container_manager import ContainerManager
-                        from midas_agent.runtime.io_backend import DockerIO
+                        from llm_agent_toolkit.docker.container_manager import ContainerManager
+                        from llm_agent_toolkit.runtime.io_backend import DockerIO
 
                         cm = ContainerManager()
                         image = _resolve_swebench_image(issue)

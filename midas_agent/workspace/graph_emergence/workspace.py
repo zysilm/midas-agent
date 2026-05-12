@@ -7,15 +7,15 @@ import uuid
 from datetime import date
 from typing import Callable
 
-from midas_agent.context.environment import EnvironmentContext
-from midas_agent.llm.types import LLMRequest, LLMResponse
-from midas_agent.stdlib.actions.bash import BashAction
+from llm_agent_toolkit.context.environment import EnvironmentContext
+from llm_agent_toolkit.llm.types import LLMRequest, LLMResponse
+from llm_agent_toolkit.stdlib.actions.bash import BashAction
 from midas_agent.stdlib.actions.delegate_task import DelegateTaskAction
-from midas_agent.stdlib.actions.str_replace_editor import StrReplaceEditorAction
-from midas_agent.stdlib.actions.task_done import TaskDoneAction
+from llm_agent_toolkit.stdlib.actions.str_replace_editor import StrReplaceEditorAction
+from llm_agent_toolkit.stdlib.actions.task_done import TaskDoneAction
 from midas_agent.stdlib.actions.update_plan import UpdatePlanAction
-from midas_agent.stdlib.plan_execute_agent import PlanExecuteAgent
-from midas_agent.types import Issue
+from llm_agent_toolkit.stdlib.plan_execute_agent import PlanExecuteAgent
+from llm_agent_toolkit.types import Issue
 from midas_agent.workspace.base import Workspace
 from midas_agent.workspace.graph_emergence.agent import Agent, Soul
 from midas_agent.workspace.graph_emergence.free_agent_manager import (

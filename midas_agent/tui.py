@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from typing import Callable
 
-from midas_agent.llm.types import LLMRequest, LLMResponse
-from midas_agent.stdlib.action import Action
+from llm_agent_toolkit.llm.types import LLMRequest, LLMResponse
+from llm_agent_toolkit.stdlib.action import Action
 
 
 from llm_agent_toolkit.types import ActionEvent  # noqa: F401
@@ -26,7 +26,7 @@ class TUI:
 
     def run(self) -> None:
         """REPL loop: read input, run agent, display output."""
-        from midas_agent.stdlib.react_agent import ReactAgent
+        from llm_agent_toolkit.stdlib.react_agent import ReactAgent
 
         print("Midas Agent")  # welcome message
 

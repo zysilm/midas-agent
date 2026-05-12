@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Callable
 
-from midas_agent.llm.types import LLMRequest, LLMResponse
+from llm_agent_toolkit.llm.types import LLMRequest, LLMResponse
 
 
 class Session:

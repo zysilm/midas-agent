@@ -3,8 +3,8 @@ from unittest.mock import patch, MagicMock
 
 import pytest
 
-from midas_agent.llm.litellm_provider import LiteLLMProvider
-from midas_agent.llm.types import LLMRequest, LLMResponse, TokenUsage
+from llm_agent_toolkit.llm.litellm_provider import LiteLLMProvider
+from llm_agent_toolkit.llm.types import LLMRequest, LLMResponse, TokenUsage
 
 
 def _make_request() -> LLMRequest:

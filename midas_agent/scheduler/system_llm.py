@@ -1,6 +1,6 @@
 """SystemLLM — unmetered LLM call gateway."""
-from midas_agent.llm.provider import LLMProvider
-from midas_agent.llm.types import LLMRequest, LLMResponse
+from llm_agent_toolkit.llm.provider import LLMProvider
+from llm_agent_toolkit.llm.types import LLMRequest, LLMResponse
 
 
 class SystemLLM:

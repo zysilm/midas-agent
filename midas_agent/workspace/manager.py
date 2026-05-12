@@ -6,7 +6,7 @@ import os
 from typing import Callable, IO, TYPE_CHECKING
 
 from midas_agent.config import MidasConfig
-from midas_agent.llm.types import LLMRequest, LLMResponse
+from llm_agent_toolkit.llm.types import LLMRequest, LLMResponse
 
 if TYPE_CHECKING:
     from midas_agent.workspace.base import Workspace
@@ -118,9 +118,9 @@ class WorkspaceManager:
         call_llm: Callable,
         initial_config: dict | None,
     ) -> Workspace:
-        from midas_agent.stdlib.action import ActionRegistry
-        from midas_agent.stdlib.actions.bash import BashAction
-        from midas_agent.stdlib.actions.str_replace_editor import StrReplaceEditorAction
+        from llm_agent_toolkit.stdlib.action import ActionRegistry
+        from llm_agent_toolkit.stdlib.actions.bash import BashAction
+        from llm_agent_toolkit.stdlib.actions.str_replace_editor import StrReplaceEditorAction
         from midas_agent.workspace.config_evolution.config_schema import (
             ConfigMeta,
             StepConfig,

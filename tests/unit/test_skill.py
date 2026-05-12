@@ -7,8 +7,8 @@ import pytest
 from midas_agent.workspace.graph_emergence.agent import Agent, Soul
 from midas_agent.workspace.graph_emergence.skill import Skill, SkillReviewer
 from midas_agent.workspace.graph_emergence.free_agent_manager import FreeAgentManager
-from midas_agent.llm.types import LLMRequest, LLMResponse, TokenUsage
-from midas_agent.stdlib.react_agent import ActionRecord
+from llm_agent_toolkit.llm.types import LLMRequest, LLMResponse, TokenUsage
+from llm_agent_toolkit.stdlib.react_agent import ActionRecord
 
 
 def _make_agent(skill: Skill | None = None) -> Agent:

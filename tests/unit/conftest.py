@@ -1,8 +1,8 @@
 """Shared test fixtures for unit tests."""
 import pytest
 
-from midas_agent.llm.provider import LLMProvider
-from midas_agent.llm.types import LLMRequest, LLMResponse, TokenUsage
+from llm_agent_toolkit.llm.provider import LLMProvider
+from llm_agent_toolkit.llm.types import LLMRequest, LLMResponse, TokenUsage
 from midas_agent.scheduler.storage import StorageBackend, LogFilter
 from midas_agent.scheduler.training_log import LogEntry
 

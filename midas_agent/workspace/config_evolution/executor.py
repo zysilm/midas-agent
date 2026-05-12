@@ -13,10 +13,10 @@ from collections import deque
 from dataclasses import dataclass, field
 from typing import Callable
 
-from midas_agent.llm.types import LLMRequest, LLMResponse
-from midas_agent.stdlib.action import ActionRegistry
-from midas_agent.stdlib.react_agent import ActionRecord, ReactAgent
-from midas_agent.types import Issue
+from llm_agent_toolkit.llm.types import LLMRequest, LLMResponse
+from llm_agent_toolkit.stdlib.action import ActionRegistry
+from llm_agent_toolkit.stdlib.react_agent import ActionRecord, ReactAgent
+from llm_agent_toolkit.types import Issue
 from midas_agent.workspace.config_evolution.config_schema import WorkflowConfig
 
 logger = logging.getLogger(__name__)
@@ -303,7 +303,7 @@ class DAGExecutor:
 
                     # Truncate large output
                     if self._max_tool_output_chars and result and len(result) > self._max_tool_output_chars:
-                        from midas_agent.context.truncation import truncate_output
+                        from llm_agent_toolkit.context.truncation import truncate_output
                         result = truncate_output(result, max_chars=self._max_tool_output_chars)
 
                     all_action_history.append(ActionRecord(
@@ -331,7 +331,7 @@ class DAGExecutor:
                             args = tc.get("function", {}).get("arguments", "")
                             total_chars += len(str(args))
                     total_tokens_est = total_chars // 4
-                    from midas_agent.context.compaction import should_compact, build_compaction_prompt, build_compacted_history
+                    from llm_agent_toolkit.context.compaction import should_compact, build_compaction_prompt, build_compacted_history
                     if should_compact(total_tokens_est, self._max_context_tokens):
                         logger.info(
                             "  Context compaction triggered at %d tokens est (%d chars, %d messages)",

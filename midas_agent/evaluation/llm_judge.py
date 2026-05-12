@@ -4,9 +4,9 @@ from __future__ import annotations
 import json
 
 from midas_agent.evaluation.criteria_cache import CriteriaCache
-from midas_agent.llm.provider import LLMProvider
-from midas_agent.llm.types import LLMRequest
-from midas_agent.types import Issue
+from llm_agent_toolkit.llm.provider import LLMProvider
+from llm_agent_toolkit.llm.types import LLMRequest
+from llm_agent_toolkit.types import Issue
 
 
 class LLMJudge:

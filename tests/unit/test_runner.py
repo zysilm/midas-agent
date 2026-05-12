@@ -9,10 +9,10 @@ from midas_agent.inference.runner import run_inference
 from midas_agent.inference.schemas import GraphEmergenceArtifact
 from midas_agent.workspace.graph_emergence.agent import Agent, Soul
 from midas_agent.workspace.graph_emergence.skill import Skill
-from midas_agent.llm.types import LLMResponse, TokenUsage, ToolCall
-from midas_agent.stdlib.action import ActionRegistry
-from midas_agent.stdlib.actions.task_done import TaskDoneAction
-from midas_agent.types import Issue
+from llm_agent_toolkit.llm.types import LLMResponse, TokenUsage, ToolCall
+from llm_agent_toolkit.stdlib.action import ActionRegistry
+from llm_agent_toolkit.stdlib.actions.task_done import TaskDoneAction
+from llm_agent_toolkit.types import Issue
 
 try:
     import yaml
@@ -158,7 +158,7 @@ class TestEnvironmentContextInRunner:
     """Tests that the runner builds EnvironmentContext correctly from artifacts."""
 
     def test_includes_agent_info(self):
-        from midas_agent.context.environment import EnvironmentContext
+        from llm_agent_toolkit.context.environment import EnvironmentContext
 
         artifact = GraphEmergenceArtifact(
             responsible_agent=_make_responsible_agent(),
@@ -193,7 +193,7 @@ class TestEnvironmentContextInRunner:
         assert "5%" in info
 
     def test_handles_no_skill(self):
-        from midas_agent.context.environment import EnvironmentContext
+        from llm_agent_toolkit.context.environment import EnvironmentContext
 
         artifact = GraphEmergenceArtifact(
             responsible_agent=_make_responsible_agent(),
@@ -221,7 +221,7 @@ class TestEnvironmentContextInRunner:
         assert "no skill" in info
 
     def test_empty_agents(self):
-        from midas_agent.context.environment import EnvironmentContext
+        from llm_agent_toolkit.context.environment import EnvironmentContext
 
         env = EnvironmentContext(
             cwd="/testbed", shell="bash", balance=10000,

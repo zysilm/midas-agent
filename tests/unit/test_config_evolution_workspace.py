@@ -15,8 +15,8 @@ from midas_agent.workspace.config_evolution.executor import DAGExecutor, Executi
 from midas_agent.workspace.config_evolution.prompt_optimizer import GEPAConfigOptimizer
 from midas_agent.workspace.config_evolution.snapshot_store import ConfigSnapshotStore
 from midas_agent.evaluation.module import EvalResult
-from midas_agent.types import Issue
-from midas_agent.llm.types import LLMRequest, LLMResponse, TokenUsage
+from llm_agent_toolkit.types import Issue
+from llm_agent_toolkit.llm.types import LLMRequest, LLMResponse, TokenUsage
 
 
 @pytest.mark.unit

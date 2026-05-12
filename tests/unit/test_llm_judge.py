@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from midas_agent.evaluation.llm_judge import LLMJudge
-from midas_agent.types import Issue
+from llm_agent_toolkit.types import Issue
 
 
 @pytest.mark.unit

@@ -8,8 +8,8 @@ import subprocess
 
 import pytest
 
-from midas_agent.runtime.io_backend import DockerIO
-from midas_agent.stdlib.actions.bash import BashAction
+from llm_agent_toolkit.runtime.io_backend import DockerIO
+from llm_agent_toolkit.stdlib.actions.bash import BashAction
 
 
 @pytest.mark.unit

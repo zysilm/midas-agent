@@ -7,8 +7,8 @@ import math
 from typing import Callable
 from types import SimpleNamespace
 
-from midas_agent.llm.types import LLMRequest
-from midas_agent.stdlib.react_agent import ActionRecord
+from llm_agent_toolkit.llm.types import LLMRequest
+from llm_agent_toolkit.stdlib.react_agent import ActionRecord
 from midas_agent.workspace.graph_emergence.skill import Skill
 
 # ---------------------------------------------------------------------------

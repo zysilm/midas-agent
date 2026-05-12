@@ -19,9 +19,9 @@ from unittest.mock import patch
 import pytest
 
 from midas_agent.config import MidasConfig
-from midas_agent.llm.provider import LLMProvider
-from midas_agent.llm.types import LLMRequest, LLMResponse, TokenUsage, ToolCall
-from midas_agent.types import Issue
+from llm_agent_toolkit.llm.provider import LLMProvider
+from llm_agent_toolkit.llm.types import LLMRequest, LLMResponse, TokenUsage, ToolCall
+from llm_agent_toolkit.types import Issue
 
 
 # The known-good fix for astropy__astropy-12907
@@ -210,8 +210,8 @@ class TestDockerIOEndToEnd:
     def docker_io(self):
         """Start a real container and return DockerIO."""
         try:
-            from midas_agent.docker.container_manager import ContainerManager
-            from midas_agent.runtime.io_backend import DockerIO
+            from llm_agent_toolkit.docker.container_manager import ContainerManager
+            from llm_agent_toolkit.runtime.io_backend import DockerIO
             from swebench.harness.test_spec.test_spec import make_test_spec
             from datasets import load_dataset
 
@@ -245,7 +245,7 @@ class TestDockerIOEndToEnd:
 
     def test_edit_via_str_replace_editor(self, docker_io):
         """StrReplaceEditorAction with DockerIO edits files inside container."""
-        from midas_agent.stdlib.actions.str_replace_editor import StrReplaceEditorAction
+        from llm_agent_toolkit.stdlib.actions.str_replace_editor import StrReplaceEditorAction
 
         editor = StrReplaceEditorAction(cwd="/testbed", io=docker_io)
 

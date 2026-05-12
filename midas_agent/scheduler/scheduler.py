@@ -8,7 +8,7 @@ from __future__ import annotations
 from typing import Callable, TYPE_CHECKING
 
 from midas_agent.config import MidasConfig
-from midas_agent.llm.types import LLMRequest, LLMResponse
+from llm_agent_toolkit.llm.types import LLMRequest, LLMResponse
 from midas_agent.scheduler.budget_allocator import BudgetAllocator
 from midas_agent.scheduler.resource_meter import ResourceMeter
 from midas_agent.scheduler.selection import SelectionEngine
