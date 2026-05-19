@@ -1,4 +1,12 @@
-"""Selection engine — bottom-n eviction logic."""
+"""Bottom-n workspace eviction by eta.
+
+STATUS: Currently dormant. Under all shipped configs, workspace_count=1
+and n_evict=0, which means run_selection() always returns ([], all_workspaces).
+This module is preserved for potential future use by multi-candidate
+architectures (see HTA design proposal). Do not enable n_evict > 0
+without also wiring up replace_evicted() in the active training entry
+point — see scheduler.py:Scheduler.replace_evicted().
+"""
 from __future__ import annotations
 
 import random

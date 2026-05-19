@@ -2,6 +2,12 @@
 
 Orchestrates budget allocation, evaluation, selection, and workspace
 lifecycle by delegating to injected sub-components.
+
+NOTE: The SelectionEngine-driven eviction path (run_selection, _evicted_ids,
+replace_evicted) is dormant under all shipped configs (workspace_count=1,
+n_evict=0). The live eviction path is mid-episode budget exhaustion via the
+on_workspace_evicted hook, which populates _all_evicted_ever. See
+selection.py for details before enabling SelectionEngine eviction.
 """
 from __future__ import annotations
 

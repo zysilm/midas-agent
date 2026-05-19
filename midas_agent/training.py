@@ -398,6 +398,14 @@ def run_training(
         runtime_mode=config.runtime_mode,
         n_evict=config.n_evict,
     )
+    if config.workspace_count > 1 or config.n_evict > 0:
+        logger.warning(
+            "Multi-workspace config detected (workspace_count=%d, n_evict=%d), "
+            "but the replace_evicted() call path is currently disabled. "
+            "Evicted workspaces will not be replaced. Wire scheduler.replace_evicted() "
+            "into the episode loop before relying on eviction.",
+            config.workspace_count, config.n_evict,
+        )
 
     workspace_manager = WorkspaceManager(
         config=config,
