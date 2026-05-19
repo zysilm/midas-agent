@@ -1,0 +1,13 @@
+initial_budget: 1500000
+runtime_mode: hta
+score_floor: 0.01
+beta: 0.3
+execution_env: docker
+max_tool_output_chars: 100000
+max_context_tokens: 32000
+lesson_similarity_threshold: 0.50
+# HTA-specific knobs
+hta_epsilon: 1.0e-6
+hta_novel_threshold: 3
+hta_max_decision_points: 12
+hta_enable_test_scope: false

@@ -37,3 +37,8 @@ class MidasConfig:
     skill_evolution: bool = True
     # Lesson retrieval: minimum cosine similarity to inject a lesson
     lesson_similarity_threshold: float = 0.50
+    # HTA runtime mode (runtime_mode="hta")
+    hta_epsilon: float = 1e-6           # group-advantage std collapse threshold
+    hta_novel_threshold: int = 3        # occurrences before a __novel__ slug registers
+    hta_max_decision_points: int = 12   # safety cap on decision-graph size per issue
+    hta_enable_test_scope: bool = False  # enable the optional test_scope_strategy DP
