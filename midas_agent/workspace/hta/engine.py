@@ -1,0 +1,446 @@
+"""HTAEngine — drives the decision graph for one issue.
+
+The engine walks a worklist of steps with an explicit cursor (it never
+topo-sorts, so backward edges are safe). The worklist starts as a fixed
+backbone — localize, reproduce, choose fix layer, implement, validate — which
+encodes the rule-triggered decision points. Decision points layer the
+hypothesis mechanism on top; stuck execution nodes invoke the meta-judge, which
+can splice an investigation_continuation decision (and a backward edge) into
+the worklist.
+
+Termination is bounded three ways: the global budget brake, a cap on decision
+nodes, and a hard cap on total steps.
+"""
+from __future__ import annotations
+
+import logging
+import statistics
+from collections import deque
+from dataclasses import dataclass, field
+from typing import Callable
+
+from llm_agent_toolkit.llm.types import LLMRequest, LLMResponse
+from llm_agent_toolkit.stdlib.action import Action
+from llm_agent_toolkit.stdlib.react_agent import ActionRecord
+from llm_agent_toolkit.types import Issue
+
+from midas_agent.prompts import SYSTEM_PROMPT
+from midas_agent.workspace.hta.advantage_memory import TypedAdvantageMemory
+from midas_agent.workspace.hta.decision_point import (
+    DecisionPoint,
+    DecisionPointRegistry,
+    Hypothesis,
+    RuleTriggerInputs,
+)
+from midas_agent.workspace.hta.execution_node import ExecutionNode, ExecutionOutcome
+from midas_agent.workspace.hta.graph import DecisionGraph, NodeKind, NodeStatus
+from midas_agent.workspace.hta.hypothesis_gen import HypothesisGenerator
+from midas_agent.workspace.hta.meta_judge import DecisionPointMetaJudge
+from midas_agent.workspace.hta.sub_verifier import (
+    ContinuationVerifier,
+    FixLocalityVerifier,
+    RCLVerifier,
+    SpecInterpretationVerifier,
+    SubVerifier,
+    TestScopeVerifier,
+    VerifierContext,
+)
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class HTAEngineConfig:
+    epsilon: float = 1e-6           # std-collapse threshold for advantage
+    max_decision_points: int = 12   # cap on decision nodes per issue
+    max_steps: int = 40             # hard cap on total worklist steps
+    enable_test_scope_dp: bool = False
+
+
+@dataclass
+class _Step:
+    kind: str                       # "decision" | "execution"
+    decision_type: str | None = None
+    goal: str | None = None
+    backward_to: str | None = None  # node id for a re-entry backward edge
+
+
+@dataclass
+class _DecisionResult:
+    winner: Hypothesis | None = None
+    hypotheses: list[Hypothesis] = field(default_factory=list)
+    escalated: bool = False
+    failed: bool = False
+
+
+# Backbone goals for execution nodes (the rule-driven main flow).
+_REPRODUCE_GOAL = (
+    "Reproduce the bug described in the issue and confirm the selected root "
+    "cause. Write or run a minimal reproduction."
+)
+_IMPLEMENT_GOAL = (
+    "Implement the fix at the chosen code layer. Make the smallest change that "
+    "resolves the issue without breaking existing behaviour."
+)
+_VALIDATE_TARGETED_GOAL = (
+    "Run the failing tests named in the issue and confirm they now pass."
+)
+_VALIDATE_BROAD_GOAL = (
+    "Run the broader set of tests around your change and check for regressions."
+)
+
+
+class HTAEngine:
+    def __init__(
+        self,
+        issue: Issue,
+        call_llm: Callable[[LLMRequest], LLMResponse],
+        system_llm: Callable[[LLMRequest], LLMResponse],
+        actions: list[Action],
+        advantage_memory: TypedAdvantageMemory,
+        registry: DecisionPointRegistry,
+        run_bash: Callable[[str], str],
+        write_file: Callable[[str, str], str],
+        remove_file: Callable[[str], None],
+        config: HTAEngineConfig,
+        work_dir: str = "",
+        balance_provider: Callable[[], int] | None = None,
+        max_tool_output_chars: int | None = None,
+        max_context_tokens: int | None = None,
+        action_log=None,
+    ) -> None:
+        self._issue = issue
+        self._call_llm = call_llm
+        self._system_llm = system_llm
+        self._actions = actions
+        self._memory = advantage_memory
+        self._registry = registry
+        self._run_bash = run_bash
+        self._write_file = write_file
+        self._remove_file = remove_file
+        self._config = config
+        self._work_dir = work_dir
+        self._balance_provider = balance_provider
+        self._max_tool_output_chars = max_tool_output_chars
+        self._max_context_tokens = max_context_tokens
+        self._action_log = action_log
+
+        self._hypothesis_gen = HypothesisGenerator(system_llm=system_llm)
+        self._meta_judge = DecisionPointMetaJudge(system_llm=system_llm, registry=registry)
+        self._verifiers: dict[str, SubVerifier] = {
+            "root_cause_localization": RCLVerifier(),
+            "fix_locality_scope": FixLocalityVerifier(),
+            "spec_interpretation": SpecInterpretationVerifier(),
+            "investigation_continuation": ContinuationVerifier(),
+            "test_scope_strategy": TestScopeVerifier(),
+        }
+        self._decision_count = 0
+        self._escalated = False
+
+    # ------------------------------------------------------------------
+    # Main loop
+    # ------------------------------------------------------------------
+
+    def run(self) -> DecisionGraph:
+        graph = DecisionGraph()
+        root = graph.add_node(NodeKind.EXECUTION, "bootstrap", status=NodeStatus.DONE)
+        cursor_id = root.node_id
+
+        worklist: deque[_Step] = deque([
+            _Step("decision", decision_type="root_cause_localization"),
+            _Step("execution", goal=_REPRODUCE_GOAL),
+            _Step("decision", decision_type="fix_locality_scope"),
+            _Step("execution", goal=_IMPLEMENT_GOAL),
+            _Step("execution", goal=_VALIDATE_TARGETED_GOAL),
+            _Step("execution", goal=_VALIDATE_BROAD_GOAL),
+        ])
+        last_action_history: list[ActionRecord] = []
+        steps_run = 0
+
+        while worklist and steps_run < self._config.max_steps:
+            if self._balance_provider is not None and self._balance_provider() <= 0:
+                logger.info("HTAEngine: budget exhausted, stopping")
+                break
+            step = worklist.popleft()
+            steps_run += 1
+
+            if step.kind == "decision":
+                cursor_id = self._run_decision_step(step, graph, cursor_id, worklist,
+                                                    last_action_history)
+            else:
+                cursor_id, outcome = self._run_execution_step(step, graph, cursor_id)
+                last_action_history = outcome.action_history
+                if outcome.termination_reason == "budget_exhausted":
+                    break
+                if outcome.stuck:
+                    cursor_id = self._handle_stuck(step, graph, cursor_id, outcome, worklist)
+
+        return graph
+
+    # ------------------------------------------------------------------
+    # Decision steps
+    # ------------------------------------------------------------------
+
+    def _run_decision_step(
+        self,
+        step: _Step,
+        graph: DecisionGraph,
+        cursor_id: str,
+        worklist: deque[_Step],
+        action_history: list[ActionRecord],
+    ) -> str:
+        if self._decision_count >= self._config.max_decision_points:
+            logger.info("HTAEngine: decision-point cap reached, skipping %s", step.decision_type)
+            return cursor_id
+
+        dp = self._registry.get(step.decision_type)
+        if dp is None:
+            return cursor_id
+
+        node = graph.add_node(
+            NodeKind.DECISION, step.decision_type, decision_type=step.decision_type,
+            status=NodeStatus.RUNNING,
+        )
+        graph.add_edge(cursor_id, node.node_id, reason="advance")
+        if step.backward_to:
+            graph.add_edge(node.node_id, step.backward_to, kind="backward", reason="re-entry")
+        self._decision_count += 1
+
+        result = self._resolve(dp, graph, node.node_id, action_history)
+
+        if result.escalated and not self._escalated:
+            self._escalated = True
+            node.status = NodeStatus.DONE
+            node.distilled_evidence = (
+                "[root_cause_localization] hypotheses were indistinguishable "
+                "(advantage collapse) — escalating to spec_interpretation."
+            )
+            # Re-read the spec, then re-enter RCL with a backward edge.
+            worklist.appendleft(_Step("decision", decision_type="root_cause_localization",
+                                      backward_to=node.node_id))
+            worklist.appendleft(_Step("decision", decision_type="spec_interpretation"))
+            return node.node_id
+
+        if result.failed or result.winner is None:
+            node.status = NodeStatus.ABANDONED
+            return node.node_id
+
+        node.status = NodeStatus.DONE
+        node.winner_hypothesis = result.winner.name
+        node.distilled_evidence = self._distill_decision(step.decision_type, result.winner)
+        node.payload = self._decision_payload(result)
+        return node.node_id
+
+    def _resolve(
+        self,
+        dp: DecisionPoint,
+        graph: DecisionGraph,
+        node_id: str,
+        action_history: list[ActionRecord],
+    ) -> _DecisionResult:
+        """Generate hypotheses, verify, score by group-relative advantage."""
+        g = self._memory.adaptive_g(dp.decision_type)
+        evidence = graph.trace_evidence(node_id)
+        hypotheses = self._hypothesis_gen.generate(
+            dp, self._issue.description, evidence, g, self._memory,
+        )
+        if not hypotheses:
+            return _DecisionResult(failed=True)
+
+        # Record any novel classes the generator emitted.
+        for h in hypotheses:
+            if h.is_novel:
+                self._memory.maybe_register_novel(h.novel_slug or "unspecified")
+
+        # G == 1: memory is decisive — degenerate to a plain commitment.
+        if len(hypotheses) == 1:
+            winner = hypotheses[0]
+            winner.advantage = 0.0
+            return _DecisionResult(winner=winner, hypotheses=hypotheses)
+
+        verifier = self._verifiers.get(dp.decision_type) or ContinuationVerifier()
+        ctx = VerifierContext(
+            issue=self._issue,
+            work_dir=self._work_dir,
+            run_bash=self._run_bash,
+            write_file=self._write_file,
+            remove_file=self._remove_file,
+            action_history=action_history,
+        )
+        for h in hypotheses:
+            try:
+                h.score = verifier.verify(h, ctx)
+            except Exception as e:  # noqa: BLE001 — a broken probe must not crash the engine
+                logger.warning("Sub-verifier failed for %s: %s", h.name, e)
+                h.score = 0.0
+
+        scores = [h.score for h in hypotheses]
+        mean = statistics.mean(scores)
+        std = statistics.pstdev(scores)
+
+        # Dynamic-sampling collapse: the hypotheses cannot be told apart.
+        if std < self._config.epsilon:
+            if dp.decision_type == "root_cause_localization" and not self._escalated:
+                return _DecisionResult(hypotheses=hypotheses, escalated=True)
+            # Non-RCL collapse (or already escalated): fall back to raw score.
+            for h in hypotheses:
+                h.advantage = 0.0
+            winner = max(hypotheses, key=lambda h: h.score)
+        else:
+            for h in hypotheses:
+                h.advantage = (h.score - mean) / std
+            winner = max(hypotheses, key=lambda h: h.advantage)
+
+        # Write every hypothesis' advantage (winner and losers) into memory.
+        for h in hypotheses:
+            self._memory.buffer(dp.decision_type, h.name, h.advantage)
+
+        return _DecisionResult(winner=winner, hypotheses=hypotheses)
+
+    # ------------------------------------------------------------------
+    # Execution steps
+    # ------------------------------------------------------------------
+
+    def _run_execution_step(
+        self, step: _Step, graph: DecisionGraph, cursor_id: str,
+    ) -> tuple[str, ExecutionOutcome]:
+        node = graph.add_node(
+            NodeKind.EXECUTION, step.goal or "execute", status=NodeStatus.RUNNING,
+        )
+        graph.add_edge(cursor_id, node.node_id, reason="advance")
+
+        context = self._build_execution_context(graph, node.node_id, step.goal or "")
+        exec_node = ExecutionNode(
+            system_prompt=SYSTEM_PROMPT,
+            actions=self._actions,
+            call_llm=self._call_llm,
+            system_llm=self._system_llm,
+            max_tool_output_chars=self._max_tool_output_chars,
+            max_context_tokens=self._max_context_tokens,
+            balance_provider=self._balance_provider,
+            action_log=self._action_log,
+        )
+        outcome = exec_node.run(context)
+
+        if outcome.termination_reason in ("error", "budget_exhausted"):
+            node.status = NodeStatus.ABANDONED
+        else:
+            node.status = NodeStatus.DONE
+        node.distilled_evidence = self._distill_execution(outcome)
+        node.payload = {
+            "termination_reason": outcome.termination_reason,
+            "iterations": outcome.iterations,
+            "stuck": outcome.stuck,
+        }
+        return node.node_id, outcome
+
+    def _handle_stuck(
+        self,
+        step: _Step,
+        graph: DecisionGraph,
+        cursor_id: str,
+        outcome: ExecutionOutcome,
+        worklist: deque[_Step],
+    ) -> str:
+        """A stuck execution node — consult the meta-judge for a continuation DP."""
+        if self._decision_count >= self._config.max_decision_points:
+            return cursor_id
+
+        dp = self._meta_judge.classify(
+            rule_inputs=_EMPTY_RULE_INPUTS,
+            is_stuck=True,
+            issue_summary=self._issue.description,
+            recent_trace=_format_trace(outcome.action_history),
+        )
+        if dp is None:
+            return cursor_id
+
+        if dp.decision_type.startswith("__novel__"):
+            self._memory.maybe_register_novel(dp.decision_type)
+
+        node = graph.add_node(
+            NodeKind.DECISION, dp.decision_type, decision_type=dp.decision_type,
+            status=NodeStatus.RUNNING,
+        )
+        graph.add_edge(cursor_id, node.node_id, reason="stuck")
+        self._decision_count += 1
+
+        result = self._resolve(dp, graph, node.node_id, outcome.action_history)
+        if result.failed or result.winner is None:
+            node.status = NodeStatus.ABANDONED
+            return node.node_id
+
+        node.status = NodeStatus.DONE
+        node.winner_hypothesis = result.winner.name
+        node.distilled_evidence = self._distill_decision(dp.decision_type, result.winner)
+        node.payload = self._decision_payload(result)
+
+        # Act on the chosen continuation strategy.
+        cls = result.winner.name
+        if cls == "persist_same_path":
+            worklist.appendleft(_Step("execution", goal=step.goal, backward_to=cursor_id))
+        elif cls in ("pivot_evidence_type", "pivot_target"):
+            worklist.appendleft(_Step(
+                "execution",
+                goal=(
+                    f"Previous approach stalled. Change tack ({cls}): "
+                    f"{result.winner.rationale} Original goal: {step.goal}"
+                ),
+                backward_to=cursor_id,
+            ))
+        # "abandon" -> add nothing; the worklist moves on.
+        return node.node_id
+
+    # ------------------------------------------------------------------
+    # Context + distillation helpers
+    # ------------------------------------------------------------------
+
+    def _build_execution_context(self, graph: DecisionGraph, node_id: str, goal: str) -> str:
+        evidence = graph.trace_evidence(node_id)
+        return (
+            f"## GitHub issue\n{self._issue.description.strip()}\n\n"
+            f"## Progress and decisions so far\n{evidence or '(none yet)'}\n\n"
+            f"## Your current task\n{goal}"
+        )
+
+    @staticmethod
+    def _distill_decision(decision_type: str, winner: Hypothesis) -> str:
+        return (
+            f"[{decision_type}] selected hypothesis '{winner.name}' "
+            f"(advantage {winner.advantage:+.2f}). {winner.rationale} "
+            f"Predicted location: {winner.predicted_path or 'n/a'}"
+        ).strip()
+
+    @staticmethod
+    def _distill_execution(outcome: ExecutionOutcome) -> str:
+        if outcome.error:
+            return f"(execution failed: {outcome.error})"
+        return (outcome.output or "").strip()[:1500]
+
+    @staticmethod
+    def _decision_payload(result: _DecisionResult) -> dict:
+        return {
+            "hypotheses": [
+                {
+                    "name": h.name,
+                    "rationale": h.rationale,
+                    "predicted_path": h.predicted_path,
+                    "score": h.score,
+                    "advantage": h.advantage,
+                }
+                for h in result.hypotheses
+            ],
+            "winner": result.winner.name if result.winner else None,
+        }
+
+
+def _format_trace(action_history: list[ActionRecord], last_n: int = 8) -> str:
+    recent = action_history[-last_n:]
+    lines = []
+    for rec in recent:
+        result = (rec.result or "")[:200]
+        lines.append(f"- {rec.action_name}({rec.arguments}) -> {result}")
+    return "\n".join(lines)
+
+
+_EMPTY_RULE_INPUTS = RuleTriggerInputs()
