@@ -50,6 +50,10 @@ class WorkspaceManager:
             ws = self._create_graph_emergence_workspace(
                 workspace_id, call_llm, initial_config,
             )
+        elif self._config.runtime_mode == "hta":
+            ws = self._create_hta_workspace(
+                workspace_id, call_llm, initial_config,
+            )
         else:
             # Default to config_evolution mode.
             ws = self._create_config_evolution_workspace(
@@ -268,3 +272,61 @@ class WorkspaceManager:
             max_tool_output_chars=self._config.max_tool_output_chars,
             action_log=action_log,
         )
+
+    def _create_hta_workspace(
+        self,
+        workspace_id: str,
+        call_llm: Callable,
+        initial_config: dict | None,
+    ) -> Workspace:
+        from llm_agent_toolkit.stdlib.action import ActionRegistry
+        from llm_agent_toolkit.stdlib.actions.bash import BashAction
+        from llm_agent_toolkit.stdlib.actions.str_replace_editor import StrReplaceEditorAction
+        from midas_agent.workspace.hta.decision_point import DecisionPointRegistry
+        from midas_agent.workspace.hta.engine import HTAEngineConfig
+        from midas_agent.workspace.hta.workspace import HTAWorkspace
+
+        registry = ActionRegistry([BashAction(), StrReplaceEditorAction()])
+        actions = list(registry._actions.values())
+
+        engine_config = HTAEngineConfig(
+            epsilon=self._config.hta_epsilon,
+            max_decision_points=self._config.hta_max_decision_points,
+            enable_test_scope_dp=self._config.hta_enable_test_scope,
+        )
+        action_log = self._open_action_log(workspace_id)
+
+        return HTAWorkspace(
+            workspace_id=workspace_id,
+            call_llm=call_llm,
+            system_llm=self._system_llm_callback,
+            actions=actions,
+            advantage_memory=self._get_advantage_memory(),
+            registry=DecisionPointRegistry(
+                enable_test_scope=self._config.hta_enable_test_scope,
+            ),
+            engine_config=engine_config,
+            train_dir=self._train_dir,
+            max_tool_output_chars=self._config.max_tool_output_chars,
+            max_context_tokens=self._config.max_context_tokens,
+            action_log=action_log,
+        )
+
+    def _get_advantage_memory(self):
+        """Lazily build the TypedAdvantageMemory, shared across all HTA workspaces.
+
+        Sharing is what makes the cold-to-warm transition meaningful — every
+        workspace and episode reads and writes the same typed memory.
+        """
+        existing = getattr(self, "_advantage_memory", None)
+        if existing is not None:
+            return existing
+        from midas_agent.workspace.hta.advantage_memory import TypedAdvantageMemory
+
+        memory = TypedAdvantageMemory(
+            store_path=os.path.join(self._train_dir, "data", "advantage_memory.json"),
+            epsilon=self._config.hta_epsilon,
+            novel_register_threshold=self._config.hta_novel_threshold,
+        )
+        self._advantage_memory = memory
+        return memory

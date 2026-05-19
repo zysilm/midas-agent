@@ -700,6 +700,31 @@ def _do_export(
             f.write(artifact.model_dump_json(indent=2))
         logger.info("Exported Graph Emergence artifact to %s", output_path)
 
+    elif config.runtime_mode == "hta":
+        # HTA: export the last decision graph and a copy of the typed memory.
+        ws = workspaces[0]
+        graph = getattr(ws, "_last_graph", None)
+        memory = getattr(ws, "_advantage_memory", None)
+        artifact = {
+            "decision_graph": graph.to_dict() if graph is not None else None,
+            "advantage_memory": [
+                {
+                    "decision_type": s.decision_type,
+                    "hypothesis_class": s.hypothesis_class,
+                    "count": s.count,
+                    "mean_advantage": s.mean,
+                    "variance": s.variance,
+                }
+                for s in (memory.all_stats() if memory is not None else [])
+            ],
+            "registered_novel": memory.registered_novels() if memory is not None else [],
+        }
+        output_path = os.path.join(output_dir, "hta_artifact.json")
+        with open(output_path, "w") as f:
+            import json as _json
+            _json.dump(artifact, f, indent=2)
+        logger.info("Exported HTA artifact to %s", output_path)
+
     else:
         # Config Evolution: export best config from snapshot store.
         from midas_agent.workspace.config_evolution.snapshot_store import SnapshotFilter

@@ -115,3 +115,30 @@ class TestWorkspaceManager:
             initial_config={"temperature": 0.7, "max_tokens": 2048},
         )
         assert isinstance(ws, Workspace)
+
+    def test_create_hta_workspace(self, tmp_path):
+        """runtime_mode='hta' makes create() return an HTAWorkspace."""
+        from midas_agent.workspace.hta.workspace import HTAWorkspace
+
+        config = _make_config(runtime_mode="hta")
+        mgr = WorkspaceManager(
+            config=config,
+            call_llm_factory=_dummy_call_llm_factory,
+            system_llm_callback=_dummy_system_llm,
+            train_dir=str(tmp_path),
+        )
+        ws = mgr.create(workspace_id="ws-hta")
+        assert isinstance(ws, HTAWorkspace)
+
+    def test_hta_workspaces_share_advantage_memory(self, tmp_path):
+        """All HTA workspaces share one TypedAdvantageMemory instance."""
+        config = _make_config(runtime_mode="hta")
+        mgr = WorkspaceManager(
+            config=config,
+            call_llm_factory=_dummy_call_llm_factory,
+            system_llm_callback=_dummy_system_llm,
+            train_dir=str(tmp_path),
+        )
+        ws1 = mgr.create(workspace_id="ws-a")
+        ws2 = mgr.create(workspace_id="ws-b")
+        assert ws1._advantage_memory is ws2._advantage_memory
