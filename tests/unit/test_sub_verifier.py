@@ -41,57 +41,79 @@ def _ctx(run_bash, issue=None) -> VerifierContext:
 
 @pytest.mark.unit
 class TestRCLVerifier:
-    def test_predicted_path_in_traceback_scores_one(self):
-        run_bash = MagicMock(return_value=(
-            'Traceback (most recent call last):\n'
-            '  File "pkg/parser.py", line 12, in parse\n'
-            'ValueError: empty'
+    """The Tier-0 RCL verifier greps the *issue text* (which the LLM did
+    not author) for tokens from a static per-class lexicon (also outside
+    LLM control). The verifier never touches the sandbox.
+    """
+
+    def test_two_tokens_in_issue_score_one(self):
+        # operator_overload_path tokens include __array_ufunc__ and __eq__.
+        issue = _issue(description=(
+            'Comparing Row to None raises TypeError. Traceback:\n'
+            '  __array_ufunc__ dispatched, then __eq__ raised.'
         ))
-        v = RCLVerifier()
-        score = v.verify(
-            Hypothesis(name="regex_or_parser_edge", predicted_path="pkg/parser.py",
-                       test_payload="import pkg; pkg.parse('')"),
-            _ctx(run_bash),
+        score = RCLVerifier().verify(
+            Hypothesis(name="operator_overload_path"),
+            _ctx(MagicMock(), issue=issue),
         )
         assert score == 1.0
 
-    def test_traceback_without_predicted_path_scores_half(self):
-        run_bash = MagicMock(return_value=(
-            'Traceback (most recent call last):\n'
-            '  File "pkg/other.py", line 3\nTypeError: x'
+    def test_one_token_in_issue_scores_half(self):
+        issue = _issue(description=(
+            'A super() call in the subclass returns the wrong result.'
         ))
-        v = RCLVerifier()
-        score = v.verify(
-            Hypothesis(name="inheritance_dispatch", predicted_path="pkg/parser.py",
-                       test_payload="import pkg"),
-            _ctx(run_bash),
+        score = RCLVerifier().verify(
+            Hypothesis(name="inheritance_dispatch"),
+            _ctx(MagicMock(), issue=issue),
         )
         assert score == 0.5
 
-    def test_clean_run_scores_zero(self):
-        run_bash = MagicMock(return_value="all good\n")
-        v = RCLVerifier()
-        score = v.verify(
-            Hypothesis(name="state_mutation_order", predicted_path="pkg/parser.py",
-                       test_payload="print('ok')"),
-            _ctx(run_bash),
+    def test_no_tokens_in_issue_scores_zero(self):
+        issue = _issue(description='The widget rendered upside down.')
+        score = RCLVerifier().verify(
+            Hypothesis(name="serialization_roundtrip"),
+            _ctx(MagicMock(), issue=issue),
         )
         assert score == 0.0
 
-    def test_empty_payload_scores_zero_and_skips_sandbox(self):
-        run_bash = MagicMock()
-        v = RCLVerifier()
-        score = v.verify(Hypothesis(name="error_message_only"), _ctx(run_bash))
-        assert score == 0.0
-        run_bash.assert_not_called()
-
-    def test_probe_file_is_cleaned_up(self):
-        run_bash = MagicMock(return_value="Traceback (most recent call last):\nx")
-        ctx = _ctx(run_bash)
-        RCLVerifier().verify(
-            Hypothesis(name="x", predicted_path="p", test_payload="print(1)"), ctx,
+    def test_unknown_class_with_no_lexicon_scores_zero(self):
+        # A class with no entry in RCL_EVIDENCE_TOKENS and no novel slug.
+        issue = _issue(description='anything')
+        score = RCLVerifier().verify(
+            Hypothesis(name="not_a_real_class"),
+            _ctx(MagicMock(), issue=issue),
         )
-        ctx.remove_file.assert_called_once()
+        assert score == 0.0
+
+    def test_novel_class_uses_slug_derived_tokens(self):
+        issue = _issue(description='cache invalidation race in the worker pool')
+        score = RCLVerifier().verify(
+            Hypothesis(name="__novel__:cache_invalidation_race"),
+            _ctx(MagicMock(), issue=issue),
+        )
+        # Two slug tokens hit (cache, invalidation) -> 1.0.
+        assert score == 1.0
+
+    def test_does_not_touch_the_sandbox(self):
+        """Anti-gaming property: the verifier must never run scripts or
+        files in the sandbox — that path let the LLM author both
+        question and answer (issue #44 B3)."""
+        ctx = _ctx(MagicMock())
+        RCLVerifier().verify(Hypothesis(name="operator_overload_path"), ctx)
+        ctx.run_bash.assert_not_called()
+        ctx.write_file.assert_not_called()
+        ctx.remove_file.assert_not_called()
+
+    def test_predicted_path_field_is_ignored(self):
+        """Even a 'perfect' predicted_path is irrelevant — the verifier
+        doesn't look at it. Confirms the LLM cannot author the oracle."""
+        issue = _issue(description='The widget rendered upside down.')
+        score = RCLVerifier().verify(
+            Hypothesis(name="serialization_roundtrip",
+                       predicted_path="The widget rendered upside down."),
+            _ctx(MagicMock(), issue=issue),
+        )
+        assert score == 0.0
 
 
 @pytest.mark.unit

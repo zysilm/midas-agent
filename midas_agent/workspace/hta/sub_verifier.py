@@ -22,7 +22,7 @@ from llm_agent_toolkit.llm.types import LLMRequest, LLMResponse
 from llm_agent_toolkit.stdlib.react_agent import ActionRecord
 from llm_agent_toolkit.types import Issue
 
-from midas_agent.workspace.hta.decision_point import Hypothesis
+from midas_agent.workspace.hta.decision_point import Hypothesis, evidence_tokens_for
 
 logger = logging.getLogger(__name__)
 
@@ -85,26 +85,30 @@ def _has_traceback(output: str) -> bool:
 # ---------------------------------------------------------------------------
 
 class RCLVerifier(SubVerifier):
-    """root_cause_localization — run the hypothesis' reproduction script and
-    check whether the traceback implicates its predicted path.
+    """root_cause_localization — grep the *issue itself* for tokens that
+    typically appear in tracebacks of this hypothesis class.
 
-    1.0  the predicted path appears in the failure output
-    0.5  some failure occurred but at a different path
-    0.0  no failure (the hypothesis did not reproduce the bug)
+    The verifier does NOT run an LLM-authored probe script and does NOT
+    grep an LLM-authored predicted_path string; both would let the same
+    LLM call author both the question and the answer (issue #44 B3). The
+    grep target is the issue's own text — which the LLM did not write —
+    and the search tokens come from a static per-class lexicon in
+    decision_point.RCL_EVIDENCE_TOKENS, also outside LLM control.
+
+    Score: ``min(1.0, hits / 2)`` — 0 hits 0.0, 1 hit 0.5, 2+ hits 1.0.
     """
 
     tier = 0
 
     def verify(self, hyp: Hypothesis, ctx: VerifierContext, cheap: bool = True) -> float:
-        output = _run_probe(ctx, hyp.test_payload)
-        if not output:
+        tokens = evidence_tokens_for(hyp.name)
+        if not tokens:
             return 0.0
-        predicted = (hyp.predicted_path or "").strip()
-        if predicted and predicted in output:
-            return 1.0
-        if _has_traceback(output):
-            return 0.5
-        return 0.0
+        text = ctx.issue.description.lower()
+        if ctx.issue.fail_to_pass:
+            text += "\n" + "\n".join(ctx.issue.fail_to_pass).lower()
+        hits = sum(1 for t in tokens if t.lower() in text)
+        return min(1.0, hits / 2.0)
 
 
 class FixLocalityVerifier(SubVerifier):

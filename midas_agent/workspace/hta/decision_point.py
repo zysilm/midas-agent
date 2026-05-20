@@ -65,6 +65,67 @@ class RuleTriggerInputs:
     test_scope_pending: bool = False
 
 
+# Per-class evidence tokens for the Tier-0 RCL verifier --------------------
+#
+# Per issue #44 Q3 (machine-extract predicted_evidence): the verifier must
+# NOT trust an LLM-authored predicted-evidence string, because the same LLM
+# call that writes the hypothesis also writes its expected evidence and can
+# trivially make the two self-consistent. Instead, the engine carries a
+# static lexicon of tokens that typically appear in tracebacks when each
+# RCL hypothesis class is the root cause. The verifier greps the issue
+# text for these tokens; the LLM has no influence on the grep target.
+#
+# Adding a token here is the canonical way to teach the verifier about a
+# new failure pattern without giving the LLM the keys to its own oracle.
+#
+RCL_EVIDENCE_TOKENS: dict[str, list[str]] = {
+    "framework_default_value": [
+        "__init__", "_default", "default_value", "default_factory",
+    ],
+    "operator_overload_path": [
+        "__array_ufunc__", "__array_function__", "ufunc", "__eq__",
+        "__ne__", "__hash__", "__lt__", "__gt__",
+    ],
+    "serialization_roundtrip": [
+        "to_json", "from_json", "loads", "dumps", "pickle", "serialize",
+        "deserialize", "encode", "decode",
+    ],
+    "inheritance_dispatch": [
+        "super()", "__mro__", "__class__", "MetaClass", "abstractmethod",
+    ],
+    "regex_or_parser_edge": [
+        "re.match", "re.search", "re.compile", "parse", "tokenize",
+        "lexer", "regex",
+    ],
+    "state_mutation_order": [
+        "_cache", "_state", "invalidate", "mutate", "in-place",
+        "side effect", "lazy",
+    ],
+    "error_message_only": [
+        "expected", "but found", "message", "ValueError", "TypeError",
+    ],
+    "test_expectation_wrong": [
+        "assert", "expected", "test_", "FAIL_TO_PASS",
+    ],
+}
+
+
+def evidence_tokens_for(hypothesis_name: str) -> list[str]:
+    """Return the per-class lexicon, or a slug-derived fallback for novels.
+
+    Novel classes (``__novel__:<slug>``) have no static lexicon; we derive a
+    best-effort one by splitting the slug on underscores and dropping
+    short fragments. This is intentionally weak — novel-class hypotheses
+    are meant to be promoted to Tier-2 verification anyway (see §003).
+    """
+    if hypothesis_name in RCL_EVIDENCE_TOKENS:
+        return list(RCL_EVIDENCE_TOKENS[hypothesis_name])
+    if hypothesis_name.startswith(NOVEL_PREFIX):
+        _, _, slug = hypothesis_name.partition(":")
+        return [t for t in slug.split("_") if len(t) >= 4]
+    return []
+
+
 # Seed hypothesis-class lists -------------------------------------------------
 
 RCL_CLASSES = [
