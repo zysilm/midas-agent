@@ -76,6 +76,10 @@ class _DecisionResult:
     hypotheses: list[Hypothesis] = field(default_factory=list)
     escalated: bool = False
     failed: bool = False
+    # Set true when fix_locality anti-gaming detected all probes firing the
+    # HTA_LAYER_HIT sentinel — meaning the LLM authored trivially-satisfied
+    # probes and the verifier could not discriminate (issue H1 D2).
+    gaming_detected: bool = False
 
 
 # Backbone goals for execution nodes (the rule-driven main flow).
@@ -336,6 +340,30 @@ class HTAEngine:
                 logger.warning("Sub-verifier failed for %s: %s", h.name, e)
                 h.score = 0.0
 
+        # Anti-gaming for fix_locality_scope (issue H1 D2): if every probe
+        # fired the sentinel and scored 1.0, the LLM has gamed the verifier
+        # with trivially-satisfied conditions (e.g. `assert True,
+        # 'HTA_LAYER_HIT'`). The verifier failed to discriminate. Two
+        # effects: (a) demote all scores to a low neutral value so any
+        # downstream consumer of `hyp.score` sees "low confidence" rather
+        # than "everyone hit 1.0 = strong signal everywhere"; (b) flag the
+        # gaming in the decision payload so the analyzer can count it and
+        # any future memory layer can record "the verifier couldn't tell
+        # these apart" as the actual lesson. Regime-independent: works the
+        # same way whether the memory layer is numerical or semantic.
+        gaming_detected = False
+        if (dp.decision_type == "fix_locality_scope"
+                and len(hypotheses) >= 2
+                and all(abs(h.score - 1.0) < 1e-6 for h in hypotheses)):
+            logger.warning(
+                "FixLocality gaming detected: all %d probes scored 1.0 "
+                "(sentinel fired indiscriminately). Demoting to 0.4.",
+                len(hypotheses),
+            )
+            for h in hypotheses:
+                h.score = 0.4
+            gaming_detected = True
+
         # Defensive: if the LLM (or retries) yielded fewer than 2 hypotheses,
         # group-relative advantage is undefined. Per Q1, buffer a soft signal
         # centred on a neutral 0.5 so the class can still drift down on
@@ -345,7 +373,10 @@ class HTAEngine:
             winner = hypotheses[0]
             winner.advantage = winner.score - 0.5
             self._memory.buffer(dp.decision_type, winner.name, winner.advantage)
-            return _DecisionResult(winner=winner, hypotheses=hypotheses)
+            return _DecisionResult(
+                winner=winner, hypotheses=hypotheses,
+                gaming_detected=gaming_detected,
+            )
 
         scores = [h.score for h in hypotheses]
         mean = statistics.mean(scores)
@@ -377,7 +408,10 @@ class HTAEngine:
         if dp.decision_type == "root_cause_localization":
             self._predicted_tokens = evidence_tokens_for(winner.name)
 
-        return _DecisionResult(winner=winner, hypotheses=hypotheses)
+        return _DecisionResult(
+            winner=winner, hypotheses=hypotheses,
+            gaming_detected=gaming_detected,
+        )
 
     # ------------------------------------------------------------------
     # Execution steps
