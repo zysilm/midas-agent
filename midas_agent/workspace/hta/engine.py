@@ -31,6 +31,7 @@ from midas_agent.workspace.hta.decision_point import (
     DecisionPointRegistry,
     Hypothesis,
     RuleTriggerInputs,
+    evidence_tokens_for,
 )
 from midas_agent.workspace.hta.execution_node import ExecutionNode, ExecutionOutcome
 from midas_agent.workspace.hta.graph import DecisionGraph, NodeKind, NodeStatus
@@ -150,6 +151,11 @@ class HTAEngine:
         # Per-issue Tier-2 budget: at most 3 LLM-judge calls per issue.
         self._tier2_calls_used = 0
         self._tier2_cap = 3
+        # Stuck-signal context (per issue): RCL winner's evidence tokens and
+        # the initial budget snapshot so signal 3 can compute the fraction
+        # of budget burned without seeing predicted evidence.
+        self._predicted_tokens: list[str] = []
+        self._initial_budget: int | None = None
 
     # ------------------------------------------------------------------
     # Main loop
@@ -158,6 +164,11 @@ class HTAEngine:
     def run(self) -> DecisionGraph:
         # Reset per-issue Tier-2 budget — the cap is per-issue, not per-process.
         self._tier2_calls_used = 0
+        # Snapshot the starting budget for the stuck-signal 3 calculation.
+        self._initial_budget = (
+            self._balance_provider() if self._balance_provider is not None else None
+        )
+        self._predicted_tokens = []
         graph = DecisionGraph()
         root = graph.add_node(NodeKind.EXECUTION, "bootstrap", status=NodeStatus.DONE)
         cursor_id = root.node_id
@@ -325,6 +336,12 @@ class HTAEngine:
         for h in hypotheses:
             self._memory.buffer(dp.decision_type, h.name, h.advantage)
 
+        # After an RCL decision: snapshot the winning class's evidence
+        # lexicon so the next execution node's stuck-signal 3 can check
+        # whether the predicted evidence ever appears.
+        if dp.decision_type == "root_cause_localization":
+            self._predicted_tokens = evidence_tokens_for(winner.name)
+
         return _DecisionResult(winner=winner, hypotheses=hypotheses)
 
     # ------------------------------------------------------------------
@@ -350,7 +367,11 @@ class HTAEngine:
             balance_provider=self._balance_provider,
             action_log=self._action_log,
         )
-        outcome = exec_node.run(context)
+        outcome = exec_node.run(
+            context,
+            predicted_tokens=list(self._predicted_tokens) or None,
+            budget_used_frac=self._budget_used_frac(),
+        )
 
         if outcome.termination_reason in ("error", "budget_exhausted"):
             node.status = NodeStatus.ABANDONED
@@ -420,6 +441,14 @@ class HTAEngine:
             ))
         # "abandon" -> add nothing; the worklist moves on.
         return node.node_id
+
+    def _budget_used_frac(self) -> float:
+        """Fraction of the per-issue budget consumed so far, in [0.0, 1.0]."""
+        if self._balance_provider is None or not self._initial_budget:
+            return 0.0
+        remaining = max(0, self._balance_provider())
+        used = max(0, self._initial_budget - remaining)
+        return min(1.0, used / self._initial_budget)
 
     def _select_verifier_for(self, hyp: Hypothesis, default: SubVerifier) -> SubVerifier:
         """Force Tier-2 (LLM judge) on novel-class hypotheses, capped per issue.
