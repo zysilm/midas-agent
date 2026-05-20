@@ -79,34 +79,10 @@ class TestTypedAdvantageMemory:
         mem_pass.commit_pending(outcome_score=1.0)
         assert mem_pass.stat("dt", "c").mean > mem_fail.stat("dt", "c").mean
 
-    def test_adaptive_g_cold(self, store_path):
-        mem = TypedAdvantageMemory(store_path)
-        assert mem.adaptive_g("root_cause_localization") == 3
-
-    def test_adaptive_g_still_cold_under_five_observations(self, store_path):
-        mem = TypedAdvantageMemory(store_path)
-        for _ in range(4):
-            mem.buffer("dt", "c", 0.1)
-        mem.commit_pending(outcome_score=1.0)
-        assert mem.adaptive_g("dt") == 3
-
-    def test_adaptive_g_strong_favourite_collapses_to_one(self, store_path):
-        mem = TypedAdvantageMemory(store_path)
-        # One class consistently strongly positive, another strongly negative.
-        for _ in range(6):
-            mem.buffer("dt", "winner", 2.0)
-            mem.buffer("dt", "loser", -2.0)
-        mem.commit_pending(outcome_score=1.0)
-        assert mem.adaptive_g("dt") == 1
-
-    def test_adaptive_g_mid_margin(self, store_path):
-        mem = TypedAdvantageMemory(store_path, clip_higher=1.0, clip_lower=1.0)
-        # Margin engineered into the (0.4, 1.0] band -> G == 2.
-        for _ in range(6):
-            mem.buffer("dt", "a", 0.6)
-            mem.buffer("dt", "b", 0.0)
-        mem.commit_pending(outcome_score=1.0)
-        assert mem.adaptive_g("dt") == 2
+    # The adaptive_g mechanism was removed (issue #44 C1/B1). G is now fixed
+    # at 3 per courseware spec §003. The previous adaptive_g tests are gone;
+    # the corresponding engine-side behaviour is exercised in
+    # tests/integration/test_hta_engine.py.
 
     def test_novel_registers_after_threshold(self, store_path):
         mem = TypedAdvantageMemory(store_path, novel_register_threshold=3)

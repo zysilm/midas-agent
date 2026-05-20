@@ -231,6 +231,12 @@ class HTAEngine:
         node.payload = self._decision_payload(result)
         return node.node_id
 
+    # G is fixed at 3 per the courseware spec §003 — adaptive_g was an
+    # implementation-only optimisation that produced a permanent G=1 absorbing
+    # state (see issue #44 B1/C1). Holding G at 3 maximally exercises the
+    # mechanism and matches the spec.
+    _G = 3
+
     def _resolve(
         self,
         dp: DecisionPoint,
@@ -238,11 +244,10 @@ class HTAEngine:
         node_id: str,
         action_history: list[ActionRecord],
     ) -> _DecisionResult:
-        """Generate hypotheses, verify, score by group-relative advantage."""
-        g = self._memory.adaptive_g(dp.decision_type)
+        """Generate G=3 hypotheses, verify, score by group-relative advantage."""
         evidence = graph.trace_evidence(node_id)
         hypotheses = self._hypothesis_gen.generate(
-            dp, self._issue.description, evidence, g, self._memory,
+            dp, self._issue.description, evidence, self._G, self._memory,
         )
         if not hypotheses:
             return _DecisionResult(failed=True)
@@ -251,12 +256,6 @@ class HTAEngine:
         for h in hypotheses:
             if h.is_novel:
                 self._memory.maybe_register_novel(h.novel_slug or "unspecified")
-
-        # G == 1: memory is decisive — degenerate to a plain commitment.
-        if len(hypotheses) == 1:
-            winner = hypotheses[0]
-            winner.advantage = 0.0
-            return _DecisionResult(winner=winner, hypotheses=hypotheses)
 
         verifier = self._verifiers.get(dp.decision_type) or ContinuationVerifier()
         ctx = VerifierContext(
@@ -274,6 +273,17 @@ class HTAEngine:
                 logger.warning("Sub-verifier failed for %s: %s", h.name, e)
                 h.score = 0.0
 
+        # Defensive: if the LLM (or retries) yielded fewer than 2 hypotheses,
+        # group-relative advantage is undefined. Per Q1, buffer a soft signal
+        # centred on a neutral 0.5 so the class can still drift down on
+        # repeated failures — i.e. don't let a single-hypothesis path freeze
+        # the memory the way the old G=1 absorbing path did.
+        if len(hypotheses) == 1:
+            winner = hypotheses[0]
+            winner.advantage = winner.score - 0.5
+            self._memory.buffer(dp.decision_type, winner.name, winner.advantage)
+            return _DecisionResult(winner=winner, hypotheses=hypotheses)
+
         scores = [h.score for h in hypotheses]
         mean = statistics.mean(scores)
         std = statistics.pstdev(scores)
@@ -281,8 +291,11 @@ class HTAEngine:
         # Dynamic-sampling collapse: the hypotheses cannot be told apart.
         if std < self._config.epsilon:
             if dp.decision_type == "root_cause_localization" and not self._escalated:
+                # Per spec §008: do NOT update memory when there is no signal.
                 return _DecisionResult(hypotheses=hypotheses, escalated=True)
-            # Non-RCL collapse (or already escalated): fall back to raw score.
+            # Non-RCL collapse (or already escalated): fall back to raw score
+            # for selection; still buffer zero advantages so all classes show
+            # the observation but neither wins nor loses learning.
             for h in hypotheses:
                 h.advantage = 0.0
             winner = max(hypotheses, key=lambda h: h.score)

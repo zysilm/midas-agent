@@ -132,38 +132,16 @@ class TypedAdvantageMemory:
         self._pending.clear()
 
     # ------------------------------------------------------------------
-    # Adaptive G and generation bias
+    # Generation bias
     # ------------------------------------------------------------------
 
-    def adaptive_g(self, decision_type: str) -> int:
-        """Pick G in {1, 2, 3} for a decision type from its historical advantages.
-
-        Cold (no data, or fewer than 5 observations) -> 3 (shadow mode, maximum
-        exploration). Warm -> G shrinks as one class pulls ahead; a decisive
-        favourite collapses G to 1 (empirical mode, degenerates to plain ReAct).
-        """
-        stats = [s for s in self._stats.values() if s.decision_type == decision_type]
-        if not stats:
-            return 3
-        total = sum(s.count for s in stats)
-        if total < 5:
-            return 3
-        means = sorted((s.mean for s in stats), reverse=True)
-        if len(means) < 2:
-            # Only one class ever observed for this decision type — strong prior.
-            return 1
-        margin = means[0] - means[1]
-        if margin > 1.0:
-            return 1
-        if margin > 0.4:
-            return 2
-        return 3
-
-    def is_cold(self, decision_type: str) -> bool:
-        """True when this decision type has too little data to bias generation."""
-        return self.adaptive_g(decision_type) == 3 and sum(
-            s.count for s in self._stats.values() if s.decision_type == decision_type
-        ) < 5
+    # Note: an `adaptive_g` mechanism that returned G ∈ {1, 2, 3} based on
+    # historical margin was removed (issue #44, C1/B1). It produced a
+    # permanent G=1 absorbing state: once any class crossed the margin
+    # threshold on noisy early data, G collapsed to 1 forever for that
+    # decision type, and no further memory updates could happen. The
+    # courseware spec §003 calls for fixed G=3 with one slot reserved for
+    # exploration; HTAEngine now honours that directly.
 
     def bias_summary(self, decision_type: str) -> str:
         """Human-readable priors block injected into the hypothesis-gen prompt."""
