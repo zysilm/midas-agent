@@ -288,6 +288,14 @@ def build_summary(
         1 for n in graph.nodes.values() if n.kind == NodeKind.DECISION
     )
     backward_edges = sum(1 for e in graph.edges if e.kind == "backward")
+    # Issue H1 D3: count how many times spec_interpretation escalation
+    # actually fired this issue. rcl.escalated is a boolean derived from
+    # any-decision-with-escalated-payload; this field is the integer
+    # count so the analyzer can show "up to N per issue" behaviour.
+    escalation_count = sum(
+        1 for n in graph.nodes.values()
+        if (n.payload or {}).get("escalated")
+    )
     return {
         "issue_id": issue_id,
         "branch": branch,
@@ -301,6 +309,7 @@ def build_summary(
         "graph_node_count": len(graph.nodes),
         "backward_edge_count": backward_edges,
         "tier2_calls_used": tier2_calls_used,
+        "escalation_count": escalation_count,
     }
 
 

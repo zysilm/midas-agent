@@ -60,6 +60,12 @@ class HTAEngineConfig:
     # Directory the engine writes per-episode analysis summaries into
     # (issue #46). When None, summary writes are skipped silently.
     run_dir: str | None = None
+    # Cap on spec_interpretation re-entries per issue (issue H1 D3). The
+    # original boolean latch fired escalation at most once per issue, so
+    # repeated RCL collapses silently fell through to raw-score selection
+    # for the rest of the episode. The counter allows escalation to fire
+    # multiple times in deeply ambiguous issues, still bounded.
+    max_escalations: int = 3
 
 
 @dataclass
@@ -154,7 +160,9 @@ class HTAEngine:
         # themselves.
         self._novel_class_judge = LLMJudgeVerifier(system_llm)
         self._decision_count = 0
-        self._escalated = False
+        # Counter of spec_interpretation escalations triggered this issue
+        # (issue H1 D3, replaces the boolean self._escalated latch).
+        self._escalation_count = 0
         # Per-issue Tier-2 budget: at most 3 LLM-judge calls per issue.
         self._tier2_calls_used = 0
         self._tier2_cap = 3
@@ -171,6 +179,8 @@ class HTAEngine:
     def run(self) -> DecisionGraph:
         # Reset per-issue Tier-2 budget — the cap is per-issue, not per-process.
         self._tier2_calls_used = 0
+        # Reset per-issue escalation counter (issue H1 D3).
+        self._escalation_count = 0
         # Snapshot the starting budget for the stuck-signal 3 calculation.
         self._initial_budget = (
             self._balance_provider() if self._balance_provider is not None else None
@@ -269,8 +279,8 @@ class HTAEngine:
 
         result = self._resolve(dp, graph, node.node_id, action_history)
 
-        if result.escalated and not self._escalated:
-            self._escalated = True
+        if result.escalated and self._escalation_count < self._config.max_escalations:
+            self._escalation_count += 1
             node.status = NodeStatus.DONE
             node.distilled_evidence = (
                 "[root_cause_localization] hypotheses were indistinguishable "
@@ -384,7 +394,8 @@ class HTAEngine:
 
         # Dynamic-sampling collapse: the hypotheses cannot be told apart.
         if std < self._config.epsilon:
-            if dp.decision_type == "root_cause_localization" and not self._escalated:
+            if (dp.decision_type == "root_cause_localization"
+                    and self._escalation_count < self._config.max_escalations):
                 # Per spec §008: do NOT update memory when there is no signal.
                 return _DecisionResult(hypotheses=hypotheses, escalated=True)
             # Non-RCL collapse (or already escalated): fall back to raw score
