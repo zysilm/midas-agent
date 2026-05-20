@@ -300,33 +300,118 @@ class SpecInterpretationVerifier(SubVerifier):
 
 
 class ContinuationVerifier(SubVerifier):
-    """investigation_continuation — Tier-1 heuristic over the stuck node's trace.
+    """investigation_continuation — Tier-1 heuristic that reads the stuck
+    signal that triggered IC, not just adjacent action repetition.
 
-    Scores each continuation strategy from observable signals in the action
-    history rather than spending a fresh LLM call.
+    The verifier's job: given the *reason* the agent got stuck, score each
+    continuation strategy by how appropriate it is for that reason. Across
+    the 30-issue eval the legacy adjacent-repetition formula collapsed IC's
+    verdict space to 100% ``persist_same_path``; reading stuck_reason
+    restores the verdict diversity the rescue mechanism is supposed to
+    produce.
+
+    The legacy behaviour (count adjacent action repeats) is preserved as
+    the fallback when ``stuck_reason`` is None or unrecognised, so unknown
+    future signals don't silently break IC.
     """
 
     tier = 1
 
+    # Per-class baselines for each known stuck_reason. The verifier returns
+    # baseline + a small history-derived adjustment. Designed so that the
+    # right verdict beats the wrong ones by ~0.3 — enough for advantage to
+    # be decisive, std stays well above epsilon.
+    _SCORES_BY_REASON: dict[str, dict[str, float]] = {
+        # Same file read 5+ times: agent is loop-stuck on one file. The
+        # right move is to look elsewhere — pivot_target wins, abandon is
+        # second, persist is penalised.
+        "same_file_read_5x": {
+            "persist_same_path": 0.25,
+            "pivot_target": 0.80,
+            "pivot_evidence_type": 0.55,
+            "abandon": 0.55,
+        },
+        # >=60% budget burned without predicted evidence: hypothesis is
+        # likely wrong; abandon and re-enter parent decision.
+        "budget_60pct_no_evidence": {
+            "persist_same_path": 0.15,
+            "pivot_target": 0.50,
+            "pivot_evidence_type": 0.50,
+            "abandon": 0.85,
+        },
+        # Same error repeating: agent keeps producing the same failure
+        # signal. The right move is to pivot the evidence type (look at
+        # different signals), not stop trying.
+        "same_error_3x": {
+            "persist_same_path": 0.25,
+            "pivot_target": 0.55,
+            "pivot_evidence_type": 0.80,
+            "abandon": 0.50,
+        },
+        # Toolkit's verbatim-repetition detector fired: soft signal, could
+        # be a legitimate retry. Keep persist allowed but lowered.
+        "toolkit_repetition": {
+            "persist_same_path": 0.55,
+            "pivot_target": 0.55,
+            "pivot_evidence_type": 0.55,
+            "abandon": 0.30,
+        },
+        # Terminal-style stuck (no more iterations / no action emitted):
+        # the agent has effectively given up. Abandon is the honest call.
+        "max_iterations": {
+            "persist_same_path": 0.30,
+            "pivot_target": 0.50,
+            "pivot_evidence_type": 0.45,
+            "abandon": 0.75,
+        },
+        "no_action": {
+            "persist_same_path": 0.25,
+            "pivot_target": 0.45,
+            "pivot_evidence_type": 0.40,
+            "abandon": 0.75,
+        },
+    }
+
     def verify(self, hyp: Hypothesis, ctx: VerifierContext, cheap: bool = True) -> float:
+        reason = ctx.stuck_reason
+        # Map reasons that include a payload suffix (e.g.
+        # "same_file_read_5x:foo.py") to their bucket name.
+        bucket = reason.split(":", 1)[0] if reason else None
+
+        if bucket and bucket in self._SCORES_BY_REASON:
+            scores = self._SCORES_BY_REASON[bucket]
+            base = scores.get(hyp.name, 0.30)
+            # Small adjustment from action history: a longer trace mildly
+            # boosts abandon, mildly suppresses persist. Capped so it
+            # cannot overturn the baseline.
+            n = len(ctx.action_history)
+            length_bonus = 0.1 if n > 20 else 0.0
+            if hyp.name == "abandon":
+                return min(1.0, base + length_bonus)
+            if hyp.name == "persist_same_path":
+                return max(0.0, base - length_bonus)
+            return base
+
+        # Fallback: stuck_reason is None or unrecognised. Use the legacy
+        # adjacent-repetition formula so unknown future signals don't
+        # silently break IC.
+        return self._legacy_score(hyp, ctx)
+
+    @staticmethod
+    def _legacy_score(hyp: Hypothesis, ctx: VerifierContext) -> float:
         history = ctx.action_history
         n = len(history)
-        # Repetition ratio: how many of the last actions repeat the prior one.
         repeats = sum(
             1 for a, b in zip(history, history[1:])
             if a.action_name == b.action_name and a.arguments == b.arguments
         )
         repetition = repeats / n if n else 0.0
-
         cls = hyp.name
         if cls == "abandon":
-            # Abandon looks better the more repetitive / longer the dead end is.
             return min(1.0, 0.3 + repetition + (0.3 if n > 20 else 0.0))
         if cls == "persist_same_path":
-            # Persisting looks better when the trace is short and not repetitive.
             return max(0.0, 1.0 - repetition - (0.3 if n > 20 else 0.0))
         if cls in ("pivot_evidence_type", "pivot_target"):
-            # Pivoting is a middle option — moderately favoured under repetition.
             return 0.4 + 0.4 * repetition
         return 0.3
 
