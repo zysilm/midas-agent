@@ -603,6 +603,7 @@ class HTAEngine:
             ],
             "winner": result.winner.name if result.winner else None,
             "escalated": result.escalated,
+            "gaming_detected": result.gaming_detected,
         }
 
 

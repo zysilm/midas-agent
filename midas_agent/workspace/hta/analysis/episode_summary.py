@@ -159,6 +159,8 @@ def _fix_locality_section(graph: DecisionGraph) -> dict:
             "sentinel_in_winner_payload": False,
             "sentinel_in_any_payload": False,
             "sentinel_count": 0,
+            "gaming_detected": False,
+            "gaming_detected_count": 0,
         }
     # If FL fires more than once (it usually doesn't), take the last.
     node = nodes[-1]
@@ -175,6 +177,14 @@ def _fix_locality_section(graph: DecisionGraph) -> dict:
             winner_adv = float(h.get("advantage", 0.0))
             sentinel_in_winner = _LAYER_HIT_SENTINEL in (h.get("test_payload") or "")
             break
+    # Issue H1 D2: count fix_locality decisions where the engine flagged
+    # all-probes-fired-sentinel gaming. We track both the last-node value
+    # (gaming_detected) and the per-issue count across all FL decisions
+    # (gaming_detected_count) so the analyzer can report a run-wide rate.
+    gaming_last = bool((node.payload or {}).get("gaming_detected", False))
+    gaming_count = sum(
+        1 for n in nodes if bool((n.payload or {}).get("gaming_detected", False))
+    )
     return {
         "fired": True,
         "winner": node.winner_hypothesis,
@@ -184,6 +194,8 @@ def _fix_locality_section(graph: DecisionGraph) -> dict:
         "sentinel_in_winner_payload": sentinel_in_winner,
         "sentinel_in_any_payload": sentinel_count > 0,
         "sentinel_count": sentinel_count,
+        "gaming_detected": gaming_last,
+        "gaming_detected_count": gaming_count,
     }
 
 

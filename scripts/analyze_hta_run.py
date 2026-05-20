@@ -277,6 +277,10 @@ def table_3_activation(run: dict) -> str:
         1 for r in run.values()
         if r["summary"].get("fix_locality", {}).get("sentinel_in_any_payload")
     )
+    fl_gaming = sum(
+        1 for r in run.values()
+        if r["summary"].get("fix_locality", {}).get("gaming_detected_count", 0) > 0
+    )
     ic_any = sum(
         1 for r in run.values()
         if r["summary"].get("investigation_continuation", {}).get("fired_count", 0) > 0
@@ -309,6 +313,7 @@ def table_3_activation(run: dict) -> str:
         f"fix_locality discriminates:                         {fl_discrim} / {N}  {pct(fl_discrim, N)}\n"
         f"  - sentinel in winner's test_payload:              {sentinel_winner} / {N}\n"
         f"  - sentinel in any test_payload:                   {sentinel_any} / {N}\n"
+        f"  - gaming detected (all probes scored 1.0):        {fl_gaming} / {N}\n"
         f"IC fires at least once:                             {ic_any} / {N}\n"
         f"  - via same_file_read_5x (bypass path):            {ic_via_bypass}\n"
         f"  - via meta-judge:                                 {ic_via_meta}\n"
