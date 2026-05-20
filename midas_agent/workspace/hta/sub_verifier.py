@@ -13,6 +13,7 @@ verifiers are agnostic to local-vs-Docker execution.
 """
 from __future__ import annotations
 
+import json
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
@@ -156,13 +157,107 @@ class FixLocalityVerifier(SubVerifier):
         return 0.2
 
 
+_JUDGE_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "submit_judgment",
+        "description": (
+            "Score how well the given hypothesis explains the issue. "
+            "Return a single float in [0.0, 1.0]."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "score": {
+                    "type": "number",
+                    "description": "0.0 = does not fit at all, 1.0 = strongly fits.",
+                },
+                "reason": {"type": "string", "description": "One short sentence."},
+            },
+            "required": ["score"],
+        },
+    },
+}
+
+_JUDGE_PROMPT = """\
+You are scoring how well one hypothesis explains a GitHub issue.
+
+## Issue
+{issue}
+
+## Hypothesis
+class: {hypothesis_class}
+rationale: {rationale}
+
+Score in [0.0, 1.0]: 0.0 means the hypothesis does not fit the issue at all,
+1.0 means it is a strong, specific fit. Be conservative — most hypotheses on
+unfamiliar issues should score 0.3-0.6. Reserve 0.8+ for genuinely strong
+matches. Call submit_judgment exactly once with your score and one-sentence
+reason.\
+"""
+
+
+class LLMJudgeVerifier(SubVerifier):
+    """Tier-2 generic verifier — one LLM call scores a hypothesis against the issue.
+
+    Used (a) by SpecInterpretationVerifier when the cheap lexical score is
+    inconclusive, and (b) by HTAEngine to force Tier-2 verification on
+    novel-class hypotheses (courseware §003 novel-class exception). The
+    engine is responsible for the per-issue 3-call cap by gating who calls
+    ``verify``; this class itself does not count.
+    """
+
+    tier = 2
+
+    def __init__(self, system_llm: Callable[[LLMRequest], LLMResponse]) -> None:
+        self._system_llm = system_llm
+
+    def verify(self, hyp: Hypothesis, ctx: VerifierContext, cheap: bool = True) -> float:
+        prompt = _JUDGE_PROMPT.format(
+            issue=(ctx.issue.description or "").strip()[:2000] or "(no description)",
+            hypothesis_class=hyp.name,
+            rationale=(hyp.rationale or "").strip()[:500] or "(no rationale)",
+        )
+        messages = [
+            {"role": "system", "content": "You judge hypothesis-issue fit. Always call submit_judgment."},
+            {"role": "user", "content": prompt},
+        ]
+        try:
+            resp = self._system_llm(
+                LLMRequest(messages=messages, model="default", tools=[_JUDGE_TOOL]),
+            )
+        except Exception as e:  # noqa: BLE001
+            logger.warning("LLMJudgeVerifier API error: %s", e)
+            return 0.0
+        if not resp.tool_calls:
+            return 0.0
+        for tc in resp.tool_calls:
+            if tc.name != "submit_judgment":
+                continue
+            args = tc.arguments
+            if isinstance(args, str):
+                try:
+                    args = json.loads(args)
+                except json.JSONDecodeError:
+                    return 0.0
+            if not isinstance(args, dict):
+                return 0.0
+            try:
+                score = float(args.get("score", 0.0))
+            except (TypeError, ValueError):
+                return 0.0
+            return max(0.0, min(1.0, score))
+        return 0.0
+
+
 class SpecInterpretationVerifier(SubVerifier):
     """spec_interpretation — score a reading by lexical consistency with the
-    issue text and gold test names.
+    issue text, escalating to Tier-2 LLM judgment when lexical is inconclusive.
 
-    This is the one decision point allowed a Tier-2 independent LLM call: when
-    a ``system_llm`` is supplied and the lexical scores are too close to
-    separate the readings, one call breaks the tie.
+    Per courseware §003 + §008, this is the one decision point whose default
+    verifier may use a Tier-2 LLM call. The engine still owns the per-issue
+    cap on Tier-2 calls; this class will skip the LLM call when no
+    ``system_llm`` is wired.
     """
 
     tier = 0
@@ -171,8 +266,22 @@ class SpecInterpretationVerifier(SubVerifier):
         self._system_llm = system_llm
         if system_llm is not None:
             self.tier = 2
+            self._judge = LLMJudgeVerifier(system_llm)
+        else:
+            self._judge = None
 
     def verify(self, hyp: Hypothesis, ctx: VerifierContext, cheap: bool = True) -> float:
+        lexical = self._lexical_overlap(hyp, ctx)
+        # Decisive in either direction — accept the cheap score.
+        if lexical < 0.1 or lexical > 0.7:
+            return lexical
+        # Lexical inconclusive — escalate to the LLM judge if available.
+        if self._judge is None:
+            return lexical
+        return self._judge.verify(hyp, ctx)
+
+    @staticmethod
+    def _lexical_overlap(hyp: Hypothesis, ctx: VerifierContext) -> float:
         text = (ctx.issue.description + " " + " ".join(ctx.issue.fail_to_pass)).lower()
         rationale_terms = {
             t for t in (hyp.rationale + " " + hyp.predicted_path).lower().split()

@@ -212,6 +212,40 @@ class TestHTAEngineRun:
         graph = engine.run()
         assert len(graph.decision_nodes()) <= 1
 
+    def test_novel_hypothesis_routes_to_tier2_judge(self, memory):
+        """A __novel__ hypothesis must be verified by the LLM judge, not by
+        the decision point's default verifier — that's the novel-class
+        exception (issue #44 C2).
+        """
+        from midas_agent.workspace.hta.decision_point import Hypothesis
+
+        # Default verifier whose verify() we can assert was NOT called for the novel.
+        default_verifier = _scored_verifier({}, default=0.4)
+        engine = _build_engine(
+            memory, _make_system_llm(),
+            verifiers={"root_cause_localization": default_verifier},
+        )
+        novel = Hypothesis(name="__novel__:fresh_thing", rationale="r")
+        seed = Hypothesis(name="framework_default_value", rationale="r")
+        picked = engine._select_verifier_for(novel, default_verifier)
+        assert picked is engine._novel_class_judge
+        picked2 = engine._select_verifier_for(seed, default_verifier)
+        assert picked2 is default_verifier
+
+    def test_tier2_cap_is_enforced_per_issue(self, memory):
+        from midas_agent.workspace.hta.decision_point import Hypothesis
+
+        engine = _build_engine(memory, _make_system_llm())
+        default = _scored_verifier({}, default=0.4)
+        novels = [Hypothesis(name=f"__novel__:n{i}", rationale="r") for i in range(5)]
+        picked = [engine._select_verifier_for(n, default) for n in novels]
+        # First 3 route to the judge; the 4th and 5th fall back to default.
+        assert picked[:3] == [engine._novel_class_judge] * 3
+        assert picked[3:] == [default, default]
+        # And a fresh run() resets the counter.
+        engine._tier2_calls_used = 0
+        assert engine._select_verifier_for(novels[0], default) is engine._novel_class_judge
+
     def test_graph_is_json_serialisable(self, memory):
         engine = _build_engine(memory, _make_system_llm())
         graph = engine.run()

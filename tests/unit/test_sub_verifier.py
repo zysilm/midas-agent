@@ -11,9 +11,12 @@ from llm_agent_toolkit.stdlib.react_agent import ActionRecord
 from llm_agent_toolkit.types import Issue
 
 from midas_agent.workspace.hta.decision_point import Hypothesis
+from llm_agent_toolkit.llm.types import LLMResponse, ToolCall, TokenUsage
+
 from midas_agent.workspace.hta.sub_verifier import (
     ContinuationVerifier,
     FixLocalityVerifier,
+    LLMJudgeVerifier,
     RCLVerifier,
     SpecInterpretationVerifier,
     VerifierContext,
@@ -199,6 +202,83 @@ class TestSpecInterpretationVerifier:
     def test_tier_is_two_when_system_llm_supplied(self):
         assert SpecInterpretationVerifier().tier == 0
         assert SpecInterpretationVerifier(system_llm=MagicMock()).tier == 2
+
+    def test_lexical_decisive_skips_llm(self):
+        # Strong lexical overlap (every rationale word in issue) -> > 0.7,
+        # so the LLM judge must not be called.
+        issue = _issue(description="serialization roundtrip timezone data lost")
+        llm = MagicMock()
+        v = SpecInterpretationVerifier(system_llm=llm)
+        score = v.verify(
+            Hypothesis(name="literal_reading", rationale="serialization roundtrip timezone"),
+            _ctx(MagicMock(), issue=issue),
+        )
+        assert score > 0.7
+        llm.assert_not_called()
+
+    def test_lexical_inconclusive_escalates_to_llm(self):
+        # Partial overlap (~0.5) lands in the inconclusive band [0.1, 0.7]
+        # so the LLM judge is invoked and its score is returned.
+        issue = _issue(description="serialization roundtrip")
+        llm = MagicMock(return_value=LLMResponse(
+            content=None,
+            tool_calls=[ToolCall(id="j1", name="submit_judgment",
+                                 arguments={"score": 0.87, "reason": "fits"})],
+            usage=TokenUsage(input_tokens=1, output_tokens=1),
+        ))
+        v = SpecInterpretationVerifier(system_llm=llm)
+        score = v.verify(
+            Hypothesis(name="literal_reading", rationale="serialization unrelated"),
+            _ctx(MagicMock(), issue=issue),
+        )
+        assert score == 0.87
+        llm.assert_called_once()
+
+
+@pytest.mark.unit
+class TestLLMJudgeVerifier:
+    def _resp(self, score=0.75):
+        return LLMResponse(
+            content=None,
+            tool_calls=[ToolCall(id="j1", name="submit_judgment",
+                                 arguments={"score": score, "reason": "ok"})],
+            usage=TokenUsage(input_tokens=1, output_tokens=1),
+        )
+
+    def test_happy_path_returns_clamped_score(self):
+        llm = MagicMock(return_value=self._resp(0.62))
+        score = LLMJudgeVerifier(llm).verify(
+            Hypothesis(name="__novel__:weird_thing", rationale="r"),
+            _ctx(MagicMock()),
+        )
+        assert score == 0.62
+
+    def test_score_above_one_is_clamped(self):
+        llm = MagicMock(return_value=self._resp(1.4))
+        score = LLMJudgeVerifier(llm).verify(
+            Hypothesis(name="__novel__:x", rationale="r"),
+            _ctx(MagicMock()),
+        )
+        assert score == 1.0
+
+    def test_no_tool_call_scores_zero(self):
+        resp = LLMResponse(
+            content="prose", tool_calls=None,
+            usage=TokenUsage(input_tokens=1, output_tokens=1),
+        )
+        llm = MagicMock(return_value=resp)
+        assert LLMJudgeVerifier(llm).verify(
+            Hypothesis(name="x", rationale="r"), _ctx(MagicMock()),
+        ) == 0.0
+
+    def test_api_error_scores_zero(self):
+        llm = MagicMock(side_effect=RuntimeError("api down"))
+        assert LLMJudgeVerifier(llm).verify(
+            Hypothesis(name="x", rationale="r"), _ctx(MagicMock()),
+        ) == 0.0
+
+    def test_tier_is_two(self):
+        assert LLMJudgeVerifier(MagicMock()).tier == 2
 
 
 @pytest.mark.unit

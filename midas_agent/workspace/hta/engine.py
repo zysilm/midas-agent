@@ -39,6 +39,7 @@ from midas_agent.workspace.hta.meta_judge import DecisionPointMetaJudge
 from midas_agent.workspace.hta.sub_verifier import (
     ContinuationVerifier,
     FixLocalityVerifier,
+    LLMJudgeVerifier,
     RCLVerifier,
     SpecInterpretationVerifier,
     SubVerifier,
@@ -127,21 +128,36 @@ class HTAEngine:
 
         self._hypothesis_gen = HypothesisGenerator(system_llm=system_llm)
         self._meta_judge = DecisionPointMetaJudge(system_llm=system_llm, registry=registry)
+        # SpecInterpretationVerifier escalates to Tier-2 (LLM judge) when
+        # lexical is inconclusive; wire system_llm so the escalation can
+        # actually happen (issue #44 B5).
         self._verifiers: dict[str, SubVerifier] = {
             "root_cause_localization": RCLVerifier(),
             "fix_locality_scope": FixLocalityVerifier(),
-            "spec_interpretation": SpecInterpretationVerifier(),
+            "spec_interpretation": SpecInterpretationVerifier(system_llm=system_llm),
             "investigation_continuation": ContinuationVerifier(),
             "test_scope_strategy": TestScopeVerifier(),
         }
+        # Shared Tier-2 judge used to force LLM-grade verification on
+        # novel-class hypotheses (courseware §003 novel-class exception,
+        # issue #44 C2). Without this, novels would always be scored by
+        # the cheap default verifier — whose lexicon does not include
+        # them — and would be silently pruned before they could prove
+        # themselves.
+        self._novel_class_judge = LLMJudgeVerifier(system_llm)
         self._decision_count = 0
         self._escalated = False
+        # Per-issue Tier-2 budget: at most 3 LLM-judge calls per issue.
+        self._tier2_calls_used = 0
+        self._tier2_cap = 3
 
     # ------------------------------------------------------------------
     # Main loop
     # ------------------------------------------------------------------
 
     def run(self) -> DecisionGraph:
+        # Reset per-issue Tier-2 budget — the cap is per-issue, not per-process.
+        self._tier2_calls_used = 0
         graph = DecisionGraph()
         root = graph.add_node(NodeKind.EXECUTION, "bootstrap", status=NodeStatus.DONE)
         cursor_id = root.node_id
@@ -257,7 +273,7 @@ class HTAEngine:
             if h.is_novel:
                 self._memory.maybe_register_novel(h.novel_slug or "unspecified")
 
-        verifier = self._verifiers.get(dp.decision_type) or ContinuationVerifier()
+        default_verifier = self._verifiers.get(dp.decision_type) or ContinuationVerifier()
         ctx = VerifierContext(
             issue=self._issue,
             work_dir=self._work_dir,
@@ -267,6 +283,7 @@ class HTAEngine:
             action_history=action_history,
         )
         for h in hypotheses:
+            verifier = self._select_verifier_for(h, default_verifier)
             try:
                 h.score = verifier.verify(h, ctx)
             except Exception as e:  # noqa: BLE001 — a broken probe must not crash the engine
@@ -403,6 +420,29 @@ class HTAEngine:
             ))
         # "abandon" -> add nothing; the worklist moves on.
         return node.node_id
+
+    def _select_verifier_for(self, hyp: Hypothesis, default: SubVerifier) -> SubVerifier:
+        """Force Tier-2 (LLM judge) on novel-class hypotheses, capped per issue.
+
+        Per courseware §003 novel-class exception (issue #44 C2): a
+        novel-class hypothesis (one whose class is __novel__:<slug>) is
+        verified at Tier-2 regardless of the decision point's default
+        tier. Without this, novels would be scored by the default verifier
+        whose lexicon doesn't include them — they would score badly
+        across their probation window and be silently pruned without ever
+        being given a fair hearing. We spend the cheap, recoverable
+        resource (an LLM call) to protect the expensive, unrecoverable
+        one (learning a new failure pattern).
+
+        The cap is per-issue and applies only to this engine-driven
+        forcing path; SpecInterpretationVerifier's internal escalation
+        manages its own LLM budget by virtue of how rarely lexical
+        scores land in the inconclusive band.
+        """
+        if hyp.is_novel and self._tier2_calls_used < self._tier2_cap:
+            self._tier2_calls_used += 1
+            return self._novel_class_judge
+        return default
 
     # ------------------------------------------------------------------
     # Context + distillation helpers
