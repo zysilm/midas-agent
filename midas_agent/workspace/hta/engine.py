@@ -57,6 +57,9 @@ class HTAEngineConfig:
     max_decision_points: int = 12   # cap on decision nodes per issue
     max_steps: int = 40             # hard cap on total worklist steps
     enable_test_scope_dp: bool = False
+    # Directory the engine writes per-episode analysis summaries into
+    # (issue #46). When None, summary writes are skipped silently.
+    run_dir: str | None = None
 
 
 @dataclass
@@ -202,7 +205,34 @@ class HTAEngine:
                 if outcome.stuck:
                     cursor_id = self._handle_stuck(step, graph, cursor_id, outcome, worklist)
 
+        # Issue #46: write a per-episode analysis summary for the aggregator.
+        # Wrapped so a summary-write failure never propagates to the engine.
+        self._write_episode_summary(graph)
         return graph
+
+    def _write_episode_summary(self, graph: DecisionGraph) -> None:
+        if not self._config.run_dir:
+            return
+        try:
+            from midas_agent.workspace.hta.analysis.episode_summary import (
+                build_summary, write_summary,
+            )
+            import os as _os
+            final_budget = (
+                self._balance_provider() if self._balance_provider is not None else None
+            )
+            summary = build_summary(
+                issue_id=self._issue.issue_id,
+                branch=_os.environ.get("MIDAS_HTA_BRANCH", "unknown"),
+                graph=graph,
+                initial_budget=self._initial_budget,
+                final_budget=final_budget,
+                tier2_calls_used=self._tier2_calls_used,
+            )
+            path = write_summary(summary, self._config.run_dir)
+            logger.info("Wrote HTA episode summary -> %s", path)
+        except Exception as e:  # noqa: BLE001 — must never fail the episode
+            logger.warning("HTA episode-summary write failed: %s", e)
 
     # ------------------------------------------------------------------
     # Decision steps

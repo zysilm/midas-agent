@@ -293,6 +293,7 @@ class WorkspaceManager:
             epsilon=self._config.hta_epsilon,
             max_decision_points=self._config.hta_max_decision_points,
             enable_test_scope_dp=self._config.hta_enable_test_scope,
+            run_dir=self._train_dir,
         )
         action_log = self._open_action_log(workspace_id)
 
