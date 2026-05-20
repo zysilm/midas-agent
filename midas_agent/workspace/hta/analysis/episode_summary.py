@@ -84,6 +84,7 @@ def _rcl_section(graph: DecisionGraph) -> dict:
             "fired": False,
             "n_hypotheses": 0,
             "winner": None,
+            "winner_predicted_path": None,
             "winner_class_is_novel": False,
             "winner_advantage": None,
             "std": None,
@@ -114,9 +115,11 @@ def _rcl_section(graph: DecisionGraph) -> dict:
         h.get("name") for n in rcl_nodes for h in _hypotheses_of(n) if h.get("name")
     })
     winner_adv = None
+    winner_pred_path = None
     for h in hyps:
         if h.get("name") == active.winner_hypothesis:
             winner_adv = float(h.get("advantage", 0.0))
+            winner_pred_path = h.get("predicted_path") or None
             break
     scores = _scores(hyps)
     std = _std(scores)
@@ -124,6 +127,7 @@ def _rcl_section(graph: DecisionGraph) -> dict:
         "fired": True,
         "n_hypotheses": len(hyps),
         "winner": active.winner_hypothesis,
+        "winner_predicted_path": winner_pred_path,
         "winner_class_is_novel": _is_novel(active.winner_hypothesis),
         "winner_advantage": winner_adv,
         "std": std,

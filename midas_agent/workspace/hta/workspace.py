@@ -120,7 +120,8 @@ class HTAWorkspace(Workspace):
         ))
         self._episode_count += 1
 
-        my_score = eval_results.get(self.workspace_id, {}).get("s_exec", 0.0)
+        my_results = eval_results.get(self.workspace_id, {})
+        my_score = my_results.get("s_exec", 0.0)
 
         # Commit the episode's buffered hypothesis advantages — weighted by the
         # outcome — into the shared typed memory. A crashed episode (no graph)
@@ -131,7 +132,27 @@ class HTAWorkspace(Workspace):
             self._advantage_memory.discard_pending()
 
         self._export_graph()
+        # Issue #46: append the per-episode outcome to outcomes.jsonl so the
+        # aggregator can join scores back to analysis summaries. Best-effort,
+        # never raises.
+        self._append_outcome(my_results)
         return None
+
+    def _append_outcome(self, my_results: dict) -> None:
+        try:
+            import json as _json
+            out_path = os.path.join(self._train_dir, "outcomes.jsonl")
+            line = _json.dumps({
+                "issue_id": self._last_issue.issue_id if self._last_issue else None,
+                "workspace_id": self.workspace_id,
+                "s_exec": my_results.get("s_exec"),
+                "s_w": my_results.get("s_w"),
+                "passed": (my_results.get("s_exec") or 0.0) >= 1.0,
+            })
+            with open(out_path, "a") as f:
+                f.write(line + "\n")
+        except Exception as e:  # noqa: BLE001
+            logger.warning("outcomes.jsonl append failed: %s", e)
 
     # ------------------------------------------------------------------
     # IO plumbing
