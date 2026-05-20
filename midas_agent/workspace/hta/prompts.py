@@ -49,9 +49,18 @@ SUBMIT_HYPOTHESES_TOOL = {
                             "test_payload": {
                                 "type": "string",
                                 "description": (
-                                    "For root_cause_localization: a self-contained "
-                                    "reproduction script of <=10 lines. For "
-                                    "fix_locality_scope: the assert snippet to insert. "
+                                    "For root_cause_localization: optional — the "
+                                    "verifier no longer runs probe scripts at RCL "
+                                    "(it greps the issue itself), so this field is "
+                                    "diagnostic-only here. "
+                                    "For fix_locality_scope: a short script that "
+                                    "(a) inserts an assertion at your candidate layer "
+                                    "tagged with the EXACT message 'HTA_LAYER_HIT' "
+                                    "(e.g. `assert <condition>, 'HTA_LAYER_HIT'`) and "
+                                    "(b) runs the issue's reproduction. The verifier "
+                                    "scores by whether that sentinel-tagged assertion "
+                                    "fires; an honest probe with a discriminating "
+                                    "condition will only fire on the right layer. "
                                     "May be empty for other decision types."
                                 ),
                             },

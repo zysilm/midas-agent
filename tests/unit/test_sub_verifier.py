@@ -118,25 +118,66 @@ class TestRCLVerifier:
 
 @pytest.mark.unit
 class TestFixLocalityVerifier:
-    def test_assertion_error_confirms_layer(self):
-        run_bash = MagicMock(return_value="AssertionError: layer contract violated")
+    def test_sentinel_assertion_scores_one(self):
+        # The sentinel-tagged assertion fired during reproduction -> layer hit.
+        run_bash = MagicMock(return_value="AssertionError: HTA_LAYER_HIT")
         score = FixLocalityVerifier().verify(
-            Hypothesis(name="root_layer", test_payload="assert False"), _ctx(run_bash),
+            Hypothesis(name="root_layer",
+                       test_payload="assert False, 'HTA_LAYER_HIT'"),
+            _ctx(run_bash),
         )
         assert score == 1.0
+
+    def test_other_assertion_scores_low(self):
+        # An assertion fired, but not the layer-hit one -> wrong layer.
+        run_bash = MagicMock(return_value="AssertionError: something else")
+        score = FixLocalityVerifier().verify(
+            Hypothesis(name="surface_patch", test_payload="probe()"),
+            _ctx(run_bash),
+        )
+        assert score == 0.3
 
     def test_unrelated_traceback_scores_half(self):
         run_bash = MagicMock(return_value="Traceback (most recent call last):\nTypeError")
         score = FixLocalityVerifier().verify(
-            Hypothesis(name="surface_patch", test_payload="probe()"), _ctx(run_bash),
+            Hypothesis(name="intermediate_layer", test_payload="probe()"),
+            _ctx(run_bash),
         )
         assert score == 0.5
+
+    def test_clean_run_scores_low(self):
+        # Probe ran but the sentinel never fired — layer not reached.
+        run_bash = MagicMock(return_value="probe ran without errors\n")
+        score = FixLocalityVerifier().verify(
+            Hypothesis(name="dual_fix", test_payload="probe()"),
+            _ctx(run_bash),
+        )
+        assert score == 0.2
 
     def test_empty_payload_scores_zero(self):
         score = FixLocalityVerifier().verify(
             Hypothesis(name="dual_fix"), _ctx(MagicMock()),
         )
         assert score == 0.0
+
+    def test_three_paths_no_longer_collapse_to_one(self):
+        """Regression test for issue #44 B4: previously 3 of 5 paths
+        returned 1.0 so every hypothesis tied. The new verifier must
+        produce a distribution of scores across realistic outputs.
+        """
+        v = FixLocalityVerifier()
+        outputs = [
+            "AssertionError: HTA_LAYER_HIT",        # 1.0
+            "AssertionError: oops",                  # 0.3
+            "Traceback (most recent call last):\nx", # 0.5
+            "ran clean\n",                           # 0.2
+        ]
+        scores = [
+            v.verify(Hypothesis(name="x", test_payload="p"),
+                     _ctx(MagicMock(return_value=o)))
+            for o in outputs
+        ]
+        assert sorted(set(scores)) == [0.2, 0.3, 0.5, 1.0]  # four distinct scores
 
 
 @pytest.mark.unit

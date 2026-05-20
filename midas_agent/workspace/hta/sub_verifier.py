@@ -111,33 +111,49 @@ class RCLVerifier(SubVerifier):
         return min(1.0, hits / 2.0)
 
 
+_LAYER_HIT_SENTINEL = "HTA_LAYER_HIT"
+
+
 class FixLocalityVerifier(SubVerifier):
-    """fix_locality_scope — run the hypothesis' layer-probe script.
+    """fix_locality_scope — sentinel-assert layer probe.
 
-    The probe is an assert-based check (no real fix) that the named layer is
-    where the contract is violated. A probe that runs clean (exit-style success
-    with no traceback) supports the hypothesis.
+    The probe (LLM-authored) inserts an assertion at the candidate layer
+    tagged with the exact message ``HTA_LAYER_HIT`` and runs the issue's
+    reproduction. The verifier scores by whether that sentinel-tagged
+    assertion fires during reproduction — i.e. whether the candidate
+    layer is on the failing code path.
 
-    1.0  probe ran and confirmed the layer (no traceback)
-    0.5  probe ran but hit an unrelated error
-    0.0  no probe payload, or probe failed to run
+    The previous implementation returned 1.0 in three of five branches
+    (any non-error output → confirmed), which gave no discrimination at
+    all; every hypothesis tied at 0.5/1.0 and the winner defaulted to
+    the first class in the seed list (issue #44 B4).
+
+    Scoring:
+      1.0  sentinel-tagged assertion fired (named layer is on the path)
+      0.3  some other AssertionError fired (wrong layer)
+      0.5  unrelated traceback (probe ran but inconclusive)
+      0.2  probe ran cleanly without firing the sentinel (layer not reached)
+      0.0  no probe payload
+
+    Anti-gaming: hypotheses compete in groups of G; gaming one (e.g.
+    ``assert True, 'HTA_LAYER_HIT'`` everywhere) requires gaming all of
+    them, which produces a tie and collapses std → 0 → no winner
+    advantage. The competitive dynamic enforces honest probes.
     """
 
-    tier = 0
+    tier = 1
 
     def verify(self, hyp: Hypothesis, ctx: VerifierContext, cheap: bool = True) -> float:
         if not hyp.test_payload.strip():
             return 0.0
         output = _run_probe(ctx, hyp.test_payload)
-        if not output:
-            # Ran with no output — treat as a clean confirmation.
+        if f"AssertionError: {_LAYER_HIT_SENTINEL}" in output or _LAYER_HIT_SENTINEL in output:
             return 1.0
         if "AssertionError" in output:
-            # The assert that encodes the layer hypothesis fired as expected.
-            return 1.0
+            return 0.3
         if _has_traceback(output):
             return 0.5
-        return 1.0
+        return 0.2
 
 
 class SpecInterpretationVerifier(SubVerifier):
