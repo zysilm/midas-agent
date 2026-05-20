@@ -242,6 +242,9 @@ class HTAEngine:
                 "[root_cause_localization] hypotheses were indistinguishable "
                 "(advantage collapse) — escalating to spec_interpretation."
             )
+            # Preserve the collapsed hypotheses on the node so the analyzer
+            # can see the std=0 group that triggered escalation.
+            node.payload = self._decision_payload(result)
             # Re-read the spec, then re-enter RCL with a backward edge.
             worklist.appendleft(_Step("decision", decision_type="root_cause_localization",
                                       backward_to=node.node_id))
@@ -382,6 +385,7 @@ class HTAEngine:
             "termination_reason": outcome.termination_reason,
             "iterations": outcome.iterations,
             "stuck": outcome.stuck,
+            "stuck_reason": outcome.stuck_reason,
         }
         return node.node_id, outcome
 
@@ -522,12 +526,14 @@ class HTAEngine:
                     "name": h.name,
                     "rationale": h.rationale,
                     "predicted_path": h.predicted_path,
+                    "test_payload": h.test_payload,
                     "score": h.score,
                     "advantage": h.advantage,
                 }
                 for h in result.hypotheses
             ],
             "winner": result.winner.name if result.winner else None,
+            "escalated": result.escalated,
         }
 
 
