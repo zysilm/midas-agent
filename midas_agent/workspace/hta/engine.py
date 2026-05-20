@@ -303,6 +303,7 @@ class HTAEngine:
         graph: DecisionGraph,
         node_id: str,
         action_history: list[ActionRecord],
+        stuck_reason: str | None = None,
     ) -> _DecisionResult:
         """Generate G=3 hypotheses, verify, score by group-relative advantage."""
         evidence = graph.trace_evidence(node_id)
@@ -325,6 +326,7 @@ class HTAEngine:
             write_file=self._write_file,
             remove_file=self._remove_file,
             action_history=action_history,
+            stuck_reason=stuck_reason,
         )
         for h in hypotheses:
             verifier = self._select_verifier_for(h, default_verifier)
@@ -465,7 +467,10 @@ class HTAEngine:
         graph.add_edge(cursor_id, node.node_id, reason="stuck")
         self._decision_count += 1
 
-        result = self._resolve(dp, graph, node.node_id, outcome.action_history)
+        result = self._resolve(
+            dp, graph, node.node_id, outcome.action_history,
+            stuck_reason=outcome.stuck_reason,
+        )
         if result.failed or result.winner is None:
             node.status = NodeStatus.ABANDONED
             return node.node_id

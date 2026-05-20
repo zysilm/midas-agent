@@ -43,6 +43,12 @@ class VerifierContext:
     write_file: Callable[[str, str], str]
     remove_file: Callable[[str], None]
     action_history: list[ActionRecord] = field(default_factory=list)
+    # Populated by the engine only when the verifier is dispatched in an
+    # investigation_continuation context — the rule-based signal that
+    # triggered IC (same_file_read_5x, budget_60pct_no_evidence,
+    # same_error_3x, toolkit_repetition, max_iterations, no_action).
+    # ContinuationVerifier dispatches on this; other verifiers ignore it.
+    stuck_reason: str | None = None
 
 
 class SubVerifier(ABC):
