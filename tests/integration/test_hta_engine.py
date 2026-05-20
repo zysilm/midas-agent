@@ -184,14 +184,18 @@ class TestHTAEngineRun:
 
     def test_advantage_collapse_triggers_escalation(self, memory):
         # All RCL hypotheses score identically -> std == 0 -> escalate.
+        # Use max_escalations=1 to verify the single-shot path: one
+        # escalation, one re-entered RCL, then fall-through. The bounded
+        # multi-shot behaviour is exercised in test_escalation_reentry.py.
         verifier = _scored_verifier({}, default=0.5)
         engine = _build_engine(
             memory, _make_system_llm(),
             verifiers={"root_cause_localization": verifier},
+            config=HTAEngineConfig(max_escalations=1),
         )
         graph = engine.run()
         dtypes = [n.decision_type for n in graph.decision_nodes()]
-        # Escalation splices in spec_interpretation and re-enters RCL.
+        # Escalation splices in spec_interpretation and re-enters RCL once.
         assert "spec_interpretation" in dtypes
         assert dtypes.count("root_cause_localization") == 2
         # The re-entry RCL node has a backward edge.
@@ -215,6 +219,7 @@ class TestHTAEngineRun:
                 "root_cause_localization": rcl_verifier,
                 "spec_interpretation": spec_verifier,
             },
+            config=HTAEngineConfig(max_escalations=1),
         )
         engine.run()
         spec_pending = [p for p in memory._pending if p[0] == "spec_interpretation"]
