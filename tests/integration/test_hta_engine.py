@@ -197,6 +197,34 @@ class TestHTAEngineRun:
         # The re-entry RCL node has a backward edge.
         assert any(e.kind == "backward" for e in graph.edges)
 
+    def test_escalation_actually_runs_spec_interpretation_race(self, memory):
+        """B7 verification: after dropping adaptive_g, the escalation path
+        is not just reachable — the spec_interpretation decision actually
+        runs its G=3 hypothesis race and writes advantages to memory.
+        Previously this was structurally unreachable (issue #44 B7).
+        """
+        # Force RCL collapse, but give spec_interpretation distinct scores
+        # so its race produces real advantages.
+        rcl_verifier = _scored_verifier({}, default=0.5)
+        spec_verifier = _scored_verifier({
+            "literal_reading": 0.9, "inverse_reading": 0.4, "scope_widened": 0.1,
+        })
+        engine = _build_engine(
+            memory, _make_system_llm(),
+            verifiers={
+                "root_cause_localization": rcl_verifier,
+                "spec_interpretation": spec_verifier,
+            },
+        )
+        engine.run()
+        spec_pending = [p for p in memory._pending if p[0] == "spec_interpretation"]
+        # All three spec_interpretation hypotheses' advantages buffered.
+        assert len(spec_pending) == 3
+        # Spec_interpretation race produced real (non-zero) advantages
+        # because its verifier returned distinct scores.
+        advs = [p[2] for p in spec_pending]
+        assert any(abs(a) > 1e-6 for a in advs)
+
     def test_budget_brake_stops_the_run(self, memory):
         engine = _build_engine(memory, _make_system_llm())
         engine._balance_provider = lambda: 0  # no budget at all
