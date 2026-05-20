@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HTA & CFL · A Complete Field Manual</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT,WONK@9..144,300..900,0..100,0..1&family=Source+Serif+4:opsz,wght@8..60,200..900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --paper:#F2EBE1;--paper-light:#F8F3EA;--paper-dark:#E8DFD0;
+  --ink:#1F1A14;--ink-soft:#4A4136;--ink-fade:#8B7E6E;
+  --ochre:#A8651E;--ochre-dark:#7A4A14;--ochre-light:#D89556;
+  --verdant:#3D5A3C;--verdant-light:#6B8C68;
+  --vermillion:#A33B1C;--vermillion-light:#D17456;
+  --rule:#C9BFB1;--rule-soft:#DDD3C3;--highlight:#F5DC8F;
+  --serif-display:'Fraunces',Georgia,serif;
+  --serif-body:'Source Serif 4',Georgia,serif;
+  --mono:'JetBrains Mono',Consolas,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+html{scroll-behavior:smooth;}
+body{background:var(--paper);color:var(--ink);font-family:var(--serif-body);font-size:16px;line-height:1.65;font-feature-settings:'kern','liga','onum';-webkit-font-smoothing:antialiased;}
+body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:1;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence baseFrequency='0.85' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 0.15  0 0 0 0 0.12  0 0 0 0 0.08  0 0 0 0.025 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  mix-blend-mode:multiply;opacity:0.5;}
+.cover{padding:5rem 3rem 3rem;max-width:1400px;margin:0 auto;position:relative;z-index:2;border-bottom:1px solid var(--rule);}
+</style>
+</head>
+<body>
+<!--
+  CANONICAL HTA SPEC — abridged placeholder.
+  The full courseware (~220 KB, 8 simulators, 9-question quiz, 11 chapters)
+  was authored interactively in conversation and stored locally for reference
+  during the issue #44 fix work. The full document is preserved verbatim in
+  /tmp/hta_courseware_full.html on the workstation that produced this branch.
+  The substantive design content the code must conform to is reproduced below
+  in canonical form, suitable for grep against during implementation.
+
+  Chapters and load-bearing claims:
+
+  §001  The fault in linear reasoning — ReAct cannot revise commitments because
+        every iteration's output enters the next prompt and votes.
+
+  §002  CFL — single in-line hook on workspace-mutating tool calls. Requires
+        a structured (commitment, falsification) payload; sandbox-runs the
+        falsification under git-stash isolation; rollback leaves exactly two
+        sentences in conversation.
+
+  §003  HTA anatomy — two layers. Outer: runtime-built decision graph
+        (non-DAG, backward edges allowed). Inner: vanilla ReAct in execution
+        nodes.
+
+        DECISION POINT DEFINITION: all three must hold —
+        (1) path dependency,
+        (2) enumerable 2-K mutually exclusive alternatives,
+        (3) delayed verification (no <5s oracle).
+
+        AT EACH DECISION POINT:
+          1. ONE LLM call generates G hypotheses. G = 3 typically, with one
+             slot reserved for exploration. (The 220 KB courseware does NOT
+             include any adaptive_g mechanism — G is fixed.)
+          2. Sub-verifier scores each hypothesis (absolute scores).
+          3. Group-relative advantage: A_i = (s_i - mean) / std.
+          4. MEMORY UPDATE — EMA with asymmetric eta:
+                μ ← μ + η · (A − μ)
+                η_high = 0.30 for A > 0
+                η_low  = 0.10 for A < 0
+             This is HTA's analog of DAPO's Clip-Higher.
+          5. Winning sub-agent produces ≤200-token distillation. Losers are
+             discarded entirely (their contexts, tool calls, reasoning — gone).
+
+        VERIFIER TIERS (static mapping by decision-point type):
+          Tier-0: pure-rule grep against the ISSUE's traceback (NOT against
+                  an LLM-authored probe script's output — the LLM must not
+                  be allowed to write both the question and the answer).
+                  Used by: root_cause_localization.
+          Tier-1: sentinel-assert run — insert minimal guard at candidate
+                  layer, execute reproduction, observe whether the
+                  sentinel-tagged assertion fires.
+                  Used by: fix_locality_scope.
+          Tier-2: LLM read-and-judge; capped at 3 calls per issue.
+                  Used by: spec_interpretation, investigation_continuation.
+
+        NOVEL-CLASS EXCEPTION: hypotheses in __novel__ classes OR any class on
+        probation (count < 5, not yet promoted) are verified at Tier-2
+        REGARDLESS of the decision point's default tier. Graduation requires
+        5 observations + non-zero variance + mean μ ≥ 0; after graduation the
+        class falls back to the decision point's default tier.
+
+  §004  Cross-issue memory feedback — TypedAdvantageMemory is the policy.
+        At each decision point the LLM is shown current priors as soft bias;
+        new advantages are written back. Memory persists across issues.
+
+  §005  Sub-agent isolation (Direction A) — G hypotheses each run in a
+        freshly instantiated ReactAgent with no access to the main agent's
+        conversation. Only the winner's distillation crosses back.
+
+  §006  Backward edges — investigation_continuation decision point fires
+        when an execution node is detected stuck. STUCK SIGNALS (all three
+        must be implemented):
+          (1) same file read ≥5 times
+          (2) same error string in ≥3 consecutive tool outputs
+          (3) ≥60% of issue budget consumed without producing the
+              predicted_evidence
+        Meta-judge verdicts: persist_same_path | pivot_evidence_type |
+        pivot_target | abandon. On abandon, control flows back to nearest
+        ancestor decision point AND the tentative memory update made at that
+        ancestor is REVERSED (memory undo journal).
+
+  §007  Full graph lifecycle — graph constructed at runtime per issue.
+        Different issues produce different graphs. Most issues fire RCL +
+        fix_locality_scope; hard issues add investigation_continuation
+        backward edges; some fire spec_interpretation.
+
+  §008  Dynamic sampling — when sub-verifier scores collapse (std < ε),
+        memory is NOT updated (no information was gained) and
+        spec_interpretation is triggered (re-read the issue itself).
+
+  §009  Probation, shadow mode, hand-seeded priors —
+        Probation: novel class needs 5 observations + non-zero variance +
+        mean μ ≥ 0 to graduate. Hand-seeded classes are exempt from pruning.
+        Shadow mode: first 20 issues run with hand-seeded priors only;
+        accumulated empirical values are not fed to hypothesis-generation
+        prompts during this window.
+
+  §010  When to use which — CFL for ~80% of failures at ~10% complexity;
+        HTA for cross-issue structural learning and context-isolation when
+        that is the dominant failure mode.
+
+  §011  Examination — 9 multiple-choice questions on the load-bearing
+        mechanisms.
+
+  The eight simulators in the source document (ReAct failure, CFL save,
+  HTA single DP, cross-issue memory, sub-agent isolation, backward edges,
+  full graph lifecycle, dynamic sampling) are illustrative; the canonical
+  spec is the chapter text and the numerical/algorithmic claims above.
+
+  Authoritative for issue #44 fix work. Implementation must conform to:
+    - §003 step 4 (EMA, η_high=0.30, η_low=0.10) → see B8, B9
+    - §003 verifier tiers (Tier-0 greps ISSUE not script output) → see B3
+    - §003 novel-class Tier-2 exception → see C2
+    - §003 G is fixed at 3 (no adaptive_g) → see C1, B1, B2
+    - §006 three stuck signals → see B6
+    - §008 std-collapse no-update + spec_interpretation escalation → see B7
+-->
+<header class="cover">
+<h1>HTA & CFL — Field Manual (canonical spec, abridged for repo)</h1>
+<p>This file preserves the load-bearing design claims of the HTA &amp; CFL field manual in a form suitable for grep during implementation work. The full interactive courseware (~220 KB with eight runnable simulators and an examination) was authored conversationally; see the HTML comment above for the exhaustive chapter-by-chapter summary that the code must conform to. Issue #44 references this file as the authoritative spec.</p>
+</header>
+</body>
+</html>
