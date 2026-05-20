@@ -42,3 +42,6 @@ class MidasConfig:
     hta_novel_threshold: int = 3        # occurrences before a __novel__ slug registers
     hta_max_decision_points: int = 12   # safety cap on decision-graph size per issue
     hta_enable_test_scope: bool = False  # enable the optional test_scope_strategy DP
+    # Typed advantage memory — asymmetric EMA learning rates (Clip-Higher analog)
+    hta_eta_high: float = 0.30          # EMA step for positive advantages
+    hta_eta_low: float = 0.10           # EMA step for negative advantages

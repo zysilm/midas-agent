@@ -327,6 +327,8 @@ class WorkspaceManager:
             store_path=os.path.join(self._train_dir, "data", "advantage_memory.json"),
             epsilon=self._config.hta_epsilon,
             novel_register_threshold=self._config.hta_novel_threshold,
+            eta_high=self._config.hta_eta_high,
+            eta_low=self._config.hta_eta_low,
         )
         self._advantage_memory = memory
         return memory

@@ -58,16 +58,20 @@ class TypedAdvantageMemory:
         store_path: str,
         epsilon: float = 1e-6,
         novel_register_threshold: int = 3,
-        clip_higher: float = 1.0,
-        clip_lower: float = 0.3,
+        eta_high: float = 0.30,
+        eta_low: float = 0.10,
     ) -> None:
         self._store_path = store_path
         self._epsilon = epsilon
         self._novel_register_threshold = novel_register_threshold
-        # Asymmetric step sizes (Clip-Higher analog): raising a class is easier
-        # than overturning an established one, so clip_higher > clip_lower.
-        self._clip_higher = clip_higher
-        self._clip_lower = clip_lower
+        # Asymmetric EMA learning rates — HTA's analog of DAPO's Clip-Higher.
+        # Per courseware spec §003 item 4: η_high = 0.30 for A > 0,
+        # η_low = 0.10 for A < 0. Positive evidence moves the mean farther
+        # than equal-magnitude negative evidence so promising rare classes
+        # can survive long enough to prove themselves while single-sample
+        # failures don't erase accumulated learning.
+        self._eta_high = eta_high
+        self._eta_low = eta_low
 
         self._stats: dict[tuple[str, str], AdvantageStat] = {}
         # (decision_type, hypothesis_class, advantage) buffered within an episode.
@@ -111,7 +115,17 @@ class TypedAdvantageMemory:
             )
 
     def _update(self, decision_type: str, hypothesis_class: str, x: float) -> None:
-        """Asymmetric Welford update for one cell."""
+        """Asymmetric-eta EMA update for one cell.
+
+        ``mean <- mean + eta * (x - mean)`` with eta = eta_high if A > 0
+        else eta_low. EMA (constant influence per step) replaces the previous
+        Welford-with-asymmetric-step formulation, which gave the first
+        observation 100% influence (1/count) and so let a single lucky
+        early sample pin the mean for many subsequent updates — the
+        mathematical root of the lucky-sample lock-in identified in
+        issue #44 B8. EMA recovers from a single anomalous sample within
+        a handful of subsequent observations.
+        """
         key = (decision_type, hypothesis_class)
         stat = self._stats.get(key)
         if stat is None:
@@ -120,10 +134,17 @@ class TypedAdvantageMemory:
 
         stat.count += 1
         delta = x - stat.mean
-        # Positive evidence moves the mean farther than equal-magnitude
-        # negative evidence — the Clip-Higher analog.
-        step = self._clip_higher if x > stat.mean else self._clip_lower
-        stat.mean += step * delta / stat.count
+        # Branch on the sign of the advantage itself (per spec wording
+        # "η_high = 0.30 for A > 0"), not on the direction of the
+        # mean-relative delta.
+        eta = self._eta_high if x > 0 else self._eta_low
+        stat.mean += eta * delta
+        # m2 is retained as a rough dispersion estimator; under EMA it is
+        # no longer the textbook Welford variance aggregate but still
+        # tracks the magnitude of recent updates and is useful for
+        # debugging memory drift. Variance consumers (none in production
+        # today) should treat it as an EMA-of-squared-deltas, not as a
+        # population variance.
         delta2 = x - stat.mean
         stat.m2 += delta * delta2
 

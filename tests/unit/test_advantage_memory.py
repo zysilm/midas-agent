@@ -51,23 +51,45 @@ class TestTypedAdvantageMemory:
 
     def test_asymmetric_update_favours_positive(self, store_path):
         """Equal-magnitude +/- evidence: the mean ends up positive because
-        positive evidence moves the mean farther (clip_higher > clip_lower)."""
-        mem = TypedAdvantageMemory(store_path, clip_higher=1.0, clip_lower=0.3)
+        positive advantages step with eta_high and negative with eta_low
+        (Clip-Higher analog under EMA)."""
+        mem = TypedAdvantageMemory(store_path, eta_high=0.30, eta_low=0.10)
         # Alternating +1 / -1 about a starting mean of 0.
         for adv in [1.0, -1.0, 1.0, -1.0, 1.0, -1.0]:
             mem.buffer("dt", "c", adv)
         mem.commit_pending(outcome_score=1.0)
         assert mem.stat("dt", "c").mean > 0.0
 
-    def test_variance_property(self, store_path):
-        mem = TypedAdvantageMemory(store_path, clip_higher=1.0, clip_lower=1.0)
-        # Symmetric steps -> standard Welford -> variance close to statistics.
-        values = [0.2, 0.8, -0.4, 1.0, -0.1]
-        for v in values:
-            mem.buffer("dt", "c", v)
+    def test_ema_recovers_from_a_single_lucky_first_sample(self, store_path):
+        """The reason Welford-with-step was replaced: under it, the first
+        observation had 100% influence and pinned the mean for many later
+        updates. Under EMA, a single anomalous sample is absorbed within
+        a handful of subsequent observations.
+        """
+        mem = TypedAdvantageMemory(store_path, eta_high=0.30, eta_low=0.10)
+        # One lucky +5.0 spike, then ten neutral 0.0 samples.
+        mem.buffer("dt", "c", 5.0)
+        for _ in range(10):
+            mem.buffer("dt", "c", 0.0)
         mem.commit_pending(outcome_score=1.0)
-        stat = mem.stat("dt", "c")
-        assert stat.variance == pytest.approx(statistics.pvariance(values), abs=1e-6)
+        # The mean should have drifted well below the initial spike.
+        assert mem.stat("dt", "c").mean < 1.0
+
+    def test_default_etas_match_spec(self, store_path):
+        """Spec §003 item 4: eta_high=0.30, eta_low=0.10. The defaults must
+        not regress — earlier they were 1.0/0.3, which is 10x too large
+        and was the root of issue #44 B9.
+        """
+        mem = TypedAdvantageMemory(store_path)
+        # Buffer one positive sample of +1.0 -> mean should move by 0.30.
+        mem.buffer("dt", "c", 1.0)
+        mem.commit_pending(outcome_score=1.0)
+        assert mem.stat("dt", "c").mean == pytest.approx(0.30, abs=1e-9)
+        # One negative sample of -1.0 -> mean should move down by 0.10*(-1.0 - 0.30)
+        # = -0.13, i.e. to 0.17. (Branches on sign of x, not delta.)
+        mem.buffer("dt", "c", -1.0)
+        mem.commit_pending(outcome_score=1.0)
+        assert mem.stat("dt", "c").mean == pytest.approx(0.17, abs=1e-9)
 
     def test_outcome_score_weights_update(self, store_path):
         """A failed episode (outcome 0) updates with less weight than a passed one."""
