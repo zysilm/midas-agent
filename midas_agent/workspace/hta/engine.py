@@ -393,16 +393,31 @@ class HTAEngine:
         outcome: ExecutionOutcome,
         worklist: deque[_Step],
     ) -> str:
-        """A stuck execution node — consult the meta-judge for a continuation DP."""
+        """A stuck execution node — consult the meta-judge for a continuation DP,
+        or bypass straight to IC for unambiguous rule-based signals."""
         if self._decision_count >= self._config.max_decision_points:
             return cursor_id
 
-        dp = self._meta_judge.classify(
-            rule_inputs=_EMPTY_RULE_INPUTS,
-            is_stuck=True,
-            issue_summary=self._issue.description,
-            recent_trace=_format_trace(outcome.action_history),
+        # Signal 1 (same_file_read_5x) is a hard rule-based observation: no
+        # semantic judgement is needed to confirm the agent is stuck. Bypass
+        # the conservative meta-judge gate, which routinely suppresses IC even
+        # when activation is obviously appropriate (issue #45). Signals 2 and
+        # 3 remain gated by the meta-judge because they are softer (a repeated
+        # error could be a legitimate pattern; budget-burn without evidence
+        # could be a hard issue where evidence takes time to surface).
+        bypass_meta_judge = (
+            outcome.stuck_reason is not None
+            and outcome.stuck_reason.startswith("same_file_read_5x")
         )
+        if bypass_meta_judge:
+            dp = self._registry.get("investigation_continuation")
+        else:
+            dp = self._meta_judge.classify(
+                rule_inputs=_EMPTY_RULE_INPUTS,
+                is_stuck=True,
+                issue_summary=self._issue.description,
+                recent_trace=_format_trace(outcome.action_history),
+            )
         if dp is None:
             return cursor_id
 

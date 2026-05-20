@@ -123,7 +123,15 @@ DECISION_TYPE_HELP = {
     ),
     "fix_locality_scope": (
         "At which layer should the fix be applied? Each hypothesis names a layer "
-        "and the assert snippet that would prove that layer is the right one."
+        "(surface_patch / intermediate_layer / root_layer / dual_fix) AND a probe "
+        "script in `test_payload` that inserts an assertion at that layer tagged "
+        "with the EXACT message 'HTA_LAYER_HIT' — i.e. `assert <discriminating "
+        "condition for this layer>, 'HTA_LAYER_HIT'`. The probe then runs the "
+        "issue's reproduction. The verifier scores 1.0 only when that "
+        "sentinel-tagged assertion fires (i.e. the named layer is on the failing "
+        "code path); other outcomes score lower. Hypotheses that omit the sentinel "
+        "or use an indiscriminate condition will all tie and the winner will be "
+        "picked arbitrarily — write probes that genuinely discriminate."
     ),
     "spec_interpretation": (
         "How should the issue's specification be read? Each hypothesis is a "
