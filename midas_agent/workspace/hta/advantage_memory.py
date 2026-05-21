@@ -176,22 +176,89 @@ class SemanticExperienceMemory:
         current_issue_id: str | None = None,
     ) -> str:
         """Retrieve up to ``k`` relevant past entries, formatted for prompt
-        injection. Returns the cold-start placeholder when the log is empty
-        for this decision type.
+        injection. Returns the cold-start placeholder when no matching
+        entry exists.
 
-        Phase A: cold-start placeholder only. Phase C wires the retrieval
-        ranking (passes-first-with-one-fail, recency tiebreak, self-issue
-        exclusion, token budget).
+        Ranking (no embeddings — simple structured retrieval):
+
+        1. Hard filter on ``decision_type``.
+        2. Exclude any entry whose ``issue_id`` equals ``current_issue_id``
+           (no self-reference within the same issue).
+        3. Sort: passes (``outcome_score >= 0.5``) first, then by recency
+           (newer first within each outcome bucket).
+        4. Take the top ``k``.
+        5. If the result is all passes and any fail exists in the matching
+           set, replace the lowest-ranked pass with the most-recent fail
+           so the LLM sees at least one "what NOT to repeat" signal.
+        6. If the formatted output exceeds ``MAX_BIAS_SUMMARY_TOKENS``
+           (rough words * 1.3 estimate), drop entries from the end until
+           it fits.
         """
-        if not self._entries:
-            return _COLD_START_PLACEHOLDER
-        # Phase C will replace this with real retrieval; for now any
-        # caller during phase A also sees the placeholder if no entries
-        # of this decision_type exist yet.
-        matching = [e for e in self._entries if e.decision_type == decision_type]
+        matching = [
+            e for e in self._entries
+            if e.decision_type == decision_type
+            and (current_issue_id is None or e.issue_id != current_issue_id)
+        ]
         if not matching:
             return _COLD_START_PLACEHOLDER
-        return _COLD_START_PLACEHOLDER
+
+        # Stable sort: passes first, then newer first within each bucket.
+        # negate timestamp so larger (newer) sorts first.
+        ranked = sorted(
+            matching,
+            key=lambda e: (0 if e.outcome_score >= 0.5 else 1, -e.timestamp),
+        )
+        selected = ranked[:k]
+
+        # Failed-entry inclusion rule: if all selected are passes and there
+        # is a fail in the matching set, swap the lowest-ranked pass for
+        # the most-recent fail.
+        all_pass = all(e.outcome_score >= 0.5 for e in selected)
+        fails = [e for e in matching if e.outcome_score < 0.5]
+        if all_pass and fails and len(selected) > 0:
+            most_recent_fail = max(fails, key=lambda e: e.timestamp)
+            if most_recent_fail not in selected:
+                selected[-1] = most_recent_fail
+
+        # Format and apply token budget.
+        formatted = self._format_entries(selected)
+        while selected and self._estimate_tokens(formatted) > self.MAX_BIAS_SUMMARY_TOKENS:
+            selected = selected[:-1]
+            formatted = self._format_entries(selected)
+
+        if not selected:
+            return _COLD_START_PLACEHOLDER
+        return formatted
+
+    @staticmethod
+    def _format_entries(entries: list[SemanticMemoryEntry]) -> str:
+        """Format a list of entries as a numbered narrative block.
+
+        Layout is intentionally consistent across entries (entry #, issue,
+        outcome marker, winner reason, loser reason) so the LLM can
+        pattern-match. Wording is deliberately simple — the surrounding
+        hypothesis-gen prompt frames how to read them.
+        """
+        if not entries:
+            return _COLD_START_PLACEHOLDER
+        lines = ["Past experiences at this decision type:", ""]
+        for i, e in enumerate(entries, 1):
+            marker = "✅" if e.outcome_score >= 0.5 else "❌"
+            short_issue = e.issue_id.split("__")[-1] if "__" in e.issue_id else e.issue_id
+            lines.append(f"[#{i}, issue {short_issue}, outcome {marker}]")
+            lines.append(f"Winner: {e.winner_class}. {e.winner_summary}")
+            lines.append(f"Losers: {e.counterfactual_summary}")
+            lines.append("")
+        return "\n".join(lines).rstrip()
+
+    @staticmethod
+    def _estimate_tokens(text: str) -> int:
+        """Rough wordcount-to-token estimate (words * 1.3).
+
+        Exact tokenisation would be over-engineering — this is for budget
+        capping only, not for billing.
+        """
+        return int(len(text.split()) * 1.3)
 
     def entries_for(self, decision_type: str) -> list[SemanticMemoryEntry]:
         return [e for e in self._entries if e.decision_type == decision_type]
