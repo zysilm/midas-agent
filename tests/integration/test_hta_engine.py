@@ -61,8 +61,21 @@ def _text_response(text="done"):
     )
 
 
+def _distillation_response(winner="ok", losers="ok"):
+    """Canned submit_distillation tool response (issue H3)."""
+    return LLMResponse(
+        content=None,
+        tool_calls=[ToolCall(id="d1", name="submit_distillation", arguments={
+            "winner_summary": winner,
+            "counterfactual_summary": losers,
+        })],
+        usage=TokenUsage(input_tokens=1, output_tokens=1),
+    )
+
+
 def _make_system_llm(decision_point_verdict=False):
-    """Return a system_llm callable that answers hypothesis-gen and meta-judge calls."""
+    """Return a system_llm callable that answers hypothesis-gen, meta-judge,
+    and H3 memory-distillation calls."""
     def system_llm(req):
         tool_names = {t["function"]["name"] for t in (req.tools or [])}
         user = req.messages[-1]["content"] if req.messages else ""
@@ -71,6 +84,8 @@ def _make_system_llm(decision_point_verdict=False):
             dt = m.group(1) if m else "root_cause_localization"
             classes = _SEED_CLASSES.get(dt, ["a", "b", "c"])
             return _hyp_response(classes)
+        if "submit_distillation" in tool_names:
+            return _distillation_response()
         if "judge_decision_point" in tool_names:
             return LLMResponse(
                 content=None,
@@ -164,23 +179,35 @@ class TestHTAEngineRun:
         )
         assert rcl.winner_hypothesis == "framework_default_value"
 
-    def test_all_advantages_buffered_to_memory(self, memory):
+    def test_semantic_entry_buffered_per_decision_point(self, memory):
+        """Issue H3: the engine writes ONE SemanticMemoryEntry per
+        decision point (via _distill_memory_entry), not three per-hypothesis
+        numerical advantages. With both RCL and fix_locality resolving
+        cleanly, expect exactly 2 entries pending.
+        """
         verifier = _scored_verifier({
             "framework_default_value": 1.0,
             "operator_overload_path": 0.5,
             "serialization_roundtrip": 0.0,
+            "surface_patch": 0.9, "intermediate_layer": 0.4, "root_layer": 0.1,
         })
         engine = _build_engine(
             memory, _make_system_llm(),
-            verifiers={"root_cause_localization": verifier},
+            verifiers={
+                "root_cause_localization": verifier,
+                "fix_locality_scope": verifier,
+            },
         )
         engine.run()
-        # Winner AND losers are buffered (pending until commit_pending).
-        rcl_pending = [p for p in memory._pending if p[0] == "root_cause_localization"]
-        assert len(rcl_pending) == 3
-        # Advantages within a group are centred on zero.
-        advs = [p[2] for p in rcl_pending]
-        assert sum(advs) == pytest.approx(0.0, abs=1e-9)
+        rcl_entries = [e for e in memory._pending
+                       if e.decision_type == "root_cause_localization"]
+        fl_entries = [e for e in memory._pending
+                      if e.decision_type == "fix_locality_scope"]
+        assert len(rcl_entries) == 1
+        assert len(fl_entries) == 1
+        assert rcl_entries[0].winner_class == "framework_default_value"
+        assert rcl_entries[0].winner_summary  # non-empty distillation
+        assert rcl_entries[0].counterfactual_summary
 
     def test_advantage_collapse_triggers_escalation(self, memory):
         # All RCL hypotheses score identically -> std == 0 -> escalate.
@@ -222,13 +249,14 @@ class TestHTAEngineRun:
             config=HTAEngineConfig(max_escalations=1),
         )
         engine.run()
-        spec_pending = [p for p in memory._pending if p[0] == "spec_interpretation"]
-        # All three spec_interpretation hypotheses' advantages buffered.
-        assert len(spec_pending) == 3
-        # Spec_interpretation race produced real (non-zero) advantages
-        # because its verifier returned distinct scores.
-        advs = [p[2] for p in spec_pending]
-        assert any(abs(a) > 1e-6 for a in advs)
+        spec_pending = [e for e in memory._pending
+                        if e.decision_type == "spec_interpretation"]
+        # Issue H3: one semantic distillation entry per decision point.
+        assert len(spec_pending) == 1
+        # The race did produce real advantages on the winning hypothesis —
+        # they are not buffered numerically any more but the winner's class
+        # is recorded in the entry.
+        assert spec_pending[0].winner_class == "literal_reading"
 
     def test_budget_brake_stops_the_run(self, memory):
         engine = _build_engine(memory, _make_system_llm())

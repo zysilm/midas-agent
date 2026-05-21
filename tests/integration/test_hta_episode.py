@@ -15,7 +15,7 @@ import pytest
 from llm_agent_toolkit.llm.types import LLMResponse, ToolCall, TokenUsage
 from llm_agent_toolkit.types import Issue
 
-from midas_agent.workspace.hta.advantage_memory import TypedAdvantageMemory
+from midas_agent.workspace.hta.advantage_memory import SemanticExperienceMemory
 from midas_agent.workspace.hta.decision_point import DecisionPointRegistry
 from midas_agent.workspace.hta.engine import HTAEngineConfig
 from midas_agent.workspace.hta.workspace import HTAWorkspace
@@ -40,7 +40,7 @@ def _hyp(cls):
 
 
 def _system_llm(req):
-    """Answer hypothesis-generation calls; reject decision-point judging."""
+    """Answer hypothesis-generation + distillation calls; reject decision-point judging."""
     tool_names = {t["function"]["name"] for t in (req.tools or [])}
     user = req.messages[-1]["content"] if req.messages else ""
     if "submit_hypotheses" in tool_names:
@@ -51,6 +51,16 @@ def _system_llm(req):
             content=None,
             tool_calls=[ToolCall(id="t1", name="submit_hypotheses", arguments={
                 "hypotheses": [_hyp(c) for c in classes],
+            })],
+            usage=TokenUsage(input_tokens=1, output_tokens=1),
+        )
+    if "submit_distillation" in tool_names:
+        # Issue H3: per-decision-point distillation. Canned reply.
+        return LLMResponse(
+            content=None,
+            tool_calls=[ToolCall(id="d1", name="submit_distillation", arguments={
+                "winner_summary": "winner picked due to predicted path match",
+                "counterfactual_summary": "losers did not match the failing path",
             })],
             usage=TokenUsage(input_tokens=1, output_tokens=1),
         )
@@ -71,7 +81,7 @@ def _call_llm(req):
 @pytest.mark.integration
 class TestHTAEpisode:
     def _run_episode(self, train_dir, score):
-        memory = TypedAdvantageMemory(
+        memory = SemanticExperienceMemory(
             os.path.join(train_dir, "data", "advantage_memory.json"),
         )
         ws = HTAWorkspace(
