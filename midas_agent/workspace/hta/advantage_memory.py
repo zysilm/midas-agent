@@ -343,7 +343,32 @@ class SemanticExperienceMemory:
         self._registered_novel = set()
 
 
-# Backward-compat alias. Phase H replaces this with a module-level
-# __getattr__ that emits a DeprecationWarning on access. For now the bare
-# alias keeps existing imports working.
-TypedAdvantageMemory = SemanticExperienceMemory
+# ---------------------------------------------------------------------------
+# Backwards-compat alias (issue H3 phase H)
+# ---------------------------------------------------------------------------
+#
+# ``TypedAdvantageMemory`` was the numerical-advantage class this module
+# used to export. It is gone — the semantic store completely replaces it
+# — but we keep the name resolvable so any out-of-tree caller that still
+# imports it gets a DeprecationWarning the first time it touches the
+# symbol, instead of an ImportError at startup. The warning is emitted
+# from a module-level ``__getattr__`` (PEP 562), not from a bare alias,
+# so silent uses are visible to anyone running with ``-Wdefault``.
+
+import warnings  # noqa: E402  — kept next to its only consumer
+
+
+def __getattr__(name: str):
+    if name == "TypedAdvantageMemory":
+        warnings.warn(
+            "TypedAdvantageMemory was replaced by SemanticExperienceMemory "
+            "in issue H3 (semantic experience memory). The numerical-advantage "
+            "class no longer exists; this alias resolves to "
+            "SemanticExperienceMemory. Update your import: "
+            "`from midas_agent.workspace.hta.advantage_memory import "
+            "SemanticExperienceMemory`.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return SemanticExperienceMemory
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

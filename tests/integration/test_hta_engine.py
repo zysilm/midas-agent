@@ -15,7 +15,7 @@ import pytest
 from llm_agent_toolkit.llm.types import LLMResponse, ToolCall, TokenUsage
 from llm_agent_toolkit.types import Issue
 
-from midas_agent.workspace.hta.advantage_memory import TypedAdvantageMemory
+from midas_agent.workspace.hta.advantage_memory import SemanticExperienceMemory
 from midas_agent.workspace.hta.decision_point import DecisionPointRegistry
 from midas_agent.workspace.hta.engine import HTAEngine, HTAEngineConfig
 from midas_agent.workspace.hta.graph import NodeKind
@@ -134,7 +134,7 @@ def _build_engine(memory, system_llm, verifiers=None, config=None):
 @pytest.fixture
 def memory():
     d = tempfile.mkdtemp(prefix="hta_eng_")
-    return TypedAdvantageMemory(os.path.join(d, "mem.json"))
+    return SemanticExperienceMemory(os.path.join(d, "mem.json"))
 
 
 @pytest.mark.integration

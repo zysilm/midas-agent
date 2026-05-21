@@ -10,7 +10,7 @@ import pytest
 
 from llm_agent_toolkit.llm.types import LLMResponse, ToolCall, TokenUsage
 
-from midas_agent.workspace.hta.advantage_memory import TypedAdvantageMemory
+from midas_agent.workspace.hta.advantage_memory import SemanticExperienceMemory
 from midas_agent.workspace.hta.decision_point import DecisionPointRegistry
 from midas_agent.workspace.hta.hypothesis_gen import HypothesisGenerator
 
@@ -37,7 +37,7 @@ def _hyp(cls, **kw):
 @pytest.fixture
 def memory():
     d = tempfile.mkdtemp(prefix="hta_gen_")
-    return TypedAdvantageMemory(os.path.join(d, "mem.json"))
+    return SemanticExperienceMemory(os.path.join(d, "mem.json"))
 
 
 @pytest.fixture

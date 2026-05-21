@@ -13,7 +13,7 @@ import pytest
 from llm_agent_toolkit.types import Issue
 
 from midas_agent.workspace.base import Workspace
-from midas_agent.workspace.hta.advantage_memory import TypedAdvantageMemory
+from midas_agent.workspace.hta.advantage_memory import SemanticExperienceMemory
 from midas_agent.workspace.hta.decision_point import DecisionPointRegistry
 from midas_agent.workspace.hta.engine import HTAEngineConfig
 from midas_agent.workspace.hta.graph import DecisionGraph, NodeKind
@@ -27,7 +27,7 @@ def train_dir():
 
 def _make_workspace(train_dir, memory=None):
     if memory is None:
-        memory = MagicMock(spec=TypedAdvantageMemory)
+        memory = MagicMock(spec=SemanticExperienceMemory)
     return HTAWorkspace(
         workspace_id="ws-1",
         call_llm=MagicMock(),
@@ -92,7 +92,7 @@ class TestHTAWorkspace:
         assert ws._last_patch == ""
 
     def test_post_episode_commits_advantages_on_success(self, train_dir):
-        memory = MagicMock(spec=TypedAdvantageMemory)
+        memory = MagicMock(spec=SemanticExperienceMemory)
         ws = _make_workspace(train_dir, memory=memory)
         ws._last_graph = DecisionGraph()
         ws.post_episode({"ws-1": {"s_exec": 1.0}}, evicted_ids=[])
@@ -100,7 +100,7 @@ class TestHTAWorkspace:
         memory.discard_pending.assert_not_called()
 
     def test_post_episode_discards_when_no_graph(self, train_dir):
-        memory = MagicMock(spec=TypedAdvantageMemory)
+        memory = MagicMock(spec=SemanticExperienceMemory)
         ws = _make_workspace(train_dir, memory=memory)
         ws._last_graph = None
         ws.post_episode({"ws-1": {"s_exec": 0.0}}, evicted_ids=[])
@@ -108,7 +108,7 @@ class TestHTAWorkspace:
         memory.commit_pending.assert_not_called()
 
     def test_post_episode_exports_graph_json(self, train_dir):
-        ws = _make_workspace(train_dir, memory=MagicMock(spec=TypedAdvantageMemory))
+        ws = _make_workspace(train_dir, memory=MagicMock(spec=SemanticExperienceMemory))
         graph = DecisionGraph()
         graph.add_node(NodeKind.DECISION, "root_cause_localization")
         ws._last_graph = graph
@@ -118,7 +118,7 @@ class TestHTAWorkspace:
         assert len(os.listdir(graph_dir)) == 1
 
     def test_post_episode_missing_workspace_score_defaults_zero(self, train_dir):
-        memory = MagicMock(spec=TypedAdvantageMemory)
+        memory = MagicMock(spec=SemanticExperienceMemory)
         ws = _make_workspace(train_dir, memory=memory)
         ws._last_graph = DecisionGraph()
         ws.post_episode({}, evicted_ids=[])  # no entry for ws-1

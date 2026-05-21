@@ -15,7 +15,7 @@ import pytest
 from llm_agent_toolkit.llm.types import LLMResponse, ToolCall, TokenUsage
 from llm_agent_toolkit.types import Issue
 
-from midas_agent.workspace.hta.advantage_memory import TypedAdvantageMemory
+from midas_agent.workspace.hta.advantage_memory import SemanticExperienceMemory
 from midas_agent.workspace.hta.analysis.episode_summary import build_summary
 from midas_agent.workspace.hta.decision_point import DecisionPointRegistry
 from midas_agent.workspace.hta.engine import HTAEngine, HTAEngineConfig
@@ -113,7 +113,7 @@ def _fl_node(graph):
 @pytest.fixture
 def memory():
     d = tempfile.mkdtemp(prefix="hta_gaming_")
-    return TypedAdvantageMemory(os.path.join(d, "mem.json"))
+    return SemanticExperienceMemory(os.path.join(d, "mem.json"))
 
 
 @pytest.mark.unit

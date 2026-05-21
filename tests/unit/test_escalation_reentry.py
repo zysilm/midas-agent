@@ -18,7 +18,7 @@ import pytest
 from llm_agent_toolkit.llm.types import LLMResponse, ToolCall, TokenUsage
 from llm_agent_toolkit.types import Issue
 
-from midas_agent.workspace.hta.advantage_memory import TypedAdvantageMemory
+from midas_agent.workspace.hta.advantage_memory import SemanticExperienceMemory
 from midas_agent.workspace.hta.decision_point import DecisionPoint, DecisionPointRegistry, Hypothesis
 from midas_agent.workspace.hta.engine import HTAEngine, HTAEngineConfig, _DecisionResult
 from midas_agent.workspace.hta.graph import DecisionGraph, NodeKind, NodeStatus
@@ -34,7 +34,7 @@ def _text_response():
 def _build_engine(config=None):
     issue = Issue(issue_id="i1", repo="o/r", description="bug")
     d = tempfile.mkdtemp(prefix="hta_esc_")
-    memory = TypedAdvantageMemory(os.path.join(d, "mem.json"))
+    memory = SemanticExperienceMemory(os.path.join(d, "mem.json"))
     engine = HTAEngine(
         issue=issue,
         call_llm=MagicMock(return_value=_text_response()),
