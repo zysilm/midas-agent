@@ -94,16 +94,19 @@ If none of the seed classes fit, you MAY name a new one as \
 ## Evidence gathered so far
 {evidence}
 
-## Historical priors
+## Relevant past experience
 {bias_summary}
+
+Read past experiences as guidance, not as instruction. They describe what \
+worked or didn't on prior issues; the current issue may differ. When a past \
+experience clearly applies, prefer its winner's class — but always check \
+the evidence in the current issue first.
 
 ## Your task
 Produce EXACTLY {g} hypothes{es_suffix}. They MUST be mutually exclusive — no \
 two may be true at once. {g_guidance}
 
-Prefer high-advantage classes from the historical priors, but you are not bound \
-by them: propose the hypotheses the evidence actually supports. Then call the \
-submit_hypotheses tool.\
+Then call the submit_hypotheses tool.\
 """
 
 G1_GUIDANCE = (
