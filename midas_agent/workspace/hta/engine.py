@@ -13,8 +13,10 @@ nodes, and a hard cap on total steps.
 """
 from __future__ import annotations
 
+import json
 import logging
 import statistics
+import time
 from collections import deque
 from dataclasses import dataclass, field
 from typing import Callable
@@ -25,7 +27,14 @@ from llm_agent_toolkit.stdlib.react_agent import ActionRecord
 from llm_agent_toolkit.types import Issue
 
 from midas_agent.prompts import SYSTEM_PROMPT
-from midas_agent.workspace.hta.advantage_memory import TypedAdvantageMemory
+from midas_agent.workspace.hta.advantage_memory import (
+    SemanticExperienceMemory,
+    SemanticMemoryEntry,
+)
+from midas_agent.workspace.hta.prompts import (
+    MEMORY_DISTILLATION_PROMPT,
+    SUBMIT_DISTILLATION_TOOL,
+)
 from midas_agent.workspace.hta.decision_point import (
     DecisionPoint,
     DecisionPointRegistry,
@@ -66,6 +75,10 @@ class HTAEngineConfig:
     # for the rest of the episode. The counter allows escalation to fire
     # multiple times in deeply ambiguous issues, still bounded.
     max_escalations: int = 3
+    # Cap on semantic-memory distillation LLM calls per issue (issue H3).
+    # One call per decision point; typical issue fires 3-5 DPs so 6 leaves
+    # 20% slack. Bounds cost on pathological issues that splice 10+ DPs.
+    max_memory_distillations: int = 6
 
 
 @dataclass
@@ -112,7 +125,7 @@ class HTAEngine:
         call_llm: Callable[[LLMRequest], LLMResponse],
         system_llm: Callable[[LLMRequest], LLMResponse],
         actions: list[Action],
-        advantage_memory: TypedAdvantageMemory,
+        advantage_memory: SemanticExperienceMemory,
         registry: DecisionPointRegistry,
         run_bash: Callable[[str], str],
         write_file: Callable[[str, str], str],
@@ -166,6 +179,8 @@ class HTAEngine:
         # Per-issue Tier-2 budget: at most 3 LLM-judge calls per issue.
         self._tier2_calls_used = 0
         self._tier2_cap = 3
+        # Per-issue semantic-memory distillation budget (issue H3).
+        self._memory_distillations_used = 0
         # Stuck-signal context (per issue): RCL winner's evidence tokens and
         # the initial budget snapshot so signal 3 can compute the fraction
         # of budget burned without seeing predicted evidence.
@@ -181,6 +196,8 @@ class HTAEngine:
         self._tier2_calls_used = 0
         # Reset per-issue escalation counter (issue H1 D3).
         self._escalation_count = 0
+        # Reset per-issue distillation counter (issue H3).
+        self._memory_distillations_used = 0
         # Snapshot the starting budget for the stuck-signal 3 calculation.
         self._initial_budget = (
             self._balance_provider() if self._balance_provider is not None else None
@@ -382,7 +399,11 @@ class HTAEngine:
         if len(hypotheses) == 1:
             winner = hypotheses[0]
             winner.advantage = winner.score - 0.5
-            self._memory.buffer(dp.decision_type, winner.name, winner.advantage)
+            # Issue H3: distill one semantic memory entry per decision
+            # point instead of buffering numerical advantages per hypothesis.
+            entry = self._distill_memory_entry(dp, hypotheses, winner)
+            if entry is not None:
+                self._memory.buffer(entry)
             return _DecisionResult(
                 winner=winner, hypotheses=hypotheses,
                 gaming_detected=gaming_detected,
@@ -398,9 +419,11 @@ class HTAEngine:
                     and self._escalation_count < self._config.max_escalations):
                 # Per spec §008: do NOT update memory when there is no signal.
                 return _DecisionResult(hypotheses=hypotheses, escalated=True)
-            # Non-RCL collapse (or already escalated): fall back to raw score
-            # for selection; still buffer zero advantages so all classes show
-            # the observation but neither wins nor loses learning.
+            # Non-RCL collapse (or already escalated): fall back to raw
+            # score for selection. Issue H3: under semantic memory the
+            # "zero advantage buffer" loop has no analog — we still distill
+            # one entry so the LLM learns "verifier could not discriminate
+            # at this decision type".
             for h in hypotheses:
                 h.advantage = 0.0
             winner = max(hypotheses, key=lambda h: h.score)
@@ -409,9 +432,10 @@ class HTAEngine:
                 h.advantage = (h.score - mean) / std
             winner = max(hypotheses, key=lambda h: h.advantage)
 
-        # Write every hypothesis' advantage (winner and losers) into memory.
-        for h in hypotheses:
-            self._memory.buffer(dp.decision_type, h.name, h.advantage)
+        # Issue H3: one semantic distillation per decision point.
+        entry = self._distill_memory_entry(dp, hypotheses, winner)
+        if entry is not None:
+            self._memory.buffer(entry)
 
         # After an RCL decision: snapshot the winning class's evidence
         # lexicon so the next execution node's stuck-signal 3 can check
@@ -423,6 +447,94 @@ class HTAEngine:
             winner=winner, hypotheses=hypotheses,
             gaming_detected=gaming_detected,
         )
+
+    # ------------------------------------------------------------------
+    # Semantic memory distillation (issue H3)
+    # ------------------------------------------------------------------
+
+    def _distill_memory_entry(
+        self,
+        dp: DecisionPoint,
+        hypotheses: list[Hypothesis],
+        winner: Hypothesis,
+    ) -> SemanticMemoryEntry | None:
+        """Issue one ``system_llm`` call to turn a resolved decision point
+        into a :class:`SemanticMemoryEntry`. Returns None if the cap is
+        hit, the LLM declines to use the tool, or the API call fails.
+
+        The entry's ``outcome_score`` is left at 0.0 here; it is filled in
+        by :meth:`SemanticExperienceMemory.commit_pending` using the
+        episode's s_exec so failed-episode entries are stamped as failures.
+        """
+        if self._memory_distillations_used >= self._config.max_memory_distillations:
+            return None
+
+        prompt = MEMORY_DISTILLATION_PROMPT.format(
+            issue_id=self._issue.issue_id,
+            issue_excerpt=(self._issue.description or "")[:600],
+            decision_type=dp.decision_type,
+            hypotheses_block=self._format_hypotheses_for_distillation(hypotheses),
+            winner_class=winner.name,
+        )
+        messages = [
+            {"role": "system", "content":
+             "You distill one HTA decision into reusable lessons. "
+             "Always call submit_distillation."},
+            {"role": "user", "content": prompt},
+        ]
+        try:
+            resp = self._system_llm(
+                LLMRequest(messages=messages, model="default",
+                           tools=[SUBMIT_DISTILLATION_TOOL]),
+            )
+        except Exception as e:  # noqa: BLE001
+            logger.warning("Memory distillation API error: %s", e)
+            return None
+
+        if not resp.tool_calls:
+            return None
+
+        for tc in resp.tool_calls:
+            if tc.name != "submit_distillation":
+                continue
+            args = tc.arguments
+            if isinstance(args, str):
+                try:
+                    args = json.loads(args)
+                except json.JSONDecodeError:
+                    return None
+            if not isinstance(args, dict):
+                return None
+            winner_summary = str(args.get("winner_summary", "")).strip()[:400]
+            counterfactual_summary = (
+                str(args.get("counterfactual_summary", "")).strip()[:400]
+            )
+            if not winner_summary or not counterfactual_summary:
+                return None
+
+            self._memory_distillations_used += 1
+            return SemanticMemoryEntry(
+                decision_type=dp.decision_type,
+                winner_class=winner.name,
+                winner_summary=winner_summary,
+                counterfactual_summary=counterfactual_summary,
+                outcome_score=0.0,   # filled in at commit_pending
+                issue_id=self._issue.issue_id,
+                timestamp=time.time(),
+                is_novel_winner=winner.is_novel,
+            )
+        return None
+
+    @staticmethod
+    def _format_hypotheses_for_distillation(hyps: list[Hypothesis]) -> str:
+        lines = []
+        for i, h in enumerate(hyps, 1):
+            lines.append(
+                f"Hypothesis {i}: class={h.name}\n"
+                f"  rationale: {(h.rationale or '')[:200]}\n"
+                f"  verifier score: {h.score:.2f}, advantage: {h.advantage:+.2f}"
+            )
+        return "\n".join(lines)
 
     # ------------------------------------------------------------------
     # Execution steps

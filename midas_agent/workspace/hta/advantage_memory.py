@@ -119,26 +119,17 @@ class SemanticExperienceMemory:
     # Write path
     # ------------------------------------------------------------------
 
-    def buffer(self, *args, **kwargs) -> None:
-        """Buffer one pending entry. Called by the engine after distillation.
-
-        Accepts either the new contract (one :class:`SemanticMemoryEntry`
-        positional) or the legacy 3-arg numerical-advantage form
-        ``(decision_type, hypothesis_class, advantage)``, which is treated
-        as a no-op during the H3 transition. The legacy shim is removed in
-        H3 phase D when the engine is rewired.
+    def buffer(self, entry: SemanticMemoryEntry) -> None:
+        """Buffer one pending entry. Called by the engine after distillation
+        produces it. The entry is committed to the persistent log by
+        :meth:`commit_pending` at ``post_episode``.
         """
-        if len(args) == 1 and isinstance(args[0], SemanticMemoryEntry):
-            self._pending.append(args[0])
-            return
-        if len(args) == 3 and not kwargs:
-            # Legacy numerical call from the pre-H3 engine — no-op while
-            # phases A-C land. Engine is updated in phase D.
-            return
-        raise TypeError(
-            "SemanticExperienceMemory.buffer expects a SemanticMemoryEntry "
-            f"(got args={args!r}, kwargs={kwargs!r})"
-        )
+        if not isinstance(entry, SemanticMemoryEntry):
+            raise TypeError(
+                "SemanticExperienceMemory.buffer expects a SemanticMemoryEntry "
+                f"(got {type(entry).__name__})"
+            )
+        self._pending.append(entry)
 
     def commit_pending(self, outcome_score: float) -> None:
         """Stamp each pending entry with the episode outcome and append to the log.

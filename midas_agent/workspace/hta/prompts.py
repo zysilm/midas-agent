@@ -220,3 +220,79 @@ correct choice.
 Call judge_decision_point with your verdict. Set is_decision_point=true ONLY if \
 all three conditions hold.\
 """
+
+
+# ---------------------------------------------------------------------------
+# Semantic memory distillation (issue H3)
+# ---------------------------------------------------------------------------
+
+SUBMIT_DISTILLATION_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "submit_distillation",
+        "description": (
+            "Distill one HTA decision point's outcome into two short "
+            "natural-language lessons: why the winner was selected, and "
+            "why the losing hypotheses lost. Each lesson is one to two "
+            "sentences, written so a future agent at a similar decision "
+            "can read it as guidance."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "winner_summary": {
+                    "type": "string",
+                    "description": (
+                        "1-2 sentences: why the winning hypothesis was "
+                        "the right call given the issue and the verifier "
+                        "evidence. Concrete, not abstract."
+                    ),
+                },
+                "counterfactual_summary": {
+                    "type": "string",
+                    "description": (
+                        "1-2 sentences: why the losing hypotheses were "
+                        "less plausible. If they were nearly tied with "
+                        "the winner, say so. If the verifier could not "
+                        "tell them apart, say so."
+                    ),
+                },
+            },
+            "required": ["winner_summary", "counterfactual_summary"],
+        },
+    },
+}
+
+MEMORY_DISTILLATION_PROMPT = """\
+You are distilling one HTA decision point into reusable lessons for future \
+issues.
+
+## Issue
+{issue_id}
+
+## Issue excerpt
+{issue_excerpt}
+
+## Decision point type
+{decision_type}
+
+## Hypotheses considered
+{hypotheses_block}
+
+## Winner
+{winner_class}
+
+## Your task
+Write two short lessons (each 1-2 sentences):
+
+1. **winner_summary**: why the winner was correctly selected given the \
+issue and the verifier scores. Be concrete — name the specific signal \
+that made it win. If the win was weak (e.g. only marginally better than \
+runners-up), acknowledge that.
+
+2. **counterfactual_summary**: why the losing hypotheses lost. If they \
+lost because the verifier couldn't discriminate (all scored near-equal), \
+note that explicitly — that is useful future signal.
+
+Call submit_distillation exactly once.\
+"""

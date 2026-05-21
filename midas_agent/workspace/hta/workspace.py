@@ -19,7 +19,7 @@ from llm_agent_toolkit.stdlib.action import Action
 from llm_agent_toolkit.types import Issue
 
 from midas_agent.workspace.base import Workspace
-from midas_agent.workspace.hta.advantage_memory import TypedAdvantageMemory
+from midas_agent.workspace.hta.advantage_memory import SemanticExperienceMemory
 from midas_agent.workspace.hta.decision_point import DecisionPointRegistry
 from midas_agent.workspace.hta.engine import HTAEngine, HTAEngineConfig
 from midas_agent.workspace.hta.graph import DecisionGraph
@@ -34,7 +34,7 @@ class HTAWorkspace(Workspace):
         call_llm: Callable[[LLMRequest], LLMResponse],
         system_llm: Callable[[LLMRequest], LLMResponse],
         actions: list[Action],
-        advantage_memory: TypedAdvantageMemory,
+        advantage_memory: SemanticExperienceMemory,
         registry: DecisionPointRegistry,
         engine_config: HTAEngineConfig,
         train_dir: str,

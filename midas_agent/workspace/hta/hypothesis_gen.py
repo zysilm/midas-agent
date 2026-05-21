@@ -1,9 +1,10 @@
 """HypothesisGenerator — produces G mutually exclusive hypotheses per decision point.
 
 One LLM call (via the system LLM, with a function-calling tool) generates the
-hypotheses. Generation is biased — but not bound — by TypedAdvantageMemory:
-the historical priors for the decision type are injected into the prompt, and
-when G has collapsed to 1 the prompt asks for a single concrete commitment.
+hypotheses. Generation is biased — but not bound — by SemanticExperienceMemory:
+the relevant past experience for the decision type is injected into the prompt
+as narrative guidance (issue H3), and when G has collapsed to 1 the prompt
+asks for a single concrete commitment.
 """
 from __future__ import annotations
 
@@ -14,7 +15,7 @@ from typing import Callable
 
 from llm_agent_toolkit.llm.types import LLMRequest, LLMResponse
 
-from midas_agent.workspace.hta.advantage_memory import TypedAdvantageMemory
+from midas_agent.workspace.hta.advantage_memory import SemanticExperienceMemory
 from midas_agent.workspace.hta.decision_point import DecisionPoint, Hypothesis, NOVEL_PREFIX
 from midas_agent.workspace.hta.prompts import (
     DECISION_TYPE_HELP,
@@ -39,7 +40,7 @@ class HypothesisGenerator:
         issue_description: str,
         evidence: str,
         g: int,
-        memory: TypedAdvantageMemory,
+        memory: SemanticExperienceMemory,
     ) -> list[Hypothesis]:
         """Generate up to ``g`` hypotheses for ``dp``. Returns [] only on total failure."""
         g = max(1, min(3, g))
