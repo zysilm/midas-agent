@@ -276,6 +276,8 @@ def build_summary(
     initial_budget: int | None,
     final_budget: int | None,
     tier2_calls_used: int,
+    memory_distillations_emitted: int = 0,
+    memory_distillation_cap: int = 0,
 ) -> dict[str, Any]:
     """Walk a completed graph and produce the per-episode summary dict."""
     rcl = _rcl_section(graph)
@@ -310,6 +312,11 @@ def build_summary(
         "backward_edge_count": backward_edges,
         "tier2_calls_used": tier2_calls_used,
         "escalation_count": escalation_count,
+        # Issue H3: per-episode semantic-memory distillation accounting.
+        "memory": {
+            "distillations_emitted": memory_distillations_emitted,
+            "distillation_cap": memory_distillation_cap,
+        },
     }
 
 

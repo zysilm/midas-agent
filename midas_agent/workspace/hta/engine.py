@@ -259,6 +259,8 @@ class HTAEngine:
                 initial_budget=self._initial_budget,
                 final_budget=final_budget,
                 tier2_calls_used=self._tier2_calls_used,
+                memory_distillations_emitted=self._memory_distillations_used,
+                memory_distillation_cap=self._config.max_memory_distillations,
             )
             path = write_summary(summary, self._config.run_dir)
             logger.info("Wrote HTA episode summary -> %s", path)

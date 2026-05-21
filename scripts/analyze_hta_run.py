@@ -480,6 +480,15 @@ def table_6_cost(run: dict, dag: dict) -> str:
         sum(r["summary"].get("tier2_calls_used", 0) for r in run.values())
         / max(1, len(run))
     )
+    avg_distill = (
+        sum(r["summary"].get("memory", {}).get("distillations_emitted", 0)
+            for r in run.values())
+        / max(1, len(run))
+    )
+    distill_cap = max(
+        (r["summary"].get("memory", {}).get("distillation_cap", 0)
+         for r in run.values()), default=0,
+    )
     ratio_str = f"{ratio:.2f}" if ratio else "n/a"
     return (
         "## Table 6 — Cost & overhead\n\n"
@@ -494,15 +503,61 @@ def table_6_cost(run: dict, dag: dict) -> str:
         f"Average decision points per issue:                  {avg_dp:.1f}\n"
         f"Average IC calls per issue:                         {avg_ic:.2f}\n"
         f"Average Tier-2 calls per issue:                     {avg_tier2:.2f}  (capped at 3)\n"
+        f"Average memory distillations per issue (H3):        {avg_distill:.2f}  (capped at {distill_cap})\n"
         f"```"
     )
+
+
+def table_7_semantic_memory(run: dict, run_dir: Path) -> str:
+    """Memory accumulation across episodes — issue H3 introspection.
+
+    Episodes are listed in outcomes.jsonl order. Per-episode decision count
+    comes from the analysis summary; distillations_emitted is the new H3
+    counter. Cumulative entries is the running sum, useful for spotting
+    silent distillation failures (cumulative growing far slower than
+    decisions would suggest).
+    """
+    outcomes_path = run_dir / "outcomes.jsonl"
+    order: list[str] = []
+    if outcomes_path.exists():
+        for line in outcomes_path.read_text().splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                rec = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            iid = rec.get("issue_id")
+            if iid and iid not in order:
+                order.append(iid)
+    if not order:
+        order = sorted(run)
+
+    lines = [
+        "## Table 7 — Semantic memory accumulation",
+        "",
+        "| Ep | Issue | Decisions | Distillations | Cumulative entries |",
+        "|---|---|---|---|---|",
+    ]
+    cumulative = 0
+    for i, iid in enumerate(order, 1):
+        rec = run.get(iid)
+        if rec is None:
+            continue
+        s = rec["summary"]
+        dec = s.get("decision_count", 0)
+        dist = s.get("memory", {}).get("distillations_emitted", 0)
+        cumulative += dist
+        lines.append(f"| {i} | {iid} | {dec} | {dist} | {cumulative} |")
+    return "\n".join(lines)
 
 
 # ---------------------------------------------------------------------------
 # Driver
 # ---------------------------------------------------------------------------
 
-def generate_report(run: dict, dag: dict) -> str:
+def generate_report(run: dict, dag: dict, run_dir: Path) -> str:
     parts = [
         "# HTA evaluation report",
         "",
@@ -521,6 +576,8 @@ def generate_report(run: dict, dag: dict) -> str:
         "",
         table_6_cost(run, dag),
         "",
+        table_7_semantic_memory(run, run_dir),
+        "",
     ]
     return "\n".join(parts)
 
@@ -536,7 +593,7 @@ def main() -> int:
     if not run:
         print(f"WARNING: no analysis files under {args.run_dir}/analysis/",
               file=sys.stderr)
-    report = generate_report(run, dag)
+    report = generate_report(run, dag, args.run_dir)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(report)
     print(f"Wrote report ({len(report)} chars) -> {args.output}")
