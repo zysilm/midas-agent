@@ -322,14 +322,16 @@ class WorkspaceManager:
         existing = getattr(self, "_advantage_memory", None)
         if existing is not None:
             return existing
-        from midas_agent.workspace.hta.advantage_memory import TypedAdvantageMemory
+        from midas_agent.workspace.hta.advantage_memory import SemanticExperienceMemory
 
-        memory = TypedAdvantageMemory(
+        # Issue H3: the numerical EMA hyperparameters (epsilon, eta_high,
+        # eta_low) are no longer meaningful — the memory is now an
+        # append-only log of semantic experience entries. Those config
+        # fields remain in MidasConfig but are unused; left dangling
+        # rather than removed to keep this change small.
+        memory = SemanticExperienceMemory(
             store_path=os.path.join(self._train_dir, "data", "advantage_memory.json"),
-            epsilon=self._config.hta_epsilon,
             novel_register_threshold=self._config.hta_novel_threshold,
-            eta_high=self._config.hta_eta_high,
-            eta_low=self._config.hta_eta_low,
         )
         self._advantage_memory = memory
         return memory

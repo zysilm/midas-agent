@@ -1,81 +1,110 @@
-"""TypedAdvantageMemory — persistent typed memory of hypothesis advantages.
+"""SemanticExperienceMemory — append-only log of distilled HTA decision lessons.
 
-Each decision point produces a group-relative advantage for every hypothesis
-(winner and losers). Those advantages are accumulated here, keyed by
-``(decision_type, hypothesis_class)``, as running statistics. The memory then
-biases future hypothesis generation and drives adaptive G — when one class is a
-decisive favourite, G collapses to 1 and the decision point degenerates to
-plain ReAct (zero overhead).
+Replaces the numerical ``TypedAdvantageMemory`` (issue H3, 2026-05-21). The
+old class accumulated per-``(decision_type, hypothesis_class)`` running
+statistics (mean / variance, asymmetric EMA), but those numbers were a
+training-time policy-gradient concept used at inference time: they had no
+causal path to behaviour. ``argmax A_i`` inside a group is monotonic with
+``argmax score_i`` so the rescaling was a no-op, and the cross-issue prompt
+injection of ``mean = +0.42`` gave the LLM an arbitrary number it had no way
+to act on.
 
-Knowledge transfers across issues by *structural* key, not by surface text
-similarity: a serialization-roundtrip bug in astropy and one in django share
-the same ``(root_cause_localization, serialization_roundtrip)`` row.
+This module records concrete past experiences instead: one
+:class:`SemanticMemoryEntry` per decision point, holding a winner_summary,
+a counterfactual_summary, and the episode outcome. Future hypothesis-gen
+prompts at the same decision type retrieve the top-K relevant entries via
+``bias_summary`` and inject them as narrative guidance — *what worked* and
+*what didn't*, not aggregated statistics.
 
-Persistence mirrors LessonStore: atomic JSON via ``.tmp`` + ``os.replace``,
-loaded on construction. The per-episode ``_pending`` buffer is never persisted —
-it is applied (and cleared) by ``commit_pending()`` in ``post_episode``, so a
-crashed episode cannot poison the memory.
+Methodologically aligned with *Training-Free Group Relative Policy
+Optimization* (arXiv:2510.08191, Oct 2025): they reach the same conclusion
+for math reasoning; we instantiate the same idea for SWE-bench decision
+points.
+
+Persistence: atomic JSON via ``.tmp`` + ``os.replace``, loaded on
+construction. Schema version 2. v1 numerical stores are not migrated —
+fresh ``train_dir`` per evaluation protocol means cold starts are clean.
+The per-episode ``_pending`` buffer is never persisted; it is applied
+(and cleared) by :meth:`commit_pending` at ``post_episode``, so a crashed
+episode cannot poison the memory.
 """
 from __future__ import annotations
 
 import json
 import logging
 import os
-from dataclasses import dataclass
+import time
+from dataclasses import asdict, dataclass, field
 
 logger = logging.getLogger(__name__)
 
 
 @dataclass
-class AdvantageStat:
-    """Running statistics for one (decision_type, hypothesis_class) cell.
+class SemanticMemoryEntry:
+    """One distilled lesson from one decision point in one episode.
 
-    ``mean``/``m2`` are maintained by an asymmetric variant of Welford's
-    online algorithm (see TypedAdvantageMemory._update).
+    Append-only. The replacement for the old ``AdvantageStat`` — instead of
+    "class X has mean advantage +0.42 over n=8 observations", we record
+    "at decision point X in issue Y, the agent chose class Z because W, and
+    classes A and B were less plausible because V, and the episode outcome
+    was 0.8". The LLM reads concrete past experiences at the next decision
+    point; it does not read aggregated statistics.
     """
 
-    decision_type: str
-    hypothesis_class: str
-    count: int = 0
-    mean: float = 0.0
-    m2: float = 0.0
+    decision_type: str          # e.g. "root_cause_localization"
+    winner_class: str           # the hypothesis_class that won (seed or __novel__:slug)
+    winner_summary: str         # 1-2 sentences: why this won
+    counterfactual_summary: str # 1-2 sentences: why the losers lost
+    outcome_score: float        # episode s_exec, in [0.0, 1.0]
+    issue_id: str               # e.g. "astropy__astropy-12907"
+    timestamp: float            # epoch seconds at entry creation
+    is_novel_winner: bool       # winner_class.startswith("__novel__")
 
-    @property
-    def variance(self) -> float:
-        return self.m2 / self.count if self.count > 1 else 0.0
+
+# Cold-start placeholder shown when no prior experience exists for a
+# given decision type. Phrased so the LLM recognises it as "no priors,
+# don't try to invent a class to match anything".
+_COLD_START_PLACEHOLDER = (
+    "No prior experience for this decision type — make a fresh decision "
+    "based on the issue and evidence."
+)
 
 
-class TypedAdvantageMemory:
-    """Persistent store of typed hypothesis advantages.
+class SemanticExperienceMemory:
+    """Append-only log of semantic memory entries, with simple structured
+    retrieval at decision-point time. Replaces ``TypedAdvantageMemory``.
 
-    Shared across all workspaces and episodes in a run — constructed once and
-    handed to every HTAWorkspace, which is what makes the cold-to-warm
-    transition meaningful.
+    Shared across all workspaces and episodes in a run — constructed once
+    by the workspace manager and handed to every HTAWorkspace, which is
+    what makes the cold-to-warm transition meaningful.
+
+    Persistence schema (v2)::
+
+        {
+          "schema_version": 2,
+          "entries": [ {<SemanticMemoryEntry as dict>}, ... ],
+          "novel_counter": { <slug>: <count>, ... },
+          "registered_novel": [<slug>, ...]
+        }
+
+    Cold start = empty entries list. v1 numerical stores are not migrated.
     """
+
+    SCHEMA_VERSION = 2
+    MAX_BIAS_SUMMARY_TOKENS = 800   # cap on prompt-injected experience
+    DEFAULT_K = 5                   # entries retrieved per decision type
 
     def __init__(
         self,
         store_path: str,
-        epsilon: float = 1e-6,
         novel_register_threshold: int = 3,
-        eta_high: float = 0.30,
-        eta_low: float = 0.10,
     ) -> None:
         self._store_path = store_path
-        self._epsilon = epsilon
         self._novel_register_threshold = novel_register_threshold
-        # Asymmetric EMA learning rates — HTA's analog of DAPO's Clip-Higher.
-        # Per courseware spec §003 item 4: η_high = 0.30 for A > 0,
-        # η_low = 0.10 for A < 0. Positive evidence moves the mean farther
-        # than equal-magnitude negative evidence so promising rare classes
-        # can survive long enough to prove themselves while single-sample
-        # failures don't erase accumulated learning.
-        self._eta_high = eta_high
-        self._eta_low = eta_low
 
-        self._stats: dict[tuple[str, str], AdvantageStat] = {}
-        # (decision_type, hypothesis_class, advantage) buffered within an episode.
-        self._pending: list[tuple[str, str, float]] = []
+        self._entries: list[SemanticMemoryEntry] = []
+        # Buffered within an episode; applied at post_episode.
+        self._pending: list[SemanticMemoryEntry] = []
         # Slug -> times seen, for __novel__ auto-registration.
         self._novel_counter: dict[str, int] = {}
         self._registered_novel: set[str] = set()
@@ -84,107 +113,99 @@ class TypedAdvantageMemory:
             self.load()
 
     def __len__(self) -> int:
-        return len(self._stats)
+        return len(self._entries)
 
     # ------------------------------------------------------------------
-    # Mid-episode buffering / post-episode commit
+    # Write path
     # ------------------------------------------------------------------
 
-    def buffer(self, decision_type: str, hypothesis_class: str, advantage: float) -> None:
-        """Buffer one hypothesis' advantage. Called by the engine per hypothesis."""
-        self._pending.append((decision_type, hypothesis_class, advantage))
+    def buffer(self, *args, **kwargs) -> None:
+        """Buffer one pending entry. Called by the engine after distillation.
+
+        Accepts either the new contract (one :class:`SemanticMemoryEntry`
+        positional) or the legacy 3-arg numerical-advantage form
+        ``(decision_type, hypothesis_class, advantage)``, which is treated
+        as a no-op during the H3 transition. The legacy shim is removed in
+        H3 phase D when the engine is rewired.
+        """
+        if len(args) == 1 and isinstance(args[0], SemanticMemoryEntry):
+            self._pending.append(args[0])
+            return
+        if len(args) == 3 and not kwargs:
+            # Legacy numerical call from the pre-H3 engine — no-op while
+            # phases A-C land. Engine is updated in phase D.
+            return
+        raise TypeError(
+            "SemanticExperienceMemory.buffer expects a SemanticMemoryEntry "
+            f"(got args={args!r}, kwargs={kwargs!r})"
+        )
 
     def commit_pending(self, outcome_score: float) -> None:
-        """Apply all buffered advantages, weighted by the episode outcome.
+        """Stamp each pending entry with the episode outcome and append to the log.
 
         ``outcome_score`` is the episode's execution score (s_exec, in [0, 1]).
-        A failed episode still updates the memory but with reduced weight, so a
-        hypothesis that won its decision point yet led nowhere is not over-
-        rewarded. Called once from HTAWorkspace.post_episode.
+        Failed-episode entries are stamped as failures so ``bias_summary`` can
+        surface them as "what didn't work" guidance. Called once from
+        :meth:`HTAWorkspace.post_episode`.
         """
-        outcome_weight = 0.5 + 0.5 * max(0.0, min(1.0, outcome_score))
-        for decision_type, hypothesis_class, advantage in self._pending:
-            self._update(decision_type, hypothesis_class, advantage * outcome_weight)
+        clamped = max(0.0, min(1.0, float(outcome_score)))
+        for entry in self._pending:
+            entry.outcome_score = clamped
+            self._entries.append(entry)
         n = len(self._pending)
         self._pending.clear()
         if n:
             self.save()
             logger.info(
-                "TypedAdvantageMemory: committed %d advantages (outcome=%.2f)",
-                n, outcome_score,
+                "SemanticExperienceMemory: committed %d entries (outcome=%.2f)",
+                n, clamped,
             )
 
-    def _update(self, decision_type: str, hypothesis_class: str, x: float) -> None:
-        """Asymmetric-eta EMA update for one cell.
-
-        ``mean <- mean + eta * (x - mean)`` with eta = eta_high if A > 0
-        else eta_low. EMA (constant influence per step) replaces the previous
-        Welford-with-asymmetric-step formulation, which gave the first
-        observation 100% influence (1/count) and so let a single lucky
-        early sample pin the mean for many subsequent updates — the
-        mathematical root of the lucky-sample lock-in identified in
-        issue #44 B8. EMA recovers from a single anomalous sample within
-        a handful of subsequent observations.
-        """
-        key = (decision_type, hypothesis_class)
-        stat = self._stats.get(key)
-        if stat is None:
-            stat = AdvantageStat(decision_type=decision_type, hypothesis_class=hypothesis_class)
-            self._stats[key] = stat
-
-        stat.count += 1
-        delta = x - stat.mean
-        # Branch on the sign of the advantage itself (per spec wording
-        # "η_high = 0.30 for A > 0"), not on the direction of the
-        # mean-relative delta.
-        eta = self._eta_high if x > 0 else self._eta_low
-        stat.mean += eta * delta
-        # m2 is retained as a rough dispersion estimator; under EMA it is
-        # no longer the textbook Welford variance aggregate but still
-        # tracks the magnitude of recent updates and is useful for
-        # debugging memory drift. Variance consumers (none in production
-        # today) should treat it as an EMA-of-squared-deltas, not as a
-        # population variance.
-        delta2 = x - stat.mean
-        stat.m2 += delta * delta2
-
     def discard_pending(self) -> None:
-        """Drop buffered advantages without applying them (e.g. crashed episode)."""
+        """Drop buffered entries without applying them (e.g. crashed episode)."""
         self._pending.clear()
 
     # ------------------------------------------------------------------
-    # Generation bias
+    # Read path (phase C will fill in retrieval ranking + formatting)
     # ------------------------------------------------------------------
 
-    # Note: an `adaptive_g` mechanism that returned G ∈ {1, 2, 3} based on
-    # historical margin was removed (issue #44, C1/B1). It produced a
-    # permanent G=1 absorbing state: once any class crossed the margin
-    # threshold on noisy early data, G collapsed to 1 forever for that
-    # decision type, and no further memory updates could happen. The
-    # courseware spec §003 calls for fixed G=3 with one slot reserved for
-    # exploration; HTAEngine now honours that directly.
+    def bias_summary(
+        self,
+        decision_type: str,
+        k: int = DEFAULT_K,
+        current_issue_id: str | None = None,
+    ) -> str:
+        """Retrieve up to ``k`` relevant past entries, formatted for prompt
+        injection. Returns the cold-start placeholder when the log is empty
+        for this decision type.
 
-    def bias_summary(self, decision_type: str) -> str:
-        """Human-readable priors block injected into the hypothesis-gen prompt."""
-        stats = [s for s in self._stats.values() if s.decision_type == decision_type]
-        if not stats:
-            return "No historical data yet for this decision type (cold start)."
-        stats.sort(key=lambda s: s.mean, reverse=True)
-        parts = [
-            f"{s.hypothesis_class} [n={s.count}, A={s.mean:+.2f}]"
-            for s in stats
-        ]
-        return "Historical priors (count, mean advantage): " + "; ".join(parts)
+        Phase A: cold-start placeholder only. Phase C wires the retrieval
+        ranking (passes-first-with-one-fail, recency tiebreak, self-issue
+        exclusion, token budget).
+        """
+        if not self._entries:
+            return _COLD_START_PLACEHOLDER
+        # Phase C will replace this with real retrieval; for now any
+        # caller during phase A also sees the placeholder if no entries
+        # of this decision_type exist yet.
+        matching = [e for e in self._entries if e.decision_type == decision_type]
+        if not matching:
+            return _COLD_START_PLACEHOLDER
+        return _COLD_START_PLACEHOLDER
+
+    def entries_for(self, decision_type: str) -> list[SemanticMemoryEntry]:
+        return [e for e in self._entries if e.decision_type == decision_type]
 
     # ------------------------------------------------------------------
-    # __novel__ auto-registration
+    # __novel__ auto-registration (unchanged from numerical version)
     # ------------------------------------------------------------------
 
     def maybe_register_novel(self, slug: str) -> bool:
         """Record one occurrence of a novel class/decision-type slug.
 
-        Returns True once the slug has been seen ``novel_register_threshold``
-        times — from then on it is a first-class registered key.
+        Returns True once the slug has been seen
+        ``novel_register_threshold`` times — from then on it is a
+        first-class registered key.
         """
         if slug in self._registered_novel:
             return True
@@ -192,7 +213,7 @@ class TypedAdvantageMemory:
         registered = self._novel_counter[slug] >= self._novel_register_threshold
         if registered:
             self._registered_novel.add(slug)
-            logger.info("TypedAdvantageMemory: registered novel slug %r", slug)
+            logger.info("SemanticExperienceMemory: registered novel slug %r", slug)
         self.save()
         return registered
 
@@ -203,33 +224,15 @@ class TypedAdvantageMemory:
         return sorted(self._registered_novel)
 
     # ------------------------------------------------------------------
-    # Accessors
-    # ------------------------------------------------------------------
-
-    def stat(self, decision_type: str, hypothesis_class: str) -> AdvantageStat | None:
-        return self._stats.get((decision_type, hypothesis_class))
-
-    def all_stats(self) -> list[AdvantageStat]:
-        return list(self._stats.values())
-
-    # ------------------------------------------------------------------
     # Persistence
     # ------------------------------------------------------------------
 
     def save(self) -> None:
-        """Atomically write the memory to disk as JSON."""
+        """Atomically write the memory to disk as JSON (schema v2)."""
         os.makedirs(os.path.dirname(self._store_path) or ".", exist_ok=True)
         data = {
-            "stats": [
-                {
-                    "decision_type": s.decision_type,
-                    "hypothesis_class": s.hypothesis_class,
-                    "count": s.count,
-                    "mean": s.mean,
-                    "m2": s.m2,
-                }
-                for s in self._stats.values()
-            ],
+            "schema_version": self.SCHEMA_VERSION,
+            "entries": [asdict(e) for e in self._entries],
             "novel_counter": self._novel_counter,
             "registered_novel": sorted(self._registered_novel),
         }
@@ -239,30 +242,50 @@ class TypedAdvantageMemory:
         os.replace(tmp, self._store_path)
 
     def load(self) -> None:
-        """Load the memory from disk; reset to empty on any failure."""
+        """Load the memory from disk. v1 numerical stores are rejected with a
+        warning — fresh ``train_dir`` per protocol means no migration is
+        attempted; the in-memory state is reset to empty.
+        """
         try:
             with open(self._store_path) as f:
                 data = json.load(f)
-            self._stats = {}
-            for item in data.get("stats", []):
-                stat = AdvantageStat(
-                    decision_type=item["decision_type"],
-                    hypothesis_class=item["hypothesis_class"],
-                    count=item.get("count", 0),
-                    mean=item.get("mean", 0.0),
-                    m2=item.get("m2", 0.0),
-                )
-                self._stats[(stat.decision_type, stat.hypothesis_class)] = stat
-            self._novel_counter = dict(data.get("novel_counter", {}))
-            self._registered_novel = set(data.get("registered_novel", []))
-            logger.info(
-                "TypedAdvantageMemory: loaded %d cells from %s",
-                len(self._stats), self._store_path,
-            )
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.warning(
-                "TypedAdvantageMemory: failed to load from %s: %s", self._store_path, e,
+                "SemanticExperienceMemory: failed to load from %s: %s",
+                self._store_path, e,
             )
-            self._stats = {}
-            self._novel_counter = {}
-            self._registered_novel = set()
+            self._reset()
+            return
+
+        version = data.get("schema_version")
+        if version != self.SCHEMA_VERSION:
+            logger.warning(
+                "SemanticExperienceMemory: ignoring %s — schema_version %r "
+                "is not v%d (likely an old numerical-advantage store). "
+                "Starting fresh; fresh train_dir per eval protocol.",
+                self._store_path, version, self.SCHEMA_VERSION,
+            )
+            self._reset()
+            return
+
+        self._entries = [
+            SemanticMemoryEntry(**item)
+            for item in data.get("entries", [])
+        ]
+        self._novel_counter = dict(data.get("novel_counter", {}))
+        self._registered_novel = set(data.get("registered_novel", []))
+        logger.info(
+            "SemanticExperienceMemory: loaded %d entries from %s",
+            len(self._entries), self._store_path,
+        )
+
+    def _reset(self) -> None:
+        self._entries = []
+        self._novel_counter = {}
+        self._registered_novel = set()
+
+
+# Backward-compat alias. Phase H replaces this with a module-level
+# __getattr__ that emits a DeprecationWarning on access. For now the bare
+# alias keeps existing imports working.
+TypedAdvantageMemory = SemanticExperienceMemory
