@@ -79,6 +79,23 @@ class HTAEngineConfig:
     # One call per decision point; typical issue fires 3-5 DPs so 6 leaves
     # 20% slack. Bounds cost on pathological issues that splice 10+ DPs.
     max_memory_distillations: int = 6
+    # Issue H4 phase 1: replace RCL's text-grep verifier with an execution-
+    # grounded probe (path existence + symbol grounding + reproduction-trace
+    # intersection). Default OFF so the flag-off baseline is byte-identical
+    # to today. Falls back to today's RCLVerifier when no path/reproduction
+    # is usable, so it never scores strictly worse than text-grep.
+    rcl_execution_probe: bool = False
+    # Hard cap on sandbox commands per RCL hypothesis probe (issue H4 §1.5).
+    # Path-check + symbol-grep typically uses 2 calls; reproduction adds one
+    # more. 8 gives headroom for retries without starving the execution node.
+    rcl_probe_max_iters: int = 8
+    # Issue H4 phase 2: stamp the RCL SemanticMemoryEntry.outcome_score from
+    # the execution-grounded probe score rather than the episode outcome
+    # (which is contaminated by the gold-test wall on ~50% of failure-tagged
+    # entries per the H3 audit). Requires rcl_execution_probe=True; ignored
+    # otherwise. Affects only RCL entries; fix_locality/IC entries keep the
+    # episode-outcome label.
+    rcl_probe_memory_label: bool = False
 
 
 @dataclass

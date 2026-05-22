@@ -118,6 +118,95 @@ class RCLVerifier(SubVerifier):
         return min(1.0, hits / 2.0)
 
 
+# ---------------------------------------------------------------------------
+# Execution-grounded RCL probe (issue H4)
+# ---------------------------------------------------------------------------
+
+@dataclass
+class RCLProbeResult:
+    """One RCL hypothesis' execution-grounded probe result.
+
+    ``method_used`` is one of (per issue H4 §3.5):
+
+    - ``on_path``            — predicted_path is on the reproduction's
+                               failing call stack (strongest signal).
+    - ``exists_unconfirmed`` — predicted_path exists and the named symbol
+                               appears in it, but no reproduction trace
+                               was usable to confirm on-path.
+    - ``lexicon_fallback``   — fell back to today's RCLVerifier text-grep
+                               score (path was unverifiable AND no repro).
+    - ``path_absent``        — predicted_path does not exist in the repo
+                               (or the named file is missing). Scored 0.0.
+    - ``skipped_budget``     — issue budget was low; probe skipped entirely
+                               and fell back to text-grep.
+    """
+
+    score: float
+    method_used: str
+    iters_used: int = 0
+
+
+class ExecutionGroundedRCLProbe:
+    """Per-RCL-decision execution-grounded probe replacing RCLVerifier's
+    text-grep score (issue H4 phase 1).
+
+    The probe is constructed mechanically from machine-controlled inputs
+    only (per constraint #1 — same-LLM-author-question-and-answer
+    forbidden, see issue #44 B3):
+
+    - ``hyp.predicted_path``: an LLM-proposed *path*, never a script.
+    - ``ctx.issue.fail_to_pass``: the issue's failing-test list (machine-
+      provided by SWE-bench, not LLM-authored).
+    - The static evidence lexicon (``evidence_tokens_for(hyp.name)``).
+
+    The reproduction trace is cached per issue (one engine instance handles
+    exactly one issue, so the probe instance is short-lived and the cache
+    is single-entry). All G=3 hypotheses share the same trace.
+
+    Method selection (per §3.2, strongest available first, capped at
+    ``max_iters`` sandbox commands per hypothesis):
+
+    1. Path-existence + symbol-grounding (cheap; always available).
+    2. Reproduction-trace intersection (preferred when a fail_to_pass test
+       exists and reproduces).
+    3. Static-lexicon fallback (today's RCLVerifier — guarantees the probe
+       never scores worse than the current text-grep behaviour).
+    """
+
+    # Suggested rubric per §3.3; constants live here so unit tests can
+    # import them rather than hard-coding numbers.
+    SCORE_ON_PATH = 1.0
+    SCORE_EXISTS_UNCONFIRMED = 0.7
+    SCORE_LEXICON_FALLBACK = 0.5
+    SCORE_PATH_ABSENT_SYMBOL = 0.2
+    SCORE_PATH_ABSENT = 0.0
+
+    def __init__(
+        self,
+        fallback_verifier: SubVerifier,
+        max_iters: int = 8,
+        balance_provider: Callable[[], int] | None = None,
+    ) -> None:
+        self._fallback = fallback_verifier
+        self._max_iters = max_iters
+        self._balance_provider = balance_provider
+        # Per-issue cache for the reproduction traceback. Cleared when a
+        # different issue is seen (defensive; in practice each engine
+        # instance is per-issue).
+        self._traceback_cache: str | None = None
+        self._traceback_issue_id: str | None = None
+
+    def probe(self, hyp: Hypothesis, ctx: VerifierContext) -> RCLProbeResult:
+        """Phase 1a skeleton — not yet wired; phases 1b/1c fill this in."""
+        # Default safety fallback: behave exactly like the existing
+        # text-grep verifier. Phases 1b/1c replace this with the real
+        # path/symbol/trace logic.
+        score = self._fallback.verify(hyp, ctx)
+        return RCLProbeResult(
+            score=score, method_used="lexicon_fallback", iters_used=0,
+        )
+
+
 _LAYER_HIT_SENTINEL = "HTA_LAYER_HIT"
 
 
