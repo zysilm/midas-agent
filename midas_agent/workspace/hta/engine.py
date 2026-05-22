@@ -480,7 +480,12 @@ class HTAEngine:
             winner.advantage = winner.score - 0.5
             # Issue H3: distill one semantic memory entry per decision
             # point instead of buffering numerical advantages per hypothesis.
-            entry = self._distill_memory_entry(dp, hypotheses, winner)
+            # Issue H4 phase 2: pass probe-derived label for RCL entries
+            # when both flags are on.
+            entry = self._distill_memory_entry(
+                dp, hypotheses, winner,
+                probe_label=self._probe_label_for(winner, probe_results),
+            )
             if entry is not None:
                 self._memory.buffer(entry)
             return _DecisionResult(
@@ -514,7 +519,12 @@ class HTAEngine:
             winner = max(hypotheses, key=lambda h: h.advantage)
 
         # Issue H3: one semantic distillation per decision point.
-        entry = self._distill_memory_entry(dp, hypotheses, winner)
+        # Issue H4 phase 2: pass probe-derived label for RCL entries
+        # when both flags are on.
+        entry = self._distill_memory_entry(
+            dp, hypotheses, winner,
+            probe_label=self._probe_label_for(winner, probe_results),
+        )
         if entry is not None:
             self._memory.buffer(entry)
 
@@ -540,6 +550,7 @@ class HTAEngine:
         dp: DecisionPoint,
         hypotheses: list[Hypothesis],
         winner: Hypothesis,
+        probe_label: float | None = None,
     ) -> SemanticMemoryEntry | None:
         """Issue one ``system_llm`` call to turn a resolved decision point
         into a :class:`SemanticMemoryEntry`. Returns None if the cap is
@@ -605,8 +616,29 @@ class HTAEngine:
                 issue_id=self._issue.issue_id,
                 timestamp=time.time(),
                 is_novel_winner=winner.is_novel,
+                # Issue H4 phase 2: only RCL entries under the flag carry
+                # this; commit_pending then uses it instead of episode
+                # outcome to populate outcome_score.
+                probe_label=probe_label,
             )
         return None
+
+    def _probe_label_for(
+        self,
+        winner: Hypothesis,
+        probe_results: dict | None,
+    ) -> float | None:
+        """Issue H4 phase 2a: return the probe's score for the winner if
+        the rcl_probe_memory_label flag is on AND the probe actually ran
+        on this decision. Returns None otherwise — the entry then falls
+        back to episode-outcome labelling in commit_pending.
+        """
+        if not self._config.rcl_probe_memory_label:
+            return None
+        if probe_results is None:
+            return None
+        pr = probe_results.get(id(winner))
+        return pr.score if pr is not None else None
 
     @staticmethod
     def _format_hypotheses_for_distillation(hyps: list[Hypothesis]) -> str:

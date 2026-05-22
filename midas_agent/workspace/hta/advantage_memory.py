@@ -55,10 +55,24 @@ class SemanticMemoryEntry:
     winner_class: str           # the hypothesis_class that won (seed or __novel__:slug)
     winner_summary: str         # 1-2 sentences: why this won
     counterfactual_summary: str # 1-2 sentences: why the losers lost
-    outcome_score: float        # episode s_exec, in [0.0, 1.0]
+    outcome_score: float        # episode s_exec, in [0.0, 1.0] (see probe_label)
     issue_id: str               # e.g. "astropy__astropy-12907"
     timestamp: float            # epoch seconds at entry creation
     is_novel_winner: bool       # winner_class.startswith("__novel__")
+    # Issue H4 phase 2a: when set (only for RCL entries under the
+    # rcl_probe_memory_label flag), commit_pending uses this in place
+    # of the episode outcome to populate outcome_score. The intent is
+    # to route around gold-test-wall contamination: a correct
+    # localization should not be labelled "fail" just because the
+    # downstream patch missed a bit-exact gold format. None for
+    # entries that were not produced under the Phase 2 flag.
+    probe_label: float | None = None
+    # Issue H4 phase 2b: when probe_label is consumed in place of the
+    # episode outcome, this side field records what the episode-outcome
+    # label would have been, so the analyzer can measure how often the
+    # two disagree (i.e. how much contamination Phase 2 removed). None
+    # when Phase 2 is off.
+    episode_outcome_for_reference: float | None = None
 
 
 # Cold-start placeholder shown when no prior experience exists for a
@@ -141,7 +155,16 @@ class SemanticExperienceMemory:
         """
         clamped = max(0.0, min(1.0, float(outcome_score)))
         for entry in self._pending:
-            entry.outcome_score = clamped
+            # Issue H4 phase 2: probe_label, when present, overrides the
+            # episode-level outcome for this entry (only RCL entries get
+            # it set, only under the rcl_probe_memory_label flag). The
+            # raw episode outcome is preserved as a side reference so the
+            # analyzer can measure label disagreement.
+            if entry.probe_label is not None:
+                entry.episode_outcome_for_reference = clamped
+                entry.outcome_score = max(0.0, min(1.0, float(entry.probe_label)))
+            else:
+                entry.outcome_score = clamped
             self._entries.append(entry)
         n = len(self._pending)
         self._pending.clear()
