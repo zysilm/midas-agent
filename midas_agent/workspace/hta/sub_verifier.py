@@ -195,6 +195,9 @@ class ExecutionGroundedRCLProbe:
         # instance is per-issue).
         self._traceback_cache: str | None = None
         self._traceback_issue_id: str | None = None
+        # True after the first hypothesis charges the reproduction-run
+        # iter; subsequent hypotheses reuse the cache for free.
+        self._traceback_iters_charged: bool = False
 
     def probe(self, hyp: Hypothesis, ctx: VerifierContext) -> RCLProbeResult:
         """Score one RCL hypothesis with execution-grounded evidence.
@@ -255,15 +258,124 @@ class ExecutionGroundedRCLProbe:
                 iters_used=iters,
             )
 
-        # Path exists (and symbol — if named — present). Phase 1c will
-        # promote this to ``on_path`` if a reproduction confirms the path
-        # is on the failing call stack. For now, return the
-        # exists_unconfirmed score.
+        # Tier 3: reproduction-trace intersection (phase 1c). Preferred
+        # when the issue has a fail_to_pass test we can re-run. The trace
+        # is cached per-issue so the G=3 hypotheses share the cost of one
+        # reproduction run.
+        if iters < self._max_iters:
+            trace = self._get_reproduction_trace(ctx)
+            if trace is None:
+                # No fail_to_pass / reproduction would not run. Fall
+                # through to lexicon fallback below.
+                pass
+            else:
+                # Each cache miss costs one iter; subsequent hypotheses
+                # in the same RCL decision reuse the cached trace for free.
+                if self._traceback_iters_charged:
+                    pass  # already counted on the first hypothesis
+                else:
+                    iters += 1
+                    self._traceback_iters_charged = True
+                if _path_on_trace(file_rel, symbol, trace):
+                    return RCLProbeResult(
+                        score=self.SCORE_ON_PATH,
+                        method_used="on_path",
+                        iters_used=iters,
+                    )
+                # Reproduction ran but predicted_path is NOT on the
+                # failing call stack — this is the discriminating signal
+                # the spec calls out for django-10880 / django-10914
+                # (winning slugs predicted off-path locations). Keep the
+                # exists_unconfirmed score floor; the off-path signal is
+                # carried by *other* hypotheses that DO appear on-path
+                # scoring higher (group-relative advantage does the rest).
+                return RCLProbeResult(
+                    score=self.SCORE_EXISTS_UNCONFIRMED,
+                    method_used="exists_unconfirmed",
+                    iters_used=iters,
+                )
+
+        # Tier 4: lexicon fallback. Path exists but no reproduction
+        # available (or iter budget exhausted). Use the text-grep score
+        # so the probe never scores strictly worse than today.
+        score = max(
+            self.SCORE_EXISTS_UNCONFIRMED,
+            self._fallback.verify(hyp, ctx),
+        )
         return RCLProbeResult(
-            score=self.SCORE_EXISTS_UNCONFIRMED,
+            score=score,
             method_used="exists_unconfirmed",
             iters_used=iters,
         )
+
+    # ------------------------------------------------------------------
+    # Reproduction trace cache + execution
+    # ------------------------------------------------------------------
+
+    def _get_reproduction_trace(self, ctx: VerifierContext) -> str | None:
+        """Return the issue's reproduction trace, running the failing test
+        if needed. Cached per issue. Returns None if no reproduction is
+        usable.
+        """
+        issue_id = getattr(ctx.issue, "issue_id", None)
+        # Cache hit (or sentinel): reuse.
+        if self._traceback_issue_id == issue_id:
+            return self._traceback_cache  # may itself be None
+
+        # Cache miss: try to run a reproduction.
+        self._traceback_issue_id = issue_id
+        self._traceback_iters_charged = False
+        self._traceback_cache = None
+
+        # SWE-bench issues carry fail_to_pass as a list of pytest node-ids.
+        f2p = list(getattr(ctx.issue, "fail_to_pass", []) or [])
+        if not f2p:
+            return None
+
+        # Run the first failing test, cap output. Pytest exit code is
+        # non-zero on failure; we don't care about exit, just the trace.
+        test = f2p[0]
+        # Quote the test id to be safe — pytest node-ids contain '::'.
+        cmd = (
+            f"cd {ctx.work_dir or '/testbed'} && "
+            f"timeout 60 python -m pytest {test!r} --tb=long -q 2>&1 | head -200"
+        )
+        try:
+            out = ctx.run_bash(cmd) or ""
+        except Exception as e:  # noqa: BLE001 — never let probe failure crash engine
+            logger.warning("RCL probe reproduction failed: %s", e)
+            return None
+
+        # Only accept output that actually looks like a traceback or
+        # pytest failure section; otherwise the test environment is
+        # broken and the trace would be useless for intersection.
+        if "Traceback" in out or "FAILED" in out or "Error" in out:
+            self._traceback_cache = out
+            return out
+        return None
+
+
+def _path_on_trace(file_rel: str, symbol: str | None, trace: str) -> bool:
+    """Return True iff ``file_rel`` (or ``symbol``, if named) appears in
+    the traceback ``trace``.
+
+    Cheap textual intersection — pytest tracebacks include lines of the
+    form ``File ".../<file_rel>", line N, in <symbol>`` so substring
+    membership is sufficient.
+    """
+    if not trace:
+        return False
+    # Match on the file (most discriminating). If the file shows up at
+    # all in the traceback's file: lines, the predicted_path is on the
+    # failing call stack.
+    if file_rel and file_rel in trace:
+        return True
+    # Fallback: match on the named symbol when the file form differs
+    # (e.g. site-packages vs testbed path). Less precise — only count
+    # the symbol if it appears inside a "File ..., in <symbol>" frame.
+    if symbol and f"in {symbol}" in trace:
+        return True
+    return False
 
 
 # ---------------------------------------------------------------------------
