@@ -197,14 +197,147 @@ class ExecutionGroundedRCLProbe:
         self._traceback_issue_id: str | None = None
 
     def probe(self, hyp: Hypothesis, ctx: VerifierContext) -> RCLProbeResult:
-        """Phase 1a skeleton — not yet wired; phases 1b/1c fill this in."""
-        # Default safety fallback: behave exactly like the existing
-        # text-grep verifier. Phases 1b/1c replace this with the real
-        # path/symbol/trace logic.
-        score = self._fallback.verify(hyp, ctx)
+        """Score one RCL hypothesis with execution-grounded evidence.
+
+        Phase 1b: path-existence + symbol-grounding tier only. Phase 1c
+        will splice in the reproduction-trace intersection check between
+        path-check and lexicon-fallback.
+
+        Returns a :class:`RCLProbeResult` with the score, the method tier
+        that produced it, and the number of sandbox commands consumed.
+        """
+        iters = 0
+
+        # Budget guard: a low-budget issue gets the cheap fallback and
+        # marks the result as skipped_budget so the analyzer can count
+        # how often the probe was bypassed.
+        if self._balance_provider is not None and self._balance_provider() <= 0:
+            score = self._fallback.verify(hyp, ctx)
+            return RCLProbeResult(
+                score=score, method_used="skipped_budget", iters_used=0,
+            )
+
+        # Parse `predicted_path` -> (relative_file, optional symbol).
+        file_rel, symbol = _parse_predicted_path(hyp.predicted_path)
+
+        # If we have no parseable file path, the path-existence tier
+        # cannot run; fall back immediately (next phase will try the
+        # reproduction-trace tier here).
+        if not file_rel:
+            score = self._fallback.verify(hyp, ctx)
+            return RCLProbeResult(
+                score=score, method_used="lexicon_fallback", iters_used=iters,
+            )
+
+        # Tier 1: path-existence check. One sandbox command.
+        path_exists = _check_path_exists(ctx, file_rel)
+        iters += 1
+        if not path_exists:
+            return RCLProbeResult(
+                score=self.SCORE_PATH_ABSENT,
+                method_used="path_absent",
+                iters_used=iters,
+            )
+
+        # Tier 2: symbol grounding (only if a symbol was named AND iters
+        # budget permits — leave headroom for phase 1c's reproduction
+        # check, so cap symbol-grep at one additional call).
+        symbol_present = False
+        if symbol and iters < self._max_iters:
+            symbol_present = _check_symbol_in_file(ctx, file_rel, symbol)
+            iters += 1
+
+        # Score floor when path exists but symbol can't be confirmed.
+        if symbol and not symbol_present:
+            return RCLProbeResult(
+                score=self.SCORE_PATH_ABSENT_SYMBOL,
+                method_used="path_absent",  # symbol absent ≈ path didn't ground
+                iters_used=iters,
+            )
+
+        # Path exists (and symbol — if named — present). Phase 1c will
+        # promote this to ``on_path`` if a reproduction confirms the path
+        # is on the failing call stack. For now, return the
+        # exists_unconfirmed score.
         return RCLProbeResult(
-            score=score, method_used="lexicon_fallback", iters_used=0,
+            score=self.SCORE_EXISTS_UNCONFIRMED,
+            method_used="exists_unconfirmed",
+            iters_used=iters,
         )
+
+
+# ---------------------------------------------------------------------------
+# Probe helpers — pure functions, easy to unit-test
+# ---------------------------------------------------------------------------
+
+def _parse_predicted_path(raw: str) -> tuple[str | None, str | None]:
+    """Parse an LLM-proposed ``predicted_path`` into a (file, symbol) pair.
+
+    The LLM frequently writes one of:
+      ``astropy/table/table.py``
+      ``astropy/table/table.py:_check_required_columns``
+      ``astropy/table/table.py:Table.__init__``
+    Occasionally it appends free-form prose (mixed-language paths from
+    earlier runs):
+      ``astropy/table/table.py中设置列数据的代码路径(可能在Table.__init__...)``
+
+    The file is the longest prefix that looks like ``<some>/<path>.py``;
+    the symbol (if any) is the first colon-separated token after the
+    file. Returns ``(None, None)`` for unparseable input.
+    """
+    if not raw or not isinstance(raw, str):
+        return None, None
+    cleaned = raw.strip()
+    # Find the first .py occurrence; anything before its closing extension
+    # boundary is the file path. We allow a leading "/" to preserve
+    # absolute paths so _sandbox_path doesn't double-prefix.
+    import re as _re
+    m = _re.search(r"(/?[A-Za-z0-9_./\-]+\.py)", cleaned)
+    if not m:
+        return None, None
+    file_path = m.group(1)
+    rest = cleaned[m.end():].lstrip()
+    symbol = None
+    # Strip a leading ':' or '#' and take the next identifier-shaped run.
+    if rest.startswith((":", "#")):
+        rest = rest[1:].lstrip()
+    sym_match = _re.match(r"[A-Za-z_][A-Za-z0-9_.]*", rest)
+    if sym_match:
+        symbol = sym_match.group(0)
+    return file_path, symbol
+
+
+def _sandbox_path(ctx: VerifierContext, rel: str) -> str:
+    """Absolute path inside the sandbox for a relative repo path."""
+    # In Docker mode ctx.work_dir is typically "/testbed"; in local mode
+    # it is the agent's working dir. Either way, prefixing yields the
+    # path the run_bash command will see.
+    import os as _os
+    if rel.startswith("/"):
+        return rel
+    return _os.path.join(ctx.work_dir or "/testbed", rel)
+
+
+def _check_path_exists(ctx: VerifierContext, rel: str) -> bool:
+    """Return True iff ``<work_dir>/<rel>`` exists as a regular file."""
+    abs_path = _sandbox_path(ctx, rel)
+    # Quoting is enough — predicted_path comes from the LLM but we have
+    # already restricted it to chars matching ``[A-Za-z0-9_./-]`` in
+    # _parse_predicted_path, so command injection is not a real risk.
+    out = ctx.run_bash(f"test -f {abs_path!s} && echo HTA_PROBE_EXISTS || echo HTA_PROBE_MISSING") or ""
+    return "HTA_PROBE_EXISTS" in out
+
+
+def _check_symbol_in_file(ctx: VerifierContext, rel: str, symbol: str) -> bool:
+    """Return True iff ``symbol`` appears in ``<work_dir>/<rel>``.
+
+    Uses fixed-string grep — no regex metacharacters in user input get
+    interpreted. Symbols are constrained to ``[A-Za-z_][A-Za-z0-9_.]*``
+    by the parser so they are shell-safe.
+    """
+    abs_path = _sandbox_path(ctx, rel)
+    out = ctx.run_bash(f"grep -F -q -- {symbol!r} {abs_path!s} && echo HTA_SYMBOL_FOUND || echo HTA_SYMBOL_ABSENT") or ""
+    return "HTA_SYMBOL_FOUND" in out
 
 
 _LAYER_HIT_SENTINEL = "HTA_LAYER_HIT"
