@@ -48,8 +48,10 @@ from midas_agent.workspace.hta.hypothesis_gen import HypothesisGenerator
 from midas_agent.workspace.hta.meta_judge import DecisionPointMetaJudge
 from midas_agent.workspace.hta.sub_verifier import (
     ContinuationVerifier,
+    ExecutionGroundedRCLProbe,
     FixLocalityVerifier,
     LLMJudgeVerifier,
+    RCLProbeResult,
     RCLVerifier,
     SpecInterpretationVerifier,
     SubVerifier,
@@ -116,6 +118,14 @@ class _DecisionResult:
     # HTA_LAYER_HIT sentinel — meaning the LLM authored trivially-satisfied
     # probes and the verifier could not discriminate (issue H1 D2).
     gaming_detected: bool = False
+    # Issue H4 phase 1d: when the execution-grounded RCL probe ran, this
+    # maps id(hypothesis) -> RCLProbeResult. None when the probe was off
+    # or the decision wasn't RCL. Populated only for the RCL decision.
+    probe_results: dict | None = None
+    # The hypothesis name the legacy text-grep RCLVerifier WOULD have
+    # selected if probe were off — used for winner_changed_vs_grep
+    # instrumentation. None when probe was off.
+    grep_winner_name: str | None = None
 
 
 # Backbone goals for execution nodes (the rule-driven main flow).
@@ -189,6 +199,16 @@ class HTAEngine:
         # them — and would be silently pruned before they could prove
         # themselves.
         self._novel_class_judge = LLMJudgeVerifier(system_llm)
+        # Issue H4 phase 1d: build the execution-grounded RCL probe only
+        # when its flag is on. When off, this attribute stays None and
+        # _resolve takes the legacy text-grep path byte-identically.
+        self._rcl_probe: ExecutionGroundedRCLProbe | None = None
+        if config.rcl_execution_probe:
+            self._rcl_probe = ExecutionGroundedRCLProbe(
+                fallback_verifier=self._verifiers["root_cause_localization"],
+                max_iters=config.rcl_probe_max_iters,
+                balance_provider=balance_provider,
+            )
         self._decision_count = 0
         # Counter of spec_interpretation escalations triggered this issue
         # (issue H1 D3, replaces the boolean self._escalated latch).
@@ -378,13 +398,53 @@ class HTAEngine:
             action_history=action_history,
             stuck_reason=stuck_reason,
         )
-        for h in hypotheses:
-            verifier = self._select_verifier_for(h, default_verifier)
-            try:
-                h.score = verifier.verify(h, ctx)
-            except Exception as e:  # noqa: BLE001 — a broken probe must not crash the engine
-                logger.warning("Sub-verifier failed for %s: %s", h.name, e)
-                h.score = 0.0
+        # Issue H4 phase 1d: when the execution-grounded RCL probe is
+        # enabled AND this decision is RCL, run the probe in place of the
+        # per-hypothesis text-grep verifier. We also keep the grep score
+        # for instrumentation (winner_changed_vs_grep). When the flag is
+        # off or this isn't RCL, fall through to the legacy path.
+        probe_results: dict | None = None
+        grep_winner_name: str | None = None
+        use_rcl_probe = (
+            self._rcl_probe is not None
+            and dp.decision_type == "root_cause_localization"
+        )
+        if use_rcl_probe:
+            rcl_grep = self._verifiers["root_cause_localization"]
+            probe_results = {}
+            grep_scores: dict[int, float] = {}
+            for h in hypotheses:
+                # Grep score is a comparison-only signal — cheap, doesn't
+                # touch the sandbox.
+                try:
+                    grep_scores[id(h)] = rcl_grep.verify(h, ctx)
+                except Exception as e:  # noqa: BLE001
+                    logger.warning("RCL grep fallback failed for %s: %s", h.name, e)
+                    grep_scores[id(h)] = 0.0
+                # Probe score is the one that actually drives selection.
+                try:
+                    pr = self._rcl_probe.probe(h, ctx)
+                except Exception as e:  # noqa: BLE001
+                    logger.warning("RCL probe failed for %s: %s", h.name, e)
+                    pr = RCLProbeResult(
+                        score=grep_scores[id(h)],
+                        method_used="lexicon_fallback",
+                        iters_used=0,
+                    )
+                h.score = pr.score
+                probe_results[id(h)] = pr
+            # Hypothetical grep-winner for the winner_changed_vs_grep flag.
+            grep_winner_name = max(
+                hypotheses, key=lambda hh: grep_scores[id(hh)]
+            ).name
+        else:
+            for h in hypotheses:
+                verifier = self._select_verifier_for(h, default_verifier)
+                try:
+                    h.score = verifier.verify(h, ctx)
+                except Exception as e:  # noqa: BLE001 — a broken probe must not crash the engine
+                    logger.warning("Sub-verifier failed for %s: %s", h.name, e)
+                    h.score = 0.0
 
         # Anti-gaming for fix_locality_scope (issue H1 D2): if every probe
         # fired the sentinel and scored 1.0, the LLM has gamed the verifier
@@ -426,6 +486,8 @@ class HTAEngine:
             return _DecisionResult(
                 winner=winner, hypotheses=hypotheses,
                 gaming_detected=gaming_detected,
+                probe_results=probe_results,
+                grep_winner_name=grep_winner_name,
             )
 
         scores = [h.score for h in hypotheses]
@@ -465,6 +527,8 @@ class HTAEngine:
         return _DecisionResult(
             winner=winner, hypotheses=hypotheses,
             gaming_detected=gaming_detected,
+            probe_results=probe_results,
+            grep_winner_name=grep_winner_name,
         )
 
     # ------------------------------------------------------------------
@@ -731,7 +795,7 @@ class HTAEngine:
 
     @staticmethod
     def _decision_payload(result: _DecisionResult) -> dict:
-        return {
+        payload = {
             "hypotheses": [
                 {
                     "name": h.name,
@@ -747,6 +811,34 @@ class HTAEngine:
             "escalated": result.escalated,
             "gaming_detected": result.gaming_detected,
         }
+        # Issue H4 phase 1d: surface probe instrumentation only when the
+        # RCL execution-grounded probe actually ran (i.e. the flag is on
+        # AND this is the RCL decision). Absent when the legacy text-grep
+        # path took the decision.
+        if result.probe_results is not None:
+            per_hyp = []
+            for h in result.hypotheses:
+                pr = result.probe_results.get(id(h))
+                per_hyp.append({
+                    "name": h.name,
+                    "probe_score": pr.score if pr else None,
+                    "probe_method": pr.method_used if pr else None,
+                    "probe_iters": pr.iters_used if pr else None,
+                })
+            payload["probe"] = {
+                "winner_changed_vs_grep": (
+                    result.winner is not None
+                    and result.grep_winner_name is not None
+                    and result.winner.name != result.grep_winner_name
+                ),
+                "grep_winner_name": result.grep_winner_name,
+                "probe_iters_total": sum(
+                    (pr.iters_used for pr in result.probe_results.values()),
+                    0,
+                ),
+                "per_hypothesis": per_hyp,
+            }
+        return payload
 
 
 def _format_trace(action_history: list[ActionRecord], last_n: int = 8) -> str:
