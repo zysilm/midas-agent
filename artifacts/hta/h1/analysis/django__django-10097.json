@@ -1,0 +1,64 @@
+{
+  "issue_id": "django__django-10097",
+  "branch": "unknown",
+  "rcl": {
+    "fired": true,
+    "n_hypotheses": 3,
+    "winner": "regex_or_parser_edge",
+    "winner_predicted_path": "django/core/validators.py",
+    "winner_class_is_novel": false,
+    "winner_advantage": 0.7071067811865475,
+    "std": 0.02357022603955158,
+    "std_collapsed": false,
+    "escalated": true,
+    "any_tier2_call": true,
+    "classes_seen": [
+      "__novel__:_userinfo_extraction_missing",
+      "error_message_only",
+      "regex_or_parser_edge"
+    ]
+  },
+  "spec_interpretation": {
+    "fired": true,
+    "trigger": "rcl_escalation",
+    "count": 1
+  },
+  "fix_locality": {
+    "fired": false,
+    "winner": null,
+    "winner_advantage": null,
+    "std": null,
+    "std_collapsed": false,
+    "sentinel_in_winner_payload": false,
+    "sentinel_in_any_payload": false,
+    "sentinel_count": 0,
+    "gaming_detected": false,
+    "gaming_detected_count": 0
+  },
+  "investigation_continuation": {
+    "fired_count": 0,
+    "signal_breakdown": {
+      "same_file_read_5x": 0,
+      "same_error_3x": 0,
+      "budget_60pct_no_evidence": 0,
+      "toolkit_repetition": 0,
+      "max_iterations": 0
+    },
+    "verdicts": []
+  },
+  "execution_nodes": {
+    "count": 1,
+    "total_iterations": 63,
+    "stuck_count": 1
+  },
+  "budget": {
+    "initial": 1500000,
+    "used": 0,
+    "fraction_used": 0.0
+  },
+  "decision_count": 3,
+  "graph_node_count": 5,
+  "backward_edge_count": 1,
+  "tier2_calls_used": 1,
+  "escalation_count": 1
+}

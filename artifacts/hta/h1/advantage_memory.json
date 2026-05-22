@@ -1,0 +1,667 @@
+{
+  "stats": [
+    {
+      "decision_type": "spec_interpretation",
+      "hypothesis_class": "literal_reading",
+      "count": 2,
+      "mean": 0.3420577329472694,
+      "m2": 0.4586079672509634
+    },
+    {
+      "decision_type": "spec_interpretation",
+      "hypothesis_class": "scope_widened",
+      "count": 2,
+      "mean": 0.17411461292591324,
+      "m2": 0.7930773109473955
+    },
+    {
+      "decision_type": "spec_interpretation",
+      "hypothesis_class": "wrong_api",
+      "count": 2,
+      "mean": -0.1583373482055566,
+      "m2": 1.8181948986439136
+    },
+    {
+      "decision_type": "root_cause_localization",
+      "hypothesis_class": "serialization_roundtrip",
+      "count": 8,
+      "mean": -0.009556515801685761,
+      "m2": 1.5510024461312069
+    },
+    {
+      "decision_type": "root_cause_localization",
+      "hypothesis_class": "inheritance_dispatch",
+      "count": 4,
+      "mean": -0.15992348128079986,
+      "m2": 1.0119885065202485
+    },
+    {
+      "decision_type": "root_cause_localization",
+      "hypothesis_class": "__novel__:_flattening_incomplete",
+      "count": 1,
+      "mean": 0.4242640687119286,
+      "m2": 1.4000000000000008
+    },
+    {
+      "decision_type": "investigation_continuation",
+      "hypothesis_class": "persist_same_path",
+      "count": 20,
+      "mean": -0.840887404895259,
+      "m2": 6.452963606448429
+    },
+    {
+      "decision_type": "investigation_continuation",
+      "hypothesis_class": "pivot_target",
+      "count": 20,
+      "mean": 0.8500020050178979,
+      "m2": 2.6608811074374845
+    },
+    {
+      "decision_type": "investigation_continuation",
+      "hypothesis_class": "abandon",
+      "count": 11,
+      "mean": 0.47675804387120796,
+      "m2": 2.3064364365098764
+    },
+    {
+      "decision_type": "investigation_continuation",
+      "hypothesis_class": "__novel__:_cstack_scalar_substitution",
+      "count": 1,
+      "mean": 0.3893314107138301,
+      "m2": 1.1789473684210527
+    },
+    {
+      "decision_type": "investigation_continuation",
+      "hypothesis_class": "__novel__:_recursive_expansion_failure",
+      "count": 1,
+      "mean": -0.016222142113076248,
+      "m2": 0.02368421052631577
+    },
+    {
+      "decision_type": "investigation_continuation",
+      "hypothesis_class": "__novel__:_mapping_array_dimension_mismatch",
+      "count": 1,
+      "mean": -0.1135549947915338,
+      "m2": 1.160526315789474
+    },
+    {
+      "decision_type": "fix_locality_scope",
+      "hypothesis_class": "surface_patch",
+      "count": 24,
+      "mean": 0.27747804884713373,
+      "m2": 6.058801418986062
+    },
+    {
+      "decision_type": "fix_locality_scope",
+      "hypothesis_class": "root_layer",
+      "count": 18,
+      "mean": 0.04868118763848407,
+      "m2": 5.3347648902821145
+    },
+    {
+      "decision_type": "fix_locality_scope",
+      "hypothesis_class": "__novel__:_separable_refactor",
+      "count": 1,
+      "mean": 0.0,
+      "m2": 0.0
+    },
+    {
+      "decision_type": "investigation_continuation",
+      "hypothesis_class": "__novel__:_evidence_type_mismatch",
+      "count": 1,
+      "mean": -0.04198321007328471,
+      "m2": 0.15863309352517993
+    },
+    {
+      "decision_type": "root_cause_localization",
+      "hypothesis_class": "error_message_only",
+      "count": 8,
+      "mean": -0.06466114341671328,
+      "m2": 5.202554456409733
+    },
+    {
+      "decision_type": "root_cause_localization",
+      "hypothesis_class": "state_mutation_order",
+      "count": 6,
+      "mean": -0.3075326532718972,
+      "m2": 2.005656943891697
+    },
+    {
+      "decision_type": "root_cause_localization",
+      "hypothesis_class": "framework_default_value",
+      "count": 16,
+      "mean": 0.2213202301894363,
+      "m2": 6.569084793376977
+    },
+    {
+      "decision_type": "investigation_continuation",
+      "hypothesis_class": "__novel__:_verification_needed",
+      "count": 1,
+      "mean": 0.04773343705054379,
+      "m2": 0.017721518987341763
+    },
+    {
+      "decision_type": "fix_locality_scope",
+      "hypothesis_class": "__novel__:semantic_error_branch",
+      "count": 1,
+      "mean": 0.044887920124843474,
+      "m2": 0.015671641791044775
+    },
+    {
+      "decision_type": "root_cause_localization",
+      "hypothesis_class": "__novel__:mixin_dispatch_missing",
+      "count": 1,
+      "mean": 0.2121320343559643,
+      "m2": 0.3500000000000002
+    },
+    {
+      "decision_type": "investigation_continuation",
+      "hypothesis_class": "__novel__:serialization_side_effects",
+      "count": 1,
+      "mean": -0.04560145927004533,
+      "m2": 0.1871543778801843
+    },
+    {
+      "decision_type": "investigation_continuation",
+      "hypothesis_class": "__novel__:mixin_dispatch_missing",
+      "count": 1,
+      "mean": -0.06434211884046667,
+      "m2": 0.3725917431192662
+    },
+    {
+      "decision_type": "investigation_continuation",
+      "hypothesis_class": "pivot_evidence_type",
+      "count": 3,
+      "mean": 0.3231840718487913,
+      "m2": 1.0452442010740919
+    },
+    {
+      "decision_type": "fix_locality_scope",
+      "hypothesis_class": "intermediate_layer",
+      "count": 20,
+      "mean": 0.3548443404945329,
+      "m2": 6.204169697923398
+    },
+    {
+      "decision_type": "root_cause_localization",
+      "hypothesis_class": "__novel__:_itrs_reference_frame_mismatch",
+      "count": 1,
+      "mean": 0.21213203435596426,
+      "m2": 0.35000000000000003
+    },
+    {
+      "decision_type": "root_cause_localization",
+      "hypothesis_class": "__novel__:_column_iteration_mismatch",
+      "count": 1,
+      "mean": 0.4242640687119285,
+      "m2": 1.4000000000000001
+    },
+    {
+      "decision_type": "investigation_continuation",
+      "hypothesis_class": "__novel__:_regression_elsewhere",
+      "count": 2,
+      "mean": -0.17960673758770024,
+      "m2": 1.7924347531156135
+    },
+    {
+      "decision_type": "fix_locality_scope",
+      "hypothesis_class": "__novel__:_base_data_format_initialization",
+      "count": 1,
+      "mean": 0.42426406871192845,
+      "m2": 1.3999999999999997
+    },
+    {
+      "decision_type": "root_cause_localization",
+      "hypothesis_class": "__novel__:_matrix_dimension_adjustment",
+      "count": 1,
+      "mean": 0.34541558535408406,
+      "m2": 0.9279816513761465
+    },
+    {
+      "decision_type": "root_cause_localization",
+      "hypothesis_class": "__novel__:_axis_metadata_loss",
+      "count": 1,
+      "mean": 0.04063712768871577,
+      "m2": 0.012844036697247697
+    },
+    {
+      "decision_type": "investigation_continuation",
+      "hypothesis_class": "__novel__:_verification_completeness",
+      "count": 1,
+      "mean": 0.018823674154144748,
+      "m2": 0.0027559055118110214
+    },
+    {
+      "decision_type": "root_cause_localization",
+      "hypothesis_class": "operator_overload_path",
+      "count": 5,
+      "mean": -0.07467677498283742,
+      "m2": 1.5007963928959989
+    },
+    {
+      "decision_type": "root_cause_localization",
+      "hypothesis_class": "__novel__:_conversion_error_propagation",
+      "count": 1,
+      "mean": 0.04773343705054379,
+      "m2": 0.017721518987341763
+    },
+    {
+      "decision_type": "investigation_continuation",
+      "hypothesis_class": "__novel__:fix_verification_complete",
+      "count": 2,
+      "mean": 0.04741558612843405,
+      "m2": 0.708910424541669
+    },
+    {
+      "decision_type": "root_cause_localization",
+      "hypothesis_class": "__novel__:_descriptor_protocol_confusion",
+      "count": 1,
+      "mean": 0.3102673408285347,
+      "m2": 0.7487341772151899
+    },
+    {
+      "decision_type": "root_cause_localization",
+      "hypothesis_class": "__novel__:_attr_lookup_precedence_bug",
+      "count": 1,
+      "mean": 0.09546687410108758,
+      "m2": 0.07088607594936705
+    },
+    {
+      "decision_type": "root_cause_localization",
+      "hypothesis_class": "__novel__:_parameter_passing_pipeline",
+      "count": 1,
+      "mean": -0.008111071056538124,
+      "m2": 0.005921052631578944
+    },
+    {
+      "decision_type": "fix_locality_scope",
+      "hypothesis_class": "__novel__:_multiple_inheritance_chain",
+      "count": 1,
+      "mean": -0.07071067811865475,
+      "m2": 0.44999999999999996
+    },
+    {
+      "decision_type": "root_cause_localization",
+      "hypothesis_class": "__novel__:_missing_argument_validation",
+      "count": 1,
+      "mean": 0.1524001524002286,
+      "m2": 0.18064516129032257
+    },
+    {
+      "decision_type": "root_cause_localization",
+      "hypothesis_class": "__novel__:_argument_routing_mismatch",
+      "count": 1,
+      "mean": -0.13970013970020959,
+      "m2": 1.7564516129032266
+    },
+    {
+      "decision_type": "root_cause_localization",
+      "hypothesis_class": "__novel__:_conditional_guard_missing",
+      "count": 1,
+      "mean": 0.26670026670039987,
+      "m2": 0.5532258064516122
+    },
+    {
+      "decision_type": "root_cause_localization",
+      "hypothesis_class": "regex_or_parser_edge",
+      "count": 6,
+      "mean": 0.1965428828151911,
+      "m2": 1.557128272839892
+    },
+    {
+      "decision_type": "root_cause_localization",
+      "hypothesis_class": "__novel__:_command_case_enforcement",
+      "count": 1,
+      "mean": 0.4242640687119285,
+      "m2": 1.4000000000000001
+    },
+    {
+      "decision_type": "root_cause_localization",
+      "hypothesis_class": "__novel__:_unit_composition_inverted",
+      "count": 1,
+      "mean": 0.17201465372429875,
+      "m2": 0.23013698630136986
+    },
+    {
+      "decision_type": "fix_locality_scope",
+      "hypothesis_class": "__novel__:_postprocess_correction",
+      "count": 1,
+      "mean": -0.03535533905932737,
+      "m2": 0.11249999999999995
+    },
+    {
+      "decision_type": "root_cause_localization",
+      "hypothesis_class": "__novel__:_float_precision_bloat",
+      "count": 1,
+      "mean": 0.4242640687119286,
+      "m2": 1.4000000000000008
+    },
+    {
+      "decision_type": "investigation_continuation",
+      "hypothesis_class": "__novel__:_issue_resolved",
+      "count": 1,
+      "mean": 0.018823674154144748,
+      "m2": 0.0027559055118110214
+    },
+    {
+      "decision_type": "fix_locality_scope",
+      "hypothesis_class": "__novel__:_comprehensive_numeric_formatting",
+      "count": 1,
+      "mean": 0.42426406871192845,
+      "m2": 1.3999999999999997
+    },
+    {
+      "decision_type": "root_cause_localization",
+      "hypothesis_class": "__novel__:_heap_pointer_miscalculation",
+      "count": 1,
+      "mean": 0.14394243453697608,
+      "m2": 0.1611510791366906
+    },
+    {
+      "decision_type": "investigation_continuation",
+      "hypothesis_class": "__novel__:_alternative_vla_handling_in_diff",
+      "count": 1,
+      "mean": -0.009338592095470354,
+      "m2": 0.007848837209302325
+    },
+    {
+      "decision_type": "fix_locality_scope",
+      "hypothesis_class": "__novel__:_vla_heap_pointer_fix",
+      "count": 1,
+      "mean": -0.010101525445522105,
+      "m2": 0.00918367346938775
+    },
+    {
+      "decision_type": "root_cause_localization",
+      "hypothesis_class": "__novel__:_continuation_boundary_miscalculation",
+      "count": 1,
+      "mean": 0.21213203435596426,
+      "m2": 0.35000000000000003
+    },
+    {
+      "decision_type": "root_cause_localization",
+      "hypothesis_class": "__novel__:_mask_coercion_missing",
+      "count": 1,
+      "mean": 0.4242640687119286,
+      "m2": 1.4000000000000008
+    },
+    {
+      "decision_type": "investigation_continuation",
+      "hypothesis_class": "__novel__:_fix_verification_complete",
+      "count": 1,
+      "mean": 0.12594963021985411,
+      "m2": 0.12338129496402885
+    },
+    {
+      "decision_type": "fix_locality_scope",
+      "hypothesis_class": "__novel__:_mask_coercion_entry",
+      "count": 1,
+      "mean": 0.0,
+      "m2": 0.0
+    },
+    {
+      "decision_type": "root_cause_localization",
+      "hypothesis_class": "__novel__:_descriptor_detection_incomplete",
+      "count": 1,
+      "mean": 0.3674234614174767,
+      "m2": 1.0500000000000003
+    },
+    {
+      "decision_type": "root_cause_localization",
+      "hypothesis_class": "__novel__:_classmethod_wrapper_mismatch",
+      "count": 1,
+      "mean": -0.1224744871391589,
+      "m2": 1.3499999999999996
+    },
+    {
+      "decision_type": "root_cause_localization",
+      "hypothesis_class": "__novel__:_return_type_check_missing",
+      "count": 1,
+      "mean": 0.35308940956582224,
+      "m2": 0.969672131147541
+    },
+    {
+      "decision_type": "root_cause_localization",
+      "hypothesis_class": "__novel__:_early_none_guard_missing",
+      "count": 1,
+      "mean": 0.21213203435596423,
+      "m2": 0.3499999999999999
+    },
+    {
+      "decision_type": "investigation_continuation",
+      "hypothesis_class": "__novel__:_verification_complete",
+      "count": 2,
+      "mean": -0.03929956106321289,
+      "m2": 0.07002120347072376
+    },
+    {
+      "decision_type": "fix_locality_scope",
+      "hypothesis_class": "dual_fix",
+      "count": 1,
+      "mean": 0.0,
+      "m2": 0.0
+    },
+    {
+      "decision_type": "root_cause_localization",
+      "hypothesis_class": "__novel__:_version_string_preprocessing",
+      "count": 1,
+      "mean": 0.4242640687119286,
+      "m2": 1.4000000000000008
+    },
+    {
+      "decision_type": "investigation_continuation",
+      "hypothesis_class": "__novel__:_secondary_regression_check",
+      "count": 1,
+      "mean": -0.07071067811865475,
+      "m2": 0.44999999999999996
+    },
+    {
+      "decision_type": "fix_locality_scope",
+      "hypothesis_class": "__novel__:_version_exception_handling",
+      "count": 1,
+      "mean": 0.38933141071383015,
+      "m2": 1.1789473684210532
+    },
+    {
+      "decision_type": "root_cause_localization",
+      "hypothesis_class": "__novel__:_type_coercion_missing",
+      "count": 1,
+      "mean": 0.17201465372429875,
+      "m2": 0.23013698630136986
+    },
+    {
+      "decision_type": "investigation_continuation",
+      "hypothesis_class": "__novel__:_encoding_generalization",
+      "count": 1,
+      "mean": -0.0031372790256907917,
+      "m2": 0.0008858267716535426
+    },
+    {
+      "decision_type": "root_cause_localization",
+      "hypothesis_class": "__novel__:_float16_explicit_upgrade",
+      "count": 1,
+      "mean": 0.21213203435596426,
+      "m2": 0.35000000000000003
+    },
+    {
+      "decision_type": "fix_locality_scope",
+      "hypothesis_class": "__novel__:_fast_path_dtype_check",
+      "count": 1,
+      "mean": 0.21213203435596423,
+      "m2": 0.3499999999999999
+    },
+    {
+      "decision_type": "investigation_continuation",
+      "hypothesis_class": "__novel__:_comprehensive_edge_case_verification",
+      "count": 1,
+      "mean": -0.04629100498862757,
+      "m2": 0.19285714285714284
+    },
+    {
+      "decision_type": "root_cause_localization",
+      "hypothesis_class": "__novel__:_userinfo_extraction_missing",
+      "count": 1,
+      "mean": -0.07071067811865475,
+      "m2": 0.44999999999999996
+    },
+    {
+      "decision_type": "root_cause_localization",
+      "hypothesis_class": "__novel__:_union_queryset_clause_sharing",
+      "count": 1,
+      "mean": -0.02314550249431376,
+      "m2": 0.04821428571428559
+    },
+    {
+      "decision_type": "root_cause_localization",
+      "hypothesis_class": "__novel__:_chained_derivation_state_leak",
+      "count": 1,
+      "mean": 0.20830952244882409,
+      "m2": 0.33750000000000013
+    },
+    {
+      "decision_type": "root_cause_localization",
+      "hypothesis_class": "__novel__:_sql_keyword_concatentation",
+      "count": 1,
+      "mean": 0.4242640687119286,
+      "m2": 1.4000000000000008
+    },
+    {
+      "decision_type": "root_cause_localization",
+      "hypothesis_class": "__novel__:_tempfile_permission_preservation",
+      "count": 1,
+      "mean": 0.4242640687119286,
+      "m2": 1.4000000000000008
+    },
+    {
+      "decision_type": "root_cause_localization",
+      "hypothesis_class": "__novel__:_password_environment_handling",
+      "count": 1,
+      "mean": 0.26670026670040003,
+      "m2": 0.5532258064516128
+    },
+    {
+      "decision_type": "root_cause_localization",
+      "hypothesis_class": "test_expectation_wrong",
+      "count": 1,
+      "mean": 0.15240015240022864,
+      "m2": 0.18064516129032268
+    },
+    {
+      "decision_type": "fix_locality_scope",
+      "hypothesis_class": "__novel__:_env_subprocess_patch",
+      "count": 1,
+      "mean": -0.1414213562373095,
+      "m2": 1.7999999999999998
+    },
+    {
+      "decision_type": "investigation_continuation",
+      "hypothesis_class": "__novel__:_environment_variable_security",
+      "count": 1,
+      "mean": 0.0,
+      "m2": 0.0
+    },
+    {
+      "decision_type": "root_cause_localization",
+      "hypothesis_class": "__novel__:_minutes_regex_incomplete",
+      "count": 1,
+      "mean": -0.019611613513818404,
+      "m2": 0.03461538461538462
+    },
+    {
+      "decision_type": "fix_locality_scope",
+      "hypothesis_class": "__novel__:_regex_compile_flag",
+      "count": 1,
+      "mean": 0.0,
+      "m2": 0.0
+    },
+    {
+      "decision_type": "root_cause_localization",
+      "hypothesis_class": "__novel__:_transaction_context_ignores_query",
+      "count": 1,
+      "mean": -0.10690449676496981,
+      "m2": 1.0285714285714296
+    },
+    {
+      "decision_type": "root_cause_localization",
+      "hypothesis_class": "__novel__:_schema_editor_disconnects_model_save",
+      "count": 1,
+      "mean": -0.02672612419124243,
+      "m2": 0.06428571428571424
+    },
+    {
+      "decision_type": "root_cause_localization",
+      "hypothesis_class": "__novel__:_field_subset_optimization",
+      "count": 1,
+      "mean": -0.07071067811865475,
+      "m2": 0.44999999999999996
+    }
+  ],
+  "novel_counter": {
+    "_flattening_incomplete": 1,
+    "_cstack_scalar_substitution": 1,
+    "_recursive_expansion_failure": 1,
+    "_mapping_array_dimension_mismatch": 1,
+    "_separable_refactor": 1,
+    "_evidence_type_mismatch": 1,
+    "_verification_needed": 1,
+    "semantic_error_branch": 1,
+    "mixin_dispatch_missing": 2,
+    "serialization_side_effects": 1,
+    "_itrs_reference_frame_mismatch": 1,
+    "_column_iteration_mismatch": 1,
+    "_regression_elsewhere": 2,
+    "_base_data_format_initialization": 1,
+    "_matrix_dimension_adjustment": 1,
+    "_axis_metadata_loss": 1,
+    "_verification_completeness": 1,
+    "_conversion_error_propagation": 1,
+    "fix_verification_complete": 2,
+    "_descriptor_protocol_confusion": 1,
+    "_attr_lookup_precedence_bug": 1,
+    "_parameter_passing_pipeline": 1,
+    "_multiple_inheritance_chain": 1,
+    "_missing_argument_validation": 1,
+    "_argument_routing_mismatch": 1,
+    "_conditional_guard_missing": 1,
+    "_command_case_enforcement": 1,
+    "_unit_composition_inverted": 1,
+    "_postprocess_correction": 1,
+    "_float_precision_bloat": 1,
+    "_issue_resolved": 1,
+    "_comprehensive_numeric_formatting": 1,
+    "_heap_pointer_miscalculation": 1,
+    "_alternative_vla_handling_in_diff": 1,
+    "_vla_heap_pointer_fix": 1,
+    "_continuation_boundary_miscalculation": 1,
+    "_mask_coercion_missing": 1,
+    "_fix_verification_complete": 1,
+    "_mask_coercion_entry": 1,
+    "_descriptor_detection_incomplete": 1,
+    "_classmethod_wrapper_mismatch": 1,
+    "_return_type_check_missing": 1,
+    "_early_none_guard_missing": 1,
+    "_verification_complete": 2,
+    "_version_string_preprocessing": 1,
+    "_secondary_regression_check": 1,
+    "_version_exception_handling": 1,
+    "_type_coercion_missing": 1,
+    "_encoding_generalization": 1,
+    "_float16_explicit_upgrade": 1,
+    "_fast_path_dtype_check": 1,
+    "_comprehensive_edge_case_verification": 1,
+    "_userinfo_extraction_missing": 1,
+    "_union_queryset_clause_sharing": 1,
+    "_chained_derivation_state_leak": 1,
+    "_sql_keyword_concatentation": 1,
+    "_tempfile_permission_preservation": 1,
+    "_password_environment_handling": 1,
+    "_env_subprocess_patch": 1,
+    "_environment_variable_security": 1,
+    "_minutes_regex_incomplete": 1,
+    "_regex_compile_flag": 1,
+    "_transaction_context_ignores_query": 1,
+    "_schema_editor_disconnects_model_save": 1,
+    "_field_subset_optimization": 1
+  },
+  "registered_novel": []
+}

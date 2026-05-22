@@ -1,0 +1,62 @@
+{
+  "issue_id": "astropy__astropy-13453",
+  "branch": "feature/issue-46-eval-and-verdict",
+  "rcl": {
+    "fired": true,
+    "n_hypotheses": 3,
+    "winner": "__novel__::code_path_isolation",
+    "winner_predicted_path": "astropy/io/ascii/base functionality used by HTML writer",
+    "winner_class_is_novel": true,
+    "winner_advantage": 1.414213562373095,
+    "std": 0.25927248643506745,
+    "std_collapsed": false,
+    "escalated": false,
+    "any_tier2_call": true,
+    "classes_seen": [
+      "__novel__::code_path_isolation",
+      "framework_default_value",
+      "state_mutation_order"
+    ]
+  },
+  "spec_interpretation": {
+    "fired": false,
+    "trigger": null
+  },
+  "fix_locality": {
+    "fired": true,
+    "winner": "surface_patch",
+    "winner_advantage": 0.0,
+    "std": 0.0,
+    "std_collapsed": true,
+    "sentinel_in_winner_payload": true,
+    "sentinel_in_any_payload": true,
+    "sentinel_count": 3
+  },
+  "investigation_continuation": {
+    "fired_count": 1,
+    "signal_breakdown": {
+      "same_file_read_5x": 1,
+      "same_error_3x": 0,
+      "budget_60pct_no_evidence": 0,
+      "toolkit_repetition": 0,
+      "max_iterations": 0
+    },
+    "verdicts": [
+      "persist_same_path"
+    ]
+  },
+  "execution_nodes": {
+    "count": 5,
+    "total_iterations": 83,
+    "stuck_count": 1
+  },
+  "budget": {
+    "initial": 1500000,
+    "used": 0,
+    "fraction_used": 0.0
+  },
+  "decision_count": 3,
+  "graph_node_count": 9,
+  "backward_edge_count": 0,
+  "tier2_calls_used": 1
+}

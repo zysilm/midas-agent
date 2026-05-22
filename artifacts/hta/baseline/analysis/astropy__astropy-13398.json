@@ -1,0 +1,63 @@
+{
+  "issue_id": "astropy__astropy-13398",
+  "branch": "feature/issue-46-eval-and-verdict",
+  "rcl": {
+    "fired": true,
+    "n_hypotheses": 3,
+    "winner": "__novel__::reference_frame_selection",
+    "winner_predicted_path": "astropy/coordinates/transformations.py",
+    "winner_class_is_novel": true,
+    "winner_advantage": 0.7667775966576986,
+    "std": 0.4129837231121289,
+    "std_collapsed": false,
+    "escalated": true,
+    "any_tier2_call": true,
+    "classes_seen": [
+      "__novel__::reference_frame_selection",
+      "__novel__::transformation_graph_design",
+      "__novel__::transformation_matrix_order",
+      "framework_default_value",
+      "inheritance_dispatch"
+    ]
+  },
+  "spec_interpretation": {
+    "fired": true,
+    "trigger": "rcl_escalation",
+    "count": 1
+  },
+  "fix_locality": {
+    "fired": true,
+    "winner": "surface_patch",
+    "winner_advantage": 0.0,
+    "std": 0.0,
+    "std_collapsed": true,
+    "sentinel_in_winner_payload": true,
+    "sentinel_in_any_payload": true,
+    "sentinel_count": 3
+  },
+  "investigation_continuation": {
+    "fired_count": 0,
+    "signal_breakdown": {
+      "same_file_read_5x": 0,
+      "same_error_3x": 0,
+      "budget_60pct_no_evidence": 0,
+      "toolkit_repetition": 0,
+      "max_iterations": 0
+    },
+    "verdicts": []
+  },
+  "execution_nodes": {
+    "count": 2,
+    "total_iterations": 75,
+    "stuck_count": 0
+  },
+  "budget": {
+    "initial": 1500000,
+    "used": 0,
+    "fraction_used": 0.0
+  },
+  "decision_count": 4,
+  "graph_node_count": 7,
+  "backward_edge_count": 1,
+  "tier2_calls_used": 3
+}

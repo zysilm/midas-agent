@@ -1,0 +1,64 @@
+{
+  "issue_id": "astropy__astropy-14309",
+  "branch": "feature/issue-46-eval-and-verdict",
+  "rcl": {
+    "fired": true,
+    "n_hypotheses": 3,
+    "winner": "__novel__::caller_argumentMismatch",
+    "winner_predicted_path": "astropy/io/registry/base.py",
+    "winner_class_is_novel": true,
+    "winner_advantage": 1.4142135623730951,
+    "std": 0.3299831645537222,
+    "std_collapsed": false,
+    "escalated": true,
+    "any_tier2_call": true,
+    "classes_seen": [
+      "__novel__::caller_argumentMismatch",
+      "error_message_only",
+      "framework_default_value",
+      "operator_overload_path",
+      "serialization_roundtrip",
+      "state_mutation_order"
+    ]
+  },
+  "spec_interpretation": {
+    "fired": true,
+    "trigger": "rcl_escalation",
+    "count": 1
+  },
+  "fix_locality": {
+    "fired": true,
+    "winner": "dual_fix",
+    "winner_advantage": 1.4142135623730951,
+    "std": 0.37712361663282534,
+    "std_collapsed": false,
+    "sentinel_in_winner_payload": true,
+    "sentinel_in_any_payload": true,
+    "sentinel_count": 3
+  },
+  "investigation_continuation": {
+    "fired_count": 0,
+    "signal_breakdown": {
+      "same_file_read_5x": 0,
+      "same_error_3x": 0,
+      "budget_60pct_no_evidence": 0,
+      "toolkit_repetition": 0,
+      "max_iterations": 0
+    },
+    "verdicts": []
+  },
+  "execution_nodes": {
+    "count": 4,
+    "total_iterations": 65,
+    "stuck_count": 0
+  },
+  "budget": {
+    "initial": 1500000,
+    "used": 0,
+    "fraction_used": 0.0
+  },
+  "decision_count": 4,
+  "graph_node_count": 9,
+  "backward_edge_count": 1,
+  "tier2_calls_used": 1
+}

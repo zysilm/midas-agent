@@ -1,0 +1,528 @@
+{
+  "stats": [
+    {
+      "decision_type": "spec_interpretation",
+      "hypothesis_class": "scope_widened",
+      "count": 6,
+      "mean": 0.34401290615266544,
+      "m2": 3.3343331951831803
+    },
+    {
+      "decision_type": "spec_interpretation",
+      "hypothesis_class": "literal_reading",
+      "count": 6,
+      "mean": 0.4346326471097074,
+      "m2": 2.4549121525364637
+    },
+    {
+      "decision_type": "spec_interpretation",
+      "hypothesis_class": "wrong_api",
+      "count": 5,
+      "mean": -0.21990615774249453,
+      "m2": 2.2121246004694752
+    },
+    {
+      "decision_type": "root_cause_localization",
+      "hypothesis_class": "serialization_roundtrip",
+      "count": 8,
+      "mean": 0.06782220724424057,
+      "m2": 3.9302391177118534
+    },
+    {
+      "decision_type": "root_cause_localization",
+      "hypothesis_class": "state_mutation_order",
+      "count": 9,
+      "mean": -0.20125787062192865,
+      "m2": 3.8871943422996855
+    },
+    {
+      "decision_type": "root_cause_localization",
+      "hypothesis_class": "__novel__::recursive_bypass",
+      "count": 1,
+      "mean": 0.4242640687119285,
+      "m2": 1.4000000000000001
+    },
+    {
+      "decision_type": "investigation_continuation",
+      "hypothesis_class": "persist_same_path",
+      "count": 24,
+      "mean": 0.6019574817813791,
+      "m2": 2.8588915139517073
+    },
+    {
+      "decision_type": "investigation_continuation",
+      "hypothesis_class": "pivot_target",
+      "count": 8,
+      "mean": -0.4721655616602918,
+      "m2": 4.025993827409244
+    },
+    {
+      "decision_type": "investigation_continuation",
+      "hypothesis_class": "abandon",
+      "count": 16,
+      "mean": 0.4871624731569035,
+      "m2": 4.82685175320411
+    },
+    {
+      "decision_type": "fix_locality_scope",
+      "hypothesis_class": "surface_patch",
+      "count": 24,
+      "mean": -0.13061187569544394,
+      "m2": 4.584131213654362
+    },
+    {
+      "decision_type": "fix_locality_scope",
+      "hypothesis_class": "root_layer",
+      "count": 24,
+      "mean": 0.2301630964649135,
+      "m2": 7.697584680735962
+    },
+    {
+      "decision_type": "fix_locality_scope",
+      "hypothesis_class": "dual_fix",
+      "count": 7,
+      "mean": 0.2201436754051132,
+      "m2": 3.367811769291037
+    },
+    {
+      "decision_type": "root_cause_localization",
+      "hypothesis_class": "error_message_only",
+      "count": 11,
+      "mean": 0.14657011780568763,
+      "m2": 6.5811519266318905
+    },
+    {
+      "decision_type": "root_cause_localization",
+      "hypothesis_class": "framework_default_value",
+      "count": 15,
+      "mean": -0.15066264598722245,
+      "m2": 3.569453548393838
+    },
+    {
+      "decision_type": "fix_locality_scope",
+      "hypothesis_class": "intermediate_layer",
+      "count": 22,
+      "mean": 0.4243776601654482,
+      "m2": 4.6612197689439805
+    },
+    {
+      "decision_type": "root_cause_localization",
+      "hypothesis_class": "__novel__::automatic_convenience_pedestal",
+      "count": 1,
+      "mean": 0.21213203435596426,
+      "m2": 0.35000000000000003
+    },
+    {
+      "decision_type": "fix_locality_scope",
+      "hypothesis_class": "__novel__::conversion_interceptor",
+      "count": 1,
+      "mean": -0.07071067811865477,
+      "m2": 0.45000000000000023
+    },
+    {
+      "decision_type": "investigation_continuation",
+      "hypothesis_class": "pivot_evidence_type",
+      "count": 3,
+      "mean": -0.24788480187377362,
+      "m2": 2.043522321428571
+    },
+    {
+      "decision_type": "root_cause_localization",
+      "hypothesis_class": "__novel__::transformation_graph_design",
+      "count": 1,
+      "mean": 0.09685611747255138,
+      "m2": 0.07296416938110746
+    },
+    {
+      "decision_type": "root_cause_localization",
+      "hypothesis_class": "__novel__::reference_frame_selection",
+      "count": 1,
+      "mean": 0.11501663949865479,
+      "m2": 0.10289087947882736
+    },
+    {
+      "decision_type": "root_cause_localization",
+      "hypothesis_class": "__novel__::code_path_isolation",
+      "count": 2,
+      "mean": 0.40305086527633205,
+      "m2": 1.4034999999999997
+    },
+    {
+      "decision_type": "root_cause_localization",
+      "hypothesis_class": "operator_overload_path",
+      "count": 11,
+      "mean": -0.36934299442264856,
+      "m2": 3.6019533682937905
+    },
+    {
+      "decision_type": "root_cause_localization",
+      "hypothesis_class": "__novel__::slice_coordinate_mapping",
+      "count": 1,
+      "mean": 0.4242640687119285,
+      "m2": 1.4000000000000001
+    },
+    {
+      "decision_type": "investigation_continuation",
+      "hypothesis_class": "__novel__:_incomplete_edge_case_coverage",
+      "count": 1,
+      "mean": -0.1358732440973515,
+      "m2": 1.6615384615384614
+    },
+    {
+      "decision_type": "root_cause_localization",
+      "hypothesis_class": "__novel__::recursive_getattr_bypass",
+      "count": 1,
+      "mean": 0.32071349029490925,
+      "m2": 0.8
+    },
+    {
+      "decision_type": "root_cause_localization",
+      "hypothesis_class": "inheritance_dispatch",
+      "count": 1,
+      "mean": -0.07071067811865475,
+      "m2": 0.44999999999999996
+    },
+    {
+      "decision_type": "root_cause_localization",
+      "hypothesis_class": "__novel__::caller_argumentMismatch",
+      "count": 1,
+      "mean": 0.4242640687119285,
+      "m2": 1.4000000000000001
+    },
+    {
+      "decision_type": "root_cause_localization",
+      "hypothesis_class": "regex_or_parser_edge",
+      "count": 8,
+      "mean": 0.13840301006060657,
+      "m2": 2.999249637349876
+    },
+    {
+      "decision_type": "root_cause_localization",
+      "hypothesis_class": "__novel__::case_sensitivity_config",
+      "count": 1,
+      "mean": -0.02314550249431379,
+      "m2": 0.048214285714285716
+    },
+    {
+      "decision_type": "investigation_continuation",
+      "hypothesis_class": "__novel__:_incomplete_fix_coverage",
+      "count": 1,
+      "mean": -0.06488856845230499,
+      "m2": 0.3789473684210523
+    },
+    {
+      "decision_type": "fix_locality_scope",
+      "hypothesis_class": "__novel__::unit_conversion_helper",
+      "count": 1,
+      "mean": 0.42426406871192845,
+      "m2": 1.3999999999999997
+    },
+    {
+      "decision_type": "root_cause_localization",
+      "hypothesis_class": "__novel__::precision_scaling_bypass",
+      "count": 1,
+      "mean": 0.0,
+      "m2": 0.0
+    },
+    {
+      "decision_type": "investigation_continuation",
+      "hypothesis_class": "__novel__:_edge_case_failure",
+      "count": 2,
+      "mean": -0.16489339550184445,
+      "m2": 1.5119427408013721
+    },
+    {
+      "decision_type": "root_cause_localization",
+      "hypothesis_class": "__novel__::vla_indexing_offset_mismatch",
+      "count": 1,
+      "mean": 0.18394180184548972,
+      "m2": 0.26315789473684215
+    },
+    {
+      "decision_type": "root_cause_localization",
+      "hypothesis_class": "__novel__::vla_array_reference_comparison",
+      "count": 1,
+      "mean": 0.2391243423991366,
+      "m2": 0.444736842105263
+    },
+    {
+      "decision_type": "fix_locality_scope",
+      "hypothesis_class": "__novel__::format_registry",
+      "count": 1,
+      "mean": 0.42426406871192845,
+      "m2": 1.3999999999999997
+    },
+    {
+      "decision_type": "root_cause_localization",
+      "hypothesis_class": "__novel__::continuation_line_boundary",
+      "count": 1,
+      "mean": 0.21213203435596426,
+      "m2": 0.35000000000000003
+    },
+    {
+      "decision_type": "root_cause_localization",
+      "hypothesis_class": "__novel__::mask_none_coercion",
+      "count": 1,
+      "mean": 0.4242640687119286,
+      "m2": 1.4000000000000008
+    },
+    {
+      "decision_type": "investigation_continuation",
+      "hypothesis_class": "__novel__:_partial_operation_coverage",
+      "count": 1,
+      "mean": -0.05080005080007619,
+      "m2": 0.23225806451612893
+    },
+    {
+      "decision_type": "fix_locality_scope",
+      "hypothesis_class": "__novel__::mask_handling_fallback",
+      "count": 1,
+      "mean": 0.37647348308289513,
+      "m2": 1.1023622047244095
+    },
+    {
+      "decision_type": "fix_locality_scope",
+      "hypothesis_class": "__novel__::mask_coercion_utility",
+      "count": 1,
+      "mean": -0.006274558051381563,
+      "m2": 0.0035433070866141467
+    },
+    {
+      "decision_type": "root_cause_localization",
+      "hypothesis_class": "__novel__::attribute_iteration_skips_descriptors",
+      "count": 1,
+      "mean": 0.21213203435596423,
+      "m2": 0.3499999999999999
+    },
+    {
+      "decision_type": "root_cause_localization",
+      "hypothesis_class": "__novel__::property_fget_detection_missing",
+      "count": 1,
+      "mean": 0.21213203435596423,
+      "m2": 0.3499999999999999
+    },
+    {
+      "decision_type": "fix_locality_scope",
+      "hypothesis_class": "__novel__::descriptor_aware_iteration",
+      "count": 1,
+      "mean": -0.07071067811865474,
+      "m2": 0.4499999999999998
+    },
+    {
+      "decision_type": "root_cause_localization",
+      "hypothesis_class": "__novel__::missing_none_guard",
+      "count": 1,
+      "mean": 0.3608108948535485,
+      "m2": 1.0125461254612544
+    },
+    {
+      "decision_type": "root_cause_localization",
+      "hypothesis_class": "__novel__:missing_none_guard",
+      "count": 1,
+      "mean": 0.21213203435596423,
+      "m2": 0.3499999999999999
+    },
+    {
+      "decision_type": "investigation_continuation",
+      "hypothesis_class": "__novel__:_investigation_complete",
+      "count": 5,
+      "mean": 0.22582503837706913,
+      "m2": 1.9921641620053525
+    },
+    {
+      "decision_type": "root_cause_localization",
+      "hypothesis_class": "__novel__::version_string_mismatch",
+      "count": 1,
+      "mean": 0.4242640687119285,
+      "m2": 1.4000000000000001
+    },
+    {
+      "decision_type": "investigation_continuation",
+      "hypothesis_class": "__novel__::incomplete_fix_coverage",
+      "count": 1,
+      "mean": -0.026726124191242442,
+      "m2": 0.0642857142857143
+    },
+    {
+      "decision_type": "root_cause_localization",
+      "hypothesis_class": "__novel__::dtype_normalization_filter",
+      "count": 1,
+      "mean": 0.21213203435596426,
+      "m2": 0.35000000000000003
+    },
+    {
+      "decision_type": "investigation_continuation",
+      "hypothesis_class": "__novel__::verify_edge_cases",
+      "count": 1,
+      "mean": -0.04313310928137537,
+      "m2": 0.16744186046511628
+    },
+    {
+      "decision_type": "investigation_continuation",
+      "hypothesis_class": "__novel__::related_investigation",
+      "count": 1,
+      "mean": -0.026958193300859603,
+      "m2": 0.06540697674418602
+    },
+    {
+      "decision_type": "investigation_continuation",
+      "hypothesis_class": "__novel__::edge_case_gaps",
+      "count": 1,
+      "mean": -0.04902903378454602,
+      "m2": 0.2163461538461539
+    },
+    {
+      "decision_type": "fix_locality_scope",
+      "hypothesis_class": "__novel__::quantity_factory_method",
+      "count": 1,
+      "mean": 0.0,
+      "m2": 0.0
+    },
+    {
+      "decision_type": "root_cause_localization",
+      "hypothesis_class": "__novel__::missing_userinfo_subpattern",
+      "count": 1,
+      "mean": 0.2121320343559642,
+      "m2": 0.34999999999999987
+    },
+    {
+      "decision_type": "root_cause_localization",
+      "hypothesis_class": "__novel__::sql_fragment_concat",
+      "count": 1,
+      "mean": 0.21213203435596426,
+      "m2": 0.35000000000000003
+    },
+    {
+      "decision_type": "root_cause_localization",
+      "hypothesis_class": "__novel__::storage_backend_permission_propagation",
+      "count": 1,
+      "mean": 0.2121320343559643,
+      "m2": 0.3500000000000002
+    },
+    {
+      "decision_type": "investigation_continuation",
+      "hypothesis_class": "__novel__:incomplete_fix_coverage",
+      "count": 2,
+      "mean": -0.15177919231498133,
+      "m2": 1.782743350583575
+    },
+    {
+      "decision_type": "root_cause_localization",
+      "hypothesis_class": "__novel__::custom_env_not_passed",
+      "count": 1,
+      "mean": 0.42426406871192845,
+      "m2": 1.3999999999999997
+    },
+    {
+      "decision_type": "investigation_continuation",
+      "hypothesis_class": "__novel__:verify_fix_correctness",
+      "count": 1,
+      "mean": -0.07071067811865474,
+      "m2": 0.4499999999999998
+    },
+    {
+      "decision_type": "spec_interpretation",
+      "hypothesis_class": "__novel__:compound_negatives_required",
+      "count": 1,
+      "mean": -0.013363062095621214,
+      "m2": 0.01607142857142856
+    },
+    {
+      "decision_type": "investigation_continuation",
+      "hypothesis_class": "__novel__:verify_no_regression",
+      "count": 1,
+      "mean": -0.07071067811865478,
+      "m2": 0.4500000000000004
+    },
+    {
+      "decision_type": "investigation_continuation",
+      "hypothesis_class": "__novel__:related_investigation",
+      "count": 1,
+      "mean": 0.10606601717798204,
+      "m2": 0.08749999999999988
+    },
+    {
+      "decision_type": "root_cause_localization",
+      "hypothesis_class": "__novel__::db_routing_context_mismatch",
+      "count": 1,
+      "mean": 0.3440293074485975,
+      "m2": 0.9205479452054794
+    },
+    {
+      "decision_type": "root_cause_localization",
+      "hypothesis_class": "__novel__::delete_cascade_field_inspection",
+      "count": 1,
+      "mean": 0.10606601717798213,
+      "m2": 0.08750000000000001
+    },
+    {
+      "decision_type": "investigation_continuation",
+      "hypothesis_class": "__novel__:investigation_complete",
+      "count": 1,
+      "mean": -0.004526787302125927,
+      "m2": 0.0018442622950819673
+    },
+    {
+      "decision_type": "investigation_continuation",
+      "hypothesis_class": "__novel__:edge_case_verification",
+      "count": 1,
+      "mean": -0.05884823492763706,
+      "m2": 0.3116803278688526
+    }
+  ],
+  "novel_counter": {
+    ":recursive_bypass": 1,
+    ":automatic_convenience_pedestal": 1,
+    ":conversion_interceptor": 1,
+    ":transformation_matrix_order": 1,
+    ":transformation_graph_design": 1,
+    ":reference_frame_selection": 1,
+    ":code_path_isolation": 2,
+    ":slice_coordinate_mapping": 1,
+    "_incomplete_edge_case_coverage": 1,
+    ":recursive_getattr_bypass": 1,
+    ":caller_argumentMismatch": 1,
+    ":case_sensitivity_config": 1,
+    "_incomplete_fix_coverage": 1,
+    ":unit_conversion_helper": 1,
+    ":precision_scaling_bypass": 1,
+    "_edge_case_failure": 2,
+    ":vla_indexing_offset_mismatch": 1,
+    ":vla_array_reference_comparison": 1,
+    ":format_registry": 1,
+    ":continuation_line_boundary": 1,
+    ":mask_none_coercion": 1,
+    "_partial_operation_coverage": 1,
+    ":mask_handling_fallback": 1,
+    ":mask_coercion_utility": 1,
+    ":attribute_iteration_skips_descriptors": 1,
+    ":property_fget_detection_missing": 1,
+    ":descriptor_aware_iteration": 1,
+    ":missing_none_guard": 1,
+    "missing_none_guard": 1,
+    "_investigation_complete": 3,
+    ":version_string_mismatch": 1,
+    ":incomplete_fix_coverage": 1,
+    ":dtype_normalization_filter": 1,
+    ":verify_edge_cases": 1,
+    ":related_investigation": 1,
+    ":edge_case_gaps": 1,
+    ":quantity_factory_method": 1,
+    ":missing_userinfo_subpattern": 1,
+    ":sql_fragment_concat": 1,
+    ":storage_backend_permission_propagation": 1,
+    "incomplete_fix_coverage": 2,
+    ":custom_env_not_passed": 1,
+    "verify_fix_correctness": 1,
+    "compound_negatives_required": 1,
+    "verify_no_regression": 1,
+    "related_investigation": 1,
+    ":db_routing_context_mismatch": 1,
+    ":delete_cascade_field_inspection": 1,
+    "investigation_complete": 1,
+    "edge_case_verification": 1
+  },
+  "registered_novel": [
+    "_investigation_complete"
+  ]
+}

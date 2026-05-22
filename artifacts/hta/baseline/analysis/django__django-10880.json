@@ -1,0 +1,60 @@
+{
+  "issue_id": "django__django-10880",
+  "branch": "feature/issue-46-eval-and-verdict",
+  "rcl": {
+    "fired": true,
+    "n_hypotheses": 3,
+    "winner": "__novel__::sql_fragment_concat",
+    "winner_predicted_path": "django/db/models/sql/aggregates.py",
+    "winner_class_is_novel": true,
+    "winner_advantage": 1.4142135623730951,
+    "std": 0.4006938426723769,
+    "std_collapsed": false,
+    "escalated": false,
+    "any_tier2_call": true,
+    "classes_seen": [
+      "__novel__::sql_fragment_concat",
+      "error_message_only",
+      "regex_or_parser_edge"
+    ]
+  },
+  "spec_interpretation": {
+    "fired": false,
+    "trigger": null
+  },
+  "fix_locality": {
+    "fired": true,
+    "winner": "surface_patch",
+    "winner_advantage": 0.7071067811865474,
+    "std": 0.1414213562373095,
+    "std_collapsed": false,
+    "sentinel_in_winner_payload": true,
+    "sentinel_in_any_payload": true,
+    "sentinel_count": 3
+  },
+  "investigation_continuation": {
+    "fired_count": 0,
+    "signal_breakdown": {
+      "same_file_read_5x": 0,
+      "same_error_3x": 0,
+      "budget_60pct_no_evidence": 0,
+      "toolkit_repetition": 0,
+      "max_iterations": 0
+    },
+    "verdicts": []
+  },
+  "execution_nodes": {
+    "count": 4,
+    "total_iterations": 70,
+    "stuck_count": 0
+  },
+  "budget": {
+    "initial": 1500000,
+    "used": 0,
+    "fraction_used": 0.0
+  },
+  "decision_count": 2,
+  "graph_node_count": 7,
+  "backward_edge_count": 0,
+  "tier2_calls_used": 1
+}

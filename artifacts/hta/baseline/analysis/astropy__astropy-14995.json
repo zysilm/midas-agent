@@ -1,0 +1,62 @@
+{
+  "issue_id": "astropy__astropy-14995",
+  "branch": "feature/issue-46-eval-and-verdict",
+  "rcl": {
+    "fired": true,
+    "n_hypotheses": 3,
+    "winner": "__novel__::mask_none_coercion",
+    "winner_predicted_path": "astropy/nddata/mixins/arithmetics.py - mask validation/preparation step",
+    "winner_class_is_novel": true,
+    "winner_advantage": 1.4142135623730954,
+    "std": 0.4242640687119285,
+    "std_collapsed": false,
+    "escalated": false,
+    "any_tier2_call": true,
+    "classes_seen": [
+      "__novel__::mask_none_coercion",
+      "framework_default_value",
+      "operator_overload_path"
+    ]
+  },
+  "spec_interpretation": {
+    "fired": false,
+    "trigger": null
+  },
+  "fix_locality": {
+    "fired": true,
+    "winner": "__novel__::mask_handling_fallback",
+    "winner_advantage": 1.2549116102763171,
+    "std": 0.26562295750848713,
+    "std_collapsed": false,
+    "sentinel_in_winner_payload": true,
+    "sentinel_in_any_payload": true,
+    "sentinel_count": 3
+  },
+  "investigation_continuation": {
+    "fired_count": 1,
+    "signal_breakdown": {
+      "same_file_read_5x": 1,
+      "same_error_3x": 0,
+      "budget_60pct_no_evidence": 0,
+      "toolkit_repetition": 0,
+      "max_iterations": 0
+    },
+    "verdicts": [
+      "persist_same_path"
+    ]
+  },
+  "execution_nodes": {
+    "count": 5,
+    "total_iterations": 69,
+    "stuck_count": 1
+  },
+  "budget": {
+    "initial": 1500000,
+    "used": 0,
+    "fraction_used": 0.0
+  },
+  "decision_count": 3,
+  "graph_node_count": 9,
+  "backward_edge_count": 0,
+  "tier2_calls_used": 3
+}

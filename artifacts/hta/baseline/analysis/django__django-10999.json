@@ -1,0 +1,61 @@
+{
+  "issue_id": "django__django-10999",
+  "branch": "feature/issue-46-eval-and-verdict",
+  "rcl": {
+    "fired": true,
+    "n_hypotheses": 3,
+    "winner": "regex_or_parser_edge",
+    "winner_predicted_path": "django/utils/dateparse.py",
+    "winner_class_is_novel": false,
+    "winner_advantage": 0.0,
+    "std": 0.0,
+    "std_collapsed": true,
+    "escalated": true,
+    "any_tier2_call": false,
+    "classes_seen": [
+      "regex_or_parser_edge"
+    ]
+  },
+  "spec_interpretation": {
+    "fired": true,
+    "trigger": "rcl_escalation",
+    "count": 1
+  },
+  "fix_locality": {
+    "fired": true,
+    "winner": "intermediate_layer",
+    "winner_advantage": 1.4142135623730951,
+    "std": 0.37712361663282534,
+    "std_collapsed": false,
+    "sentinel_in_winner_payload": true,
+    "sentinel_in_any_payload": true,
+    "sentinel_count": 3
+  },
+  "investigation_continuation": {
+    "fired_count": 1,
+    "signal_breakdown": {
+      "same_file_read_5x": 1,
+      "same_error_3x": 0,
+      "budget_60pct_no_evidence": 0,
+      "toolkit_repetition": 0,
+      "max_iterations": 0
+    },
+    "verdicts": [
+      "persist_same_path"
+    ]
+  },
+  "execution_nodes": {
+    "count": 5,
+    "total_iterations": 85,
+    "stuck_count": 1
+  },
+  "budget": {
+    "initial": 1500000,
+    "used": 0,
+    "fraction_used": 0.0
+  },
+  "decision_count": 5,
+  "graph_node_count": 11,
+  "backward_edge_count": 1,
+  "tier2_calls_used": 3
+}

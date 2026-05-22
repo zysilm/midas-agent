@@ -1,0 +1,72 @@
+{
+  "issue_id": "astropy__astropy-14995",
+  "branch": "unknown",
+  "rcl": {
+    "fired": true,
+    "n_hypotheses": 3,
+    "winner": "__novel__:_mask_none_guard_removed",
+    "winner_predicted_path": "astropy/nddata/composite.py",
+    "winner_class_is_novel": true,
+    "winner_advantage": 1.4142135623730954,
+    "std": 0.4242640687119285,
+    "std_collapsed": false,
+    "escalated": true,
+    "any_tier2_call": true,
+    "classes_seen": [
+      "__novel__:_mask_none_guard_removed",
+      "framework_default_value",
+      "inheritance_dispatch",
+      "operator_overload_path",
+      "state_mutation_order"
+    ]
+  },
+  "spec_interpretation": {
+    "fired": true,
+    "trigger": "rcl_escalation",
+    "count": 1
+  },
+  "fix_locality": {
+    "fired": true,
+    "winner": "surface_patch",
+    "winner_advantage": 0.0,
+    "std": 0.0,
+    "std_collapsed": true,
+    "sentinel_in_winner_payload": true,
+    "sentinel_in_any_payload": true,
+    "sentinel_count": 3,
+    "gaming_detected": false,
+    "gaming_detected_count": 0
+  },
+  "investigation_continuation": {
+    "fired_count": 1,
+    "signal_breakdown": {
+      "same_file_read_5x": 1,
+      "same_error_3x": 0,
+      "budget_60pct_no_evidence": 0,
+      "toolkit_repetition": 0,
+      "max_iterations": 0
+    },
+    "verdicts": [
+      "pivot_target"
+    ]
+  },
+  "execution_nodes": {
+    "count": 5,
+    "total_iterations": 86,
+    "stuck_count": 1
+  },
+  "budget": {
+    "initial": 1500000,
+    "used": 0,
+    "fraction_used": 0.0
+  },
+  "decision_count": 5,
+  "graph_node_count": 11,
+  "backward_edge_count": 1,
+  "tier2_calls_used": 1,
+  "escalation_count": 1,
+  "memory": {
+    "distillations_emitted": 4,
+    "distillation_cap": 6
+  }
+}

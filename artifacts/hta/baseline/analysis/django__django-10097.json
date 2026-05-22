@@ -1,0 +1,63 @@
+{
+  "issue_id": "django__django-10097",
+  "branch": "feature/issue-46-eval-and-verdict",
+  "rcl": {
+    "fired": true,
+    "n_hypotheses": 3,
+    "winner": "__novel__::missing_userinfo_subpattern",
+    "winner_predicted_path": "django/core/validators.py",
+    "winner_class_is_novel": true,
+    "winner_advantage": 1.4142135623730947,
+    "std": 0.11785113019775792,
+    "std_collapsed": false,
+    "escalated": true,
+    "any_tier2_call": true,
+    "classes_seen": [
+      "__novel__::missing_userinfo_subpattern",
+      "error_message_only",
+      "regex_or_parser_edge"
+    ]
+  },
+  "spec_interpretation": {
+    "fired": true,
+    "trigger": "rcl_escalation",
+    "count": 1
+  },
+  "fix_locality": {
+    "fired": true,
+    "winner": "intermediate_layer",
+    "winner_advantage": 1.4142135623730951,
+    "std": 0.37712361663282534,
+    "std_collapsed": false,
+    "sentinel_in_winner_payload": true,
+    "sentinel_in_any_payload": true,
+    "sentinel_count": 3
+  },
+  "investigation_continuation": {
+    "fired_count": 1,
+    "signal_breakdown": {
+      "same_file_read_5x": 1,
+      "same_error_3x": 0,
+      "budget_60pct_no_evidence": 0,
+      "toolkit_repetition": 0,
+      "max_iterations": 0
+    },
+    "verdicts": [
+      "__novel__:_investigation_complete"
+    ]
+  },
+  "execution_nodes": {
+    "count": 3,
+    "total_iterations": 98,
+    "stuck_count": 1
+  },
+  "budget": {
+    "initial": 1500000,
+    "used": 0,
+    "fraction_used": 0.0
+  },
+  "decision_count": 5,
+  "graph_node_count": 9,
+  "backward_edge_count": 1,
+  "tier2_calls_used": 2
+}
